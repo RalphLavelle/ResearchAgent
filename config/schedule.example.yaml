@@ -1,0 +1,2 @@
+# Copy to schedule.yaml and edit. The serve process reloads this file without restart.
+interval_hours: 1
