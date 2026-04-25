@@ -17,7 +17,7 @@ logging.basicConfig(
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Research AI-agent learning resources and save to Desktop/AgentAI as Markdown.",
+        description="Research subjects and save to a nominated Notion page.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

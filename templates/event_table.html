@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>{{TITLE}}</title>
+  <style>
+    /* ── Page ── */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 2rem auto;
+      max-width: 960px;
+      color: #333;
+      background: #fafafa;
+    }
+    h1 { margin-bottom: 0.2rem; }
+    .generated { color: #777; font-style: italic; margin-bottom: 1.5rem; font-size: 0.9rem; }
+
+    /* ── Table ── */
+    table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    thead th { background: #2e4057; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; }
+    tbody td { padding: 10px 14px; border-bottom: 1px solid #ececec; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f4f6f8; }
+
+    /* ── Poster thumbnail ── */
+    img.poster {
+      width: 56px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 4px;
+      display: block;
+    }
+    td.poster-cell { width: 68px; text-align: center; }
+
+    /* ── Links ── */
+    a { color: #0563c1; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Date ── */
+    td.date-cell { white-space: nowrap; color: #555; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+  <h1>{{TITLE}}</h1>
+  <p class="generated">Generated: {{GENERATED}}</p>
+
+  <table>
+    <thead>
+      <tr>
+        <!-- Empty header above the poster column -->
+        <th></th>
+        <!-- Column 2: act / event name, linked to ticket page -->
+        <th>Event</th>
+        <!-- Column 3: short description / line-up hint -->
+        <th>About</th>
+        <!-- Column 4: venue name and suburb/city combined -->
+        <th>Venue</th>
+        <!-- Column 5: formatted date with day-of-week -->
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+
+{{ROWS}}
+
+    </tbody>
+  </table>
+
+</body>
+</html>
+
+
+<!--
+  ═══════════════════════════════════════════════════════════════════════════
+  ROW TEMPLATE
+  ═══════════════════════════════════════════════════════════════════════════
+  Everything between the START and END markers below is the template for
+  a single event row. Edit the markup freely — just keep the {{TOKEN}}
+  placeholders so the app knows where to insert data.
+
+  Available tokens:
+    {{EVENT_URL}}   — URL of the event / ticket page
+    {{IMAGE_URL}}   — URL of the poster / thumbnail (may be empty)
+    {{EVENT_NAME}}  — Act or event name  (e.g. "The Beths")
+    {{VENUE}}       — Venue + suburb/city (e.g. "The Tivoli, Brisbane")
+    {{SUMMARY}}     — Short description or line-up hint (may be empty)
+    {{DATE}}        — Formatted date     (e.g. "Wed 7 May 2026")
+
+  {{IMAGE_CELL}} is a special token: the app renders it as a linked
+  thumbnail when a poster URL is available, or leaves it blank otherwise.
+  You can move it or style it, but keep the token name unchanged.
+  ═══════════════════════════════════════════════════════════════════════════
+-->
+<!-- ROW_TEMPLATE_START -->
+      <tr>
+        <td class="poster-cell">{{IMAGE_CELL}}</td>
+        <td><a href="{{EVENT_URL}}" target="blank">{{EVENT_NAME}}</a></td>
+        <td class="summary-cell">{{SUMMARY}}</td>
+        <td>{{VENUE}}</td>
+        <td class="date-cell">{{DATE}}</td>
+      </tr>
+<!-- ROW_TEMPLATE_END -->

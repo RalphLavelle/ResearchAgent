@@ -1,0 +1,84 @@
+# Subject-matter configuration for the research pipeline.
+#
+# This file tells the agent WHAT to research and HOW to describe it.
+# The Python code (the "engine") reads this file at startup and stays
+# completely ignorant of the topic — swap this file (or point
+# SUBJECT_MATTER_CONFIG in your .env to a different YAML) to change
+# the entire research focus without touching any Python.
+#
+# All multi-line text uses the YAML literal-block style (lines starting
+# with |) so that line breaks are preserved exactly as written.
+
+# Short human-readable label used in log messages.
+topic: "Live Music Events - Gold Coast & Brisbane"
+
+# Heading and intro text written at the top of the output Markdown file.
+output_title: "Upcoming Live Music Events"
+output_description: >
+  (Documentation only.) One row per gig. Spreadsheet columns: Event, Venue,
+  Location, Date, URL, Poster URL, Summary, Added. Titles must use
+  "Act @ Venue, Location" when all three are known so the app can split them
+  into separate columns. Price not shown; set to Unknown.
+
+# Category label for structured output (each curated row is one event).
+resource_types:
+  - event
+
+# ── LLM PROMPTS ───────────────────────────────────────────────────────────────
+# These are sent to the LLM as instructions. Edit freely to tune behaviour.
+
+# System prompt for the PLANNER step — tells the LLM what kinds of
+# search queries to produce.
+planner_system_prompt: |
+  You plan web search queries to find specific upcoming live music gigs
+  and concerts in the Gold Coast and Brisbane areas of Queensland, Australia.
+  Prefer queries that surface ticketing pages (Ticketek, Moshtix, Oztix, Eventbrite),
+  venue "what's on" **event-detail** pages (HOTA, Fortitude Music Hall, Triffid,
+  The Tivoli, HSW, Miami Marketta, Burleigh Bazaar, Coolangatta Hotel, Star Gold Coast),
+  Facebook event URLs, Bandsintown/Songkick city pages, and local gig guides
+  (Scene, The Music, street press). Rotate query angles: suburb names, "tickets",
+  "doors 7pm", "support act", festival sideshows, jazz/blues rooms, pub residencies.
+  Avoid queries that only return generic portal homepages with no dates.
+  Output as many distinct queries as requested (up to the limit in the user message).
+  Each query should be short and specific.
+
+# The human-turn message sent alongside the planner system prompt.
+# (The engine appends today's UTC date and a strict 30-day window.)
+planner_user_message: |
+  Plan search queries to find individual upcoming live music events on the
+  Gold Coast and Brisbane — rock, pop, classical, folk, and world music.
+  Prioritise Gold Coast, open mic nights, and participatory gigs. Each query
+  should help find pages for specific dated shows, not generic portal indexes.
+  Aim for maximum coverage: different venues, suburbs, ticket vendors, and genres so the combined search results surface as many separate gigs as possible.
+
+# System prompt for the CURATOR/NORMALISER step — tells the LLM how to
+# filter and structure the raw search results into usable records.
+# (The engine prepends today's UTC date and the same 30-day window.)
+curator_system_prompt: |
+  You turn noisy search results into a list of individual upcoming live music
+  events (one row per gig) for the Gold Coast and Brisbane areas of Queensland.
+
+  Recall is critical: extract every distinct gig you can justify from the
+  snippets and titles across ALL search results — not only the first few hits.
+  If a section titled "Same-site crawl" appears, mine it too for dated gigs.
+  The same venue may host multiple different acts on different nights; emit one
+  resource per gig. Prefer rows backed by a concrete event or ticket URL even if
+  the snippet is short. Do not merge two different acts into one row.
+
+  Rules:
+  - Each resource is exactly ONE gig, concert, open mic, or jam — never a
+    generic portal homepage, venue front page, or festival overview unless the
+    URL is clearly for one named performance with a date.
+  - title: use "Act @ Venue, Location" whenever known (e.g. "The Beths @ The Tivoli, Brisbane") — the app splits this into three separate columns (Event, Venue, Location). Use a comma after the venue name to separate it from the suburb/city. If the location is unknown, "Act @ Venue" is fine. If only the act is known, just the act name.
+  - resource_type: always the string "event".
+  - date: REQUIRED — primary show date only, as ISO YYYY-MM-DD (UTC calendar
+    day of the performance). If a range is shown, use the first performance day.
+    Rows without a confident ISO date in the allowed window must be omitted.
+  - price: optional metadata only (not shown in the app); use Unknown if unsure.
+  - summary: one short sentence (optional line-up or genre hint).
+  - participatory: True only when the public can perform (open mic, jam, etc.).
+  - url: must be the direct link to that specific event (Facebook event URL,
+    ticket page, or venue event detail page is fine).
+  - Omit country & western, school, and children's events.
+  - Omit any event whose date is before "today" or after the allowed window
+    described in the user message above the search results.

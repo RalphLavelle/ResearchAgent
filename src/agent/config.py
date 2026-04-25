@@ -7,6 +7,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from agent.subject_config import SubjectConfig, load_subject_config
+
 # Load .env from project root when running as package
 _ROOT = Path(__file__).resolve().parents[2]
 load_dotenv(_ROOT / ".env")
@@ -24,7 +26,20 @@ SCHEDULE_CONFIG_PATH = _get_path(
     _ROOT / "config" / "schedule.yaml",
 )
 DATA_DIR = _get_path("DATA_DIR", _ROOT / "data")
+
+# Path to the active subject-matter YAML. Point SUBJECT_MATTER_CONFIG in
+# your .env to a different file to research a completely different topic.
+SUBJECT_MATTER_CONFIG_PATH = _get_path(
+    "SUBJECT_MATTER_CONFIG",
+    _ROOT / "config" / "subject_matter.yaml",
+)
+
+# Loaded once at startup; all other modules import config.SUBJECT to read
+# the prompts, queries, and labels for the current research topic.
+SUBJECT: SubjectConfig = load_subject_config(SUBJECT_MATTER_CONFIG_PATH)
 SNAPSHOT_PATH = DATA_DIR / "snapshot.json"
+# Last research fingerprint successfully pushed to Notion (under data/, gitignored).
+NOTION_SYNC_STATE_PATH = DATA_DIR / "notion_sync_state.json"
 
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
@@ -36,6 +51,30 @@ if _output_raw:
 else:
     OUTPUT_DIR = Path.home() / "Desktop" / "AgentAI"
 
-MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "6"))
+MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
 SEARCH_DELAY_SEC = float(os.environ.get("SEARCH_DELAY_SEC", "1.5"))
-MAX_DDG_RESULTS_PER_QUERY = int(os.environ.get("MAX_DDG_RESULTS_PER_QUERY", "5"))
+# Higher default = more snippets per query for the curator to mine individual gigs from.
+MAX_DDG_RESULTS_PER_QUERY = int(os.environ.get("MAX_DDG_RESULTS_PER_QUERY", "10"))
+
+# Bounded same-origin crawl after DuckDuckGo (Task 6). Disable with CRAWL_ENABLED=false.
+_crawl_raw = (os.environ.get("CRAWL_ENABLED") or "true").strip().lower()
+CRAWL_ENABLED = _crawl_raw in ("1", "true", "yes", "on")
+MAX_CRAWL_SEEDS = int(os.environ.get("MAX_CRAWL_SEEDS", "5"))
+MAX_CRAWL_PAGES_TOTAL = int(os.environ.get("MAX_CRAWL_PAGES_TOTAL", "20"))
+MAX_CRAWL_DEPTH = int(os.environ.get("MAX_CRAWL_DEPTH", "2"))
+MAX_CRAWL_PAGES_PER_SEED = int(os.environ.get("MAX_CRAWL_PAGES_PER_SEED", "8"))
+CRAWL_DELAY_SEC = float(os.environ.get("CRAWL_DELAY_SEC", "0.35"))
+
+# Optional: sync research to a Notion page.
+# Create an internal integration, paste its secret; share the target page with that integration.
+NOTION_ENABLED = (os.environ.get("NOTION_ENABLED") or "false").strip().lower()
+NOTION_INTEGRATION_TOKEN = (os.environ.get("NOTION_INTEGRATION_TOKEN") or "").strip()
+NOTION_RESEARCH_PAGE_ID = (os.environ.get("NOTION_RESEARCH_PAGE_ID") or "").strip()
+NOTION_API_VERSION = (
+    (os.environ.get("NOTION_API_VERSION") or "").strip() or "2022-06-28"
+)
+
+
+def notion_sync_configured() -> bool:
+    """True when both token and page id are set (Notion sync runs on full writes)."""
+    return bool(NOTION_INTEGRATION_TOKEN and NOTION_RESEARCH_PAGE_ID and NOTION_ENABLED == "true")
