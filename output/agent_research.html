@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Upcoming Live Music Events</title>
+  <style>
+    /* ── Page ── */
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      margin: 2rem auto;
+      max-width: 960px;
+      color: #333;
+      background: #fafafa;
+    }
+    h1 { margin-bottom: 0.2rem; }
+    .generated { color: #777; font-style: italic; margin-bottom: 1.5rem; font-size: 0.9rem; }
+
+    /* ── Table ── */
+    table { border-collapse: collapse; width: 100%; background: #fff; border-radius: 6px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,.08); }
+    thead th { background: #2e4057; color: #fff; padding: 10px 14px; text-align: left; font-weight: 600; }
+    tbody td { padding: 10px 14px; border-bottom: 1px solid #ececec; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: #f4f6f8; }
+
+    /* ── Poster thumbnail ── */
+    img.poster {
+      width: 56px;
+      height: 56px;
+      object-fit: cover;
+      border-radius: 4px;
+      display: block;
+    }
+    td.poster-cell { width: 68px; text-align: center; }
+
+    /* ── Links ── */
+    a { color: #0563c1; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Summary ── */
+    td.summary-cell { color: #555; font-size: 0.875rem; max-width: 240px; }
+
+    /* ── Date ── */
+    td.date-cell { white-space: nowrap; color: #555; font-size: 0.9rem; }
+  </style>
+</head>
+<body>
+
+  <h1>Upcoming Live Music Events</h1>
+  <p class="generated">Generated: 2026-04-26 12:59 AEST</p>
+
+  <table>
+    <thead>
+      <tr>
+        <!-- Column 1: poster thumbnail (no heading) -->
+        <th></th>
+        <!-- Column 2: act / event name, linked to ticket page -->
+        <th>Event</th>
+        <!-- Column 3: short description / line-up hint -->
+        <th>About</th>
+        <!-- Column 4: venue name and suburb/city combined -->
+        <th>Venue</th>
+        <!-- Column 5: formatted date with day-of-week -->
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!--
+        ═══════════════════════════════════════════════════════════════════════
+        ROW TEMPLATE — edit the <tr> below to change how each event is shown.
+        The app repeats this row once per event, filling in the {{TOKENS}}.
+        ═══════════════════════════════════════════════════════════════════════
+        Tokens:
+          {{IMAGE_CELL}}  — linked <img> thumbnail, or blank when none exists
+          {{EVENT_URL}}   — URL of the event / ticket page
+          {{EVENT_NAME}}  — Act or event name        (e.g. "The Beths")
+          {{SUMMARY}}     — Short description/line-up (may be empty)
+          {{VENUE}}       — Venue + suburb/city       (e.g. "The Tivoli, Brisbane")
+          {{DATE}}        — Formatted date            (e.g. "Wed 7 May 2026")
+        ═══════════════════════════════════════════════════════════════════════
+      -->
+
+      <tr>
+        <td class="poster-cell"><a href="https://allevents.in/gold-coast/concerts"><img class="poster" src="https://cdn2.allevents.in/transup/e3/880c2c3e74476a9021094ef88f8b08/concert.png" alt="poster" /></a></td>
+        <td><a href="https://allevents.in/gold-coast/concerts" target="_blank">Newton Faulkner, Morgan Joanel</a></td>
+        <td class="summary-cell">Enjoy an acoustic evening with Newton Faulkner and Morgan Joanel.</td>
+        <td>Vinnies Dive, Gold Coast</td>
+        <td class="date-cell">Sun 26 Apr 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.miamimarketta.com/ticketed-events"><img class="poster" src="http://static1.squarespace.com/static/619ae50ac9d7b62fd49ccdf5/t/64118884ac2ce069c0b3ee36/1678870665083/040A1068.jpg?format=1500w" alt="poster" /></a></td>
+        <td><a href="https://www.miamimarketta.com/ticketed-events" target="_blank">Comunidade do Samba</a></td>
+        <td class="summary-cell">Experience live Samba, Brazilian drums, DJs, art, and dancing at Miami Marketta.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Sun 26 Apr 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://livemusic.au/gigs-festivals/queensland/"><img class="poster" src="https://livemusic.au/wp-content/uploads/Live-Music-Australia-Queensland-upcoming-gigs-and-festivals-thoughout-the-year-QLD-background-image-by-deanism.jpg" alt="poster" /></a></td>
+        <td><a href="https://livemusic.au/gigs-festivals/queensland/" target="_blank">Regurgitator</a></td>
+        <td class="summary-cell">Regurgitator performs live at The Empire Theatre in Toowoomba.</td>
+        <td>The Empire Theatre, Toowoomba</td>
+        <td class="date-cell">Sun 26 Apr 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://allevents.in/coolangatta/live-music"><img class="poster" src="https://cdn2.allevents.in/transup/b6/cd25aa012a4235be27c330e089cc2e/category_banner.webp" alt="poster" /></a></td>
+        <td><a href="https://allevents.in/coolangatta/live-music" target="_blank">Late for Woodstock</a></td>
+        <td class="summary-cell">Experience the nostalgic sounds of Woodstock with Late for Woodstock at The Coolangatta Hotel.</td>
+        <td>The Coolangatta Hotel, Coolangatta</td>
+        <td class="date-cell">Sun 26 Apr 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.whatsongoldcoast.au/Music"><img class="poster" src="https://www.goldcoast.qld.gov.au/files/sharedassets/public/v/1/images/events/event-website-home-01.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.whatsongoldcoast.au/Music" target="_blank">Guy Sebastian</a></td>
+        <td class="summary-cell">Guy Sebastian&#x27;s 2026 National Tour in celebration of his new album.</td>
+        <td>Broadbeach, Gold Coast</td>
+        <td class="date-cell">Tue 28 Apr 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.gigzta.com/gigs/ccdb48f9-7381-5207-ad16-84f6f8612257"><img class="poster" src="https://assets.oztix.com.au/image/56e95ebb-e51b-4c83-9257-a17d92f06f5e.png?width=600&amp;amp;height=300" alt="poster" /></a></td>
+        <td><a href="https://www.gigzta.com/gigs/ccdb48f9-7381-5207-ad16-84f6f8612257" target="_blank">Rogue Traders</a></td>
+        <td class="summary-cell">Rogue Traders bring their dance-rock anthems to Miami Marketta for their 21st Anniversary Tour.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Fri 1 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.linesapp.co/event/furnace-and-the-fundamentals-2026-05-01-the-fortitude-music-hall-brisbane" target="_blank">Furnace and the Fundamentals</a></td>
+        <td class="summary-cell">Furnace and the Fundamentals bring their energetic show to Brisbane.</td>
+        <td>The Fortitude Music Hall, Brisbane</td>
+        <td class="date-cell">Fri 1 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.miamimarketta.com/ticketed-events/playlunch"><img class="poster" src="http://static1.squarespace.com/static/619ae50ac9d7b62fd49ccdf5/619afe723bdcf8379ec5a412/6916c590accbd571b9e239e8/1763334007759/COVER_GOLD+COAST.jpg?format=1500w" alt="poster" /></a></td>
+        <td><a href="https://www.miamimarketta.com/ticketed-events/playlunch" target="_blank">Playlunch</a></td>
+        <td class="summary-cell">High-energy bogan-funk show as part of their &#x27;Sex Ed Regional Tour&#x27;.</td>
+        <td>Miami Marketta</td>
+        <td class="date-cell">Fri 1 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://gcmag.com.au/events/the-darkness-australian-tour-2026-live-at-miami-marketta/" target="_blank">The Darkness</a></td>
+        <td class="summary-cell">The Darkness brings their Australian tour to Miami Marketta for a night of rock.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Fri 1 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://gcmag.com.au/events/regurgitator-jukeboxxin-tour/" target="_blank">Regurgitator</a></td>
+        <td class="summary-cell">Regurgitator performs as part of their Jukeboxxin tour, promising an energetic show.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Fri 1 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.instagram.com/p/DXJPO-EDqdT/" target="_blank">Tracks Party</a></td>
+        <td class="summary-cell">A coastal rock party featuring Beddy Rays, Headsend, Mac The Knife, and Loose Goose.</td>
+        <td>Coolangatta Hotel, Gold Coast</td>
+        <td class="date-cell">Fri 1 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://thegigfactory.com.au/gig/ramjet-live-at-coolangatta-hotel-coolangatta-qld-saturday-2-may-2026/"><img class="poster" src="https://thegigfactory.com.au/wp-content/uploads/2014/10/ramjet-1.jpg" alt="poster" /></a></td>
+        <td><a href="https://thegigfactory.com.au/gig/ramjet-live-at-coolangatta-hotel-coolangatta-qld-saturday-2-may-2026/" target="_blank">Ramjet</a></td>
+        <td class="summary-cell">Live music performance by Ramjet at Coolangatta Hotel.</td>
+        <td>Coolangatta Hotel, Coolangatta</td>
+        <td class="date-cell">Sat 2 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://allevents.in/coolangatta/all"><img class="poster" src="https://cdn2.allevents.in/transup/20/37cb5ead2f4af585469eaf08b752c8/all.webp" alt="poster" /></a></td>
+        <td><a href="https://allevents.in/coolangatta/all" target="_blank">The Jungle Giants</a></td>
+        <td class="summary-cell">The Jungle Giants performing live in Gold Coast City.</td>
+        <td>Coolangatta, Gold Coast</td>
+        <td class="date-cell">Sat 2 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.whatsongoldcoast.au/Arts-culture"><img class="poster" src="https://www.goldcoast.qld.gov.au/files/sharedassets/public/v/1/images/events/event-website-home-01.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.whatsongoldcoast.au/Arts-culture" target="_blank">Local Smackdown – Eyesite + Lorien Layne + Porcelain</a></td>
+        <td class="summary-cell">A night of grunge rock with three bands supporting Aussie music.</td>
+        <td>Coolangatta</td>
+        <td class="date-cell">Sat 2 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://livemusic.au/here-comes-the-sun-2026-has-officially-dropped-its-lineup/"><img class="poster" src="https://livemusic.au/wp-content/uploads/Here-Comes-The-Sun-2026-APR-MAY-Live-Music-Australia-Gig-Calendars-and-Music-Festivals.webp" alt="poster" /></a></td>
+        <td><a href="https://livemusic.au/here-comes-the-sun-2026-has-officially-dropped-its-lineup/" target="_blank">Here Comes The Sun Festival</a></td>
+        <td class="summary-cell">One-day festival featuring Lime Cordiale, The Jungle Giants, and Young Franco.</td>
+        <td>Gold Coast</td>
+        <td class="date-cell">Sat 2 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://experiencegoldcoast.com/events/locals--hospo-open-mic-night---den-devine-broadbeach"><img class="poster" src="https://destinationgoldcoast.stylelabs.cloud/api/public/content/939adb8c3d95468c82c8f53263eb5093?v=3427f2d1" alt="poster" /></a></td>
+        <td><a href="https://experiencegoldcoast.com/events/locals--hospo-open-mic-night---den-devine-broadbeach" target="_blank">Locals &amp; Hospo Open Mic Night</a></td>
+        <td class="summary-cell">Join the locals for an open mic night featuring a rotation of talented hosts.</td>
+        <td>Den Devine, Broadbeach</td>
+        <td class="date-cell">Tue 5 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://musick.com.au/gig/jazz-gin-thursdays-2026-05-07/"><img class="poster" src="https://musick.com.au/assets/images/og-image.png" alt="poster" /></a></td>
+        <td><a href="https://musick.com.au/gig/jazz-gin-thursdays-2026-05-07/" target="_blank">Jazz &amp; Gin Thursdays</a></td>
+        <td class="summary-cell">Enjoy live jazz music paired with gin at the Garden Kitchen &amp; Bar.</td>
+        <td>Garden Kitchen &amp; Bar, Gold Coast</td>
+        <td class="date-cell">Thu 7 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.ticketle.net/au/deftones-brisbane-tickets-07-05-2026/event/623449" target="_blank">Deftones</a></td>
+        <td class="summary-cell">Experience Deftones live in Brisbane.</td>
+        <td>Brisbane Entertainment Centre</td>
+        <td class="date-cell">Thu 7 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.theticketmerchant.com.au/concert-tickets/thundercat-tickets" target="_blank">Thundercat</a></td>
+        <td class="summary-cell">Thundercat brings his unique fusion of jazz, funk, and R&amp;B to Brisbane.</td>
+        <td>Fortitude Music Hall, Brisbane</td>
+        <td class="date-cell">Fri 8 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://reddirtradar.com/events/koe-wetzel-the-fortitude-music-hall-2026-05-09"><img class="poster" src="https://reddirtradar.com/images/artists/koe-wetzel-new.jpg" alt="poster" /></a></td>
+        <td><a href="https://reddirtradar.com/events/koe-wetzel-the-fortitude-music-hall-2026-05-09" target="_blank">Koe Wetzel</a></td>
+        <td class="summary-cell">Koe Wetzel delivers an authentic Red Dirt Rock performance at The Fortitude Music Hall.</td>
+        <td>The Fortitude Music Hall</td>
+        <td class="date-cell">Sat 9 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://musick.com.au/gig/christine-anu-at-coolangatta-hotel-2026-05-09/"><img class="poster" src="https://musick.com.au/api/og-image.php?src=%2Fassets%2Fimages%2Fgigs%2Fgig-12783-christine-anu-at-coolangatta-hotel-2026-05-09.webp" alt="poster" /></a></td>
+        <td><a href="https://musick.com.au/gig/christine-anu-at-coolangatta-hotel-2026-05-09/" target="_blank">Christine Anu</a></td>
+        <td class="summary-cell">Christine Anu performs live with a set starting at 7:45pm.</td>
+        <td>Coolangatta Hotel, Gold Coast</td>
+        <td class="date-cell">Sat 9 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.miamimarketta.com/ticketed-events/chicane"><img class="poster" src="http://static1.squarespace.com/static/619ae50ac9d7b62fd49ccdf5/619afe723bdcf8379ec5a412/69339c152264f470868ad967/1768545945729/Chicane-2026-Eventbrite-Gold-Coast.jpeg?format=1500w" alt="poster" /></a></td>
+        <td><a href="https://www.miamimarketta.com/ticketed-events/chicane" target="_blank">Chicane</a></td>
+        <td class="summary-cell">Chicane performs as part of the Offshore Australian Tour 2026.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Sun 10 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://hota.com.au/whats-on" target="_blank">Slava Grigoryan &amp; Al Slavik</a></td>
+        <td class="summary-cell">A classical music performance by renowned guitarist Slava Grigoryan and Al Slavik.</td>
+        <td>HOTA, Gold Coast</td>
+        <td class="date-cell">Sun 10 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.therockpit.net/2023/dice-announce-australian-tour-and-forthcoming-ep-time-will-tell/"><img class="poster" src="https://www.therockpit.net/wp-content/uploads/2023/01/DICE_Andrew-Briggs_p1.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.therockpit.net/2023/dice-announce-australian-tour-and-forthcoming-ep-time-will-tell/" target="_blank">DICE</a></td>
+        <td class="summary-cell">DICE performs live at Burleigh Bazaar as part of their Australian tour.</td>
+        <td>Burleigh Bazaar, Gold Coast</td>
+        <td class="date-cell">Mon 11 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.ticketmaster.co.uk/mariah-the-scientist-tickets/artist/5354359"><img class="poster" src="https://prismic-images.tmol.io/ticketmaster-tm-global/aMmPhGGNHVfTPSdF_MariahtheScientist.jpg?auto=format%2Ccompress&amp;amp;rect=0%2C40%2C1536%2C648&amp;amp;w=1024&amp;amp;h=432" alt="poster" /></a></td>
+        <td><a href="https://www.ticketmaster.co.uk/mariah-the-scientist-tickets/artist/5354359" target="_blank">Mariah the Scientist</a></td>
+        <td class="summary-cell">Mariah the Scientist brings her Hearts Sold Separately tour to Brisbane.</td>
+        <td>Fortitude Music Hall, Brisbane</td>
+        <td class="date-cell">Tue 12 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.miamimarketta.com/ticketed-events/lagwagon"><img class="poster" src="http://static1.squarespace.com/static/619ae50ac9d7b62fd49ccdf5/619afe723bdcf8379ec5a412/689d861085e3ba3dcfa2f023/1768289575785/LAGWAGON_30th_Miami_1000x500.jpg?format=1500w" alt="poster" /></a></td>
+        <td><a href="https://www.miamimarketta.com/ticketed-events/lagwagon" target="_blank">Lagwagon</a></td>
+        <td class="summary-cell">California punk legends Lagwagon celebrate 30 years of HOSS with a live performance.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Thu 14 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.songkick.com/concerts/42888182-misex-at-coolangatta-hotel"><img class="poster" src="http://images.sk-static.com/images/media/img/col6/20251107-171305-405347.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.songkick.com/concerts/42888182-misex-at-coolangatta-hotel" target="_blank">Mi-Sex</a></td>
+        <td class="summary-cell">Mi-Sex performing live at Coolangatta Hotel.</td>
+        <td>Coolangatta Hotel, Coolangatta</td>
+        <td class="date-cell">Fri 15 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.ticketmaster.com.au/j-i-d-tickets/artist/2351316"><img class="poster" src="https://prismic-images.tmol.io/ticketmaster-tm-global/aKPkOqTt2nPbacOL_JID_clean_2426x1365.jpg?auto=format%2Ccompress&amp;amp;rect=0%2C0%2C2426%2C1023&amp;amp;w=1024&amp;amp;h=432" alt="poster" /></a></td>
+        <td><a href="https://www.ticketmaster.com.au/j-i-d-tickets/artist/2351316" target="_blank">JID</a></td>
+        <td class="summary-cell">JID performs live at Fortitude Music Hall.</td>
+        <td>Fortitude Music Hall, Brisbane</td>
+        <td class="date-cell">Fri 15 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://musick.com.au/gig/2000s-2010s-party-miami-gold-coast-at-miami-marketta-gold-coast-2026-05-16/"><img class="poster" src="https://musick.com.au/api/og-image.php?src=%2Fassets%2Fimages%2Fgigs%2Fgig-16546-2000s-2010s-party-miami-gold-coast-at-miami-marketta-gold-co.webp" alt="poster" /></a></td>
+        <td><a href="https://musick.com.au/gig/2000s-2010s-party-miami-gold-coast-at-miami-marketta-gold-coast-2026-05-16/" target="_blank">2000s + 2010s Party</a></td>
+        <td class="summary-cell">A nostalgic party featuring hits from the 2000s and 2010s.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Sat 16 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.songkick.com/concerts/42814103-audrey-hobert-at-fortitude-music-hall"><img class="poster" src="http://images.sk-static.com/images/media/img/col6/20250620-013317-820831.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.songkick.com/concerts/42814103-audrey-hobert-at-fortitude-music-hall" target="_blank">Audrey Hobert</a></td>
+        <td class="summary-cell">Audrey Hobert performs live in Brisbane.</td>
+        <td>Fortitude Music Hall, Brisbane</td>
+        <td class="date-cell">Sat 16 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://musick.com.au/gig/taste-of-the-folk-fest-2026-05-16/"><img class="poster" src="https://musick.com.au/assets/images/og-image.png" alt="poster" /></a></td>
+        <td><a href="https://musick.com.au/gig/taste-of-the-folk-fest-2026-05-16/" target="_blank">Taste of the Folk Fest</a></td>
+        <td class="summary-cell">A folk music festival featuring various artists at Herbert Hotel.</td>
+        <td>Herbert Hotel, Brisbane</td>
+        <td class="date-cell">Sat 16 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.facebook.com/events/1404856484096488/" target="_blank">Music of the Night-Tribute to Andrew Lloyd Webber</a></td>
+        <td class="summary-cell">A tribute to Andrew Lloyd Webber&#x27;s musicals at HOTA.</td>
+        <td>HOTA, Gold Coast</td>
+        <td class="date-cell">Sun 17 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.shazam.com/event/b26d8eb1-7893-4060-99db-245a734226b1"><img class="poster" src="https://is1-ssl.mzstatic.com/image/thumb/AMCArtistImages221/v4/45/d6/5a/45d65ac0-d1ba-2006-36aa-934b55fe8575/ami-identity-d88cbb5e542a669d99a763f80f78232a-2025-10-29T10-29-27.554Z_cropped.png/400x400bb.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.shazam.com/event/b26d8eb1-7893-4060-99db-245a734226b1" target="_blank">Mack Geiger</a></td>
+        <td class="summary-cell">Mack Geiger is playing in Fortitude Valley with soulful melodies and engaging performances.</td>
+        <td>The Fortitude Music Hall</td>
+        <td class="date-cell">Tue 19 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.shazam.com/event/a403b422-653b-4926-86d9-b506a522fdc9"><img class="poster" src="https://is1-ssl.mzstatic.com/image/thumb/AMCArtistImages211/v4/7c/81/e8/7c81e8ec-11d4-9a12-3758-ea905c0701e8/ami-identity-d83847d78314e13332556194de4bdeec-2025-09-09T15-11-09.358Z_cropped.png/400x400bb.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.shazam.com/event/a403b422-653b-4926-86d9-b506a522fdc9" target="_blank">Warren Zeiders</a></td>
+        <td class="summary-cell">Warren Zeiders will perform live in Brisbane.</td>
+        <td>The Fortitude Music Hall, Brisbane</td>
+        <td class="date-cell">Tue 19 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.miamimarketta.com/ticketed-events/electricsix"><img class="poster" src="http://static1.squarespace.com/static/619ae50ac9d7b62fd49ccdf5/619afe723bdcf8379ec5a412/688445491352d53145a10463/1760160201181/electricsix_condensed.png?format=1500w" alt="poster" /></a></td>
+        <td><a href="https://www.miamimarketta.com/ticketed-events/electricsix" target="_blank">Electric Six</a></td>
+        <td class="summary-cell">Experience a wild, neon-lit show blending disco, punk, funk, and rock.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Wed 20 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.eventfinda.com.au/2026/liza-minnelli-show-life-is-cabaret/gold-coast/surfers-paradise" target="_blank">Liza Minnelli Show - Life is a Cabaret</a></td>
+        <td class="summary-cell">Liza Minnelli tribute show at HOTA, Gold Coast.</td>
+        <td>HOTA, Gold Coast</td>
+        <td class="date-cell">Wed 20 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.facebook.com/events/1895282328042692/" target="_blank">Chicane</a></td>
+        <td class="summary-cell">Chicane returns to Australia with his Offshore Australian Tour 2026.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Wed 20 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://allevents.in/miami-au/concerts"><img class="poster" src="https://cdn2.allevents.in/transup/e3/880c2c3e74476a9021094ef88f8b08/concert.png" alt="poster" /></a></td>
+        <td><a href="https://allevents.in/miami-au/concerts" target="_blank">The Buzz Lovers (Nirvana Tribute)</a></td>
+        <td class="summary-cell">A tribute to Nirvana, bringing the best of their music to life.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Thu 21 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.miamimarketta.com/ticketed-events/thedarkness"><img class="poster" src="http://static1.squarespace.com/static/619ae50ac9d7b62fd49ccdf5/619afe723bdcf8379ec5a412/6879ed14afaf1277f3d2c64b/1763182362855/The-Darkness_2026_Miami_1000x500.jpg?format=1500w" alt="poster" /></a></td>
+        <td><a href="https://www.miamimarketta.com/ticketed-events/thedarkness" target="_blank">The Darkness</a></td>
+        <td class="summary-cell">UK rock legends The Darkness bring their high-energy rock show to the Gold Coast.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Thu 21 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://experiencegoldcoast.com/events/cool-britannia--miami-marketta" target="_blank">Cool Britannia</a></td>
+        <td class="summary-cell">A night of British hits and live performances at Miami Marketta.</td>
+        <td>Miami Marketta, Miami</td>
+        <td class="date-cell">Thu 21 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://gcmag.com.au/events/donavon-frankenreiter-live-at-miami-marketta/" target="_blank">Donavon Frankenreiter</a></td>
+        <td class="summary-cell">Enjoy a night of surf rock and acoustic vibes with Donavon Frankenreiter.</td>
+        <td>Miami Marketta, Miami</td>
+        <td class="date-cell">Thu 21 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://allevents.in/miami-au/live-music"><img class="poster" src="https://cdn2.allevents.in/transup/b6/cd25aa012a4235be27c330e089cc2e/category_banner.webp" alt="poster" /></a></td>
+        <td><a href="https://allevents.in/miami-au/live-music" target="_blank">The Buzz Lovers Perform The Best of Nirvana</a></td>
+        <td class="summary-cell">A tribute performance featuring the best of Nirvana.</td>
+        <td>23 Hillcrest Parade, Miami, QLD</td>
+        <td class="date-cell">Thu 21 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://www.koobit.com/of-monsters-and-men-e148945"><img class="poster" src="https://media.koobit.com/of-monsters-and-men-in-concert-at-razzmatazz-stage-v2-78134.jpg" alt="poster" /></a></td>
+        <td><a href="https://www.koobit.com/of-monsters-and-men-e148945" target="_blank">Of Monsters And Men</a></td>
+        <td class="summary-cell">Icelandic indie folk-rock band performs as part of The Mouse Parade Tour.</td>
+        <td>The Fortitude Music Hall, Brisbane</td>
+        <td class="date-cell">Fri 22 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://musick.com.au/gig/sessions-surf-festival-feat-dope-lemon-babe-rainbow-and-more-at-miami-marketta-gold-coast-2026-05-23/"><img class="poster" src="https://musick.com.au/api/og-image.php?src=%2Fassets%2Fimages%2Fgigs%2Fgig-15772-sessions-surf-festival-feat-dope-lemon-babe-rainbow-and-more-at-miami-marketta-g.webp" alt="poster" /></a></td>
+        <td><a href="https://musick.com.au/gig/sessions-surf-festival-feat-dope-lemon-babe-rainbow-and-more-at-miami-marketta-gold-coast-2026-05-23/" target="_blank">Dope Lemon</a></td>
+        <td class="summary-cell">Dope Lemon will perform at the Sessions Surf Festival, featuring a lineup of surf-inspired music.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Sat 23 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://allevents.in/brisbane/live-music--may" target="_blank">Enter Shikari</a></td>
+        <td class="summary-cell">Enter Shikari performs their unique blend of post-hardcore and electronic music.</td>
+        <td>The Tivoli, Brisbane</td>
+        <td class="date-cell">Sat 23 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://prwire.com.au/pr/126984/the-man-from-snowy-river-in-concert-debuts-at-the-gold-coast"><img class="poster" src="https://img.influencing.com/company/295/186/447/o.png" alt="poster" /></a></td>
+        <td><a href="https://prwire.com.au/pr/126984/the-man-from-snowy-river-in-concert-debuts-at-the-gold-coast" target="_blank">The Man From Snowy River in Concert</a></td>
+        <td class="summary-cell">Experience the classic film with a live soundtrack by the Southern Cross Symphony.</td>
+        <td>The Star, Gold Coast</td>
+        <td class="date-cell">Sat 23 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://happeningnext.com/event/rock-city-saints-twin-towns-clubs-andamp-resort-eid3a0dhxkeqx"><img class="poster" src="https://cdn.happeningnext.com/events5/banners/a922fde7386b998bf902b3491b3452f846f570ac1aa7b91741d61af62dc453f9-rimg-w822-h616-dc020202-gmir?v=1776763496" alt="poster" /></a></td>
+        <td><a href="https://happeningnext.com/event/rock-city-saints-twin-towns-clubs-andamp-resort-eid3a0dhxkeqx" target="_blank">Rock City Saints</a></td>
+        <td class="summary-cell">Rock City Saints perform live at Twin Towns Clubs &amp; Resort.</td>
+        <td>Twin Towns Clubs &amp; Resort, Coolangatta</td>
+        <td class="date-cell">Sat 23 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://musick.com.au/gig/tilt-series-2-with-ixaras-frank-louis-and-myles-all-ages-at-mo-s-desert-clubhouse-2026-05-23/"><img class="poster" src="https://musick.com.au/api/og-image.php?src=%2Fassets%2Fimages%2Fgigs%2Fgig-23412-tilt-series-2-with-ixaras-frank-louis-and-myles-all-ages-at-mo-s-desert-clubhous.webp" alt="poster" /></a></td>
+        <td><a href="https://musick.com.au/gig/tilt-series-2-with-ixaras-frank-louis-and-myles-all-ages-at-mo-s-desert-clubhouse-2026-05-23/" target="_blank">TILT SERIES 2 with Ixaras, Frank Louis</a></td>
+        <td class="summary-cell">A youth-focused series supporting emerging Australian artists.</td>
+        <td>Mo&#x27;s Desert Clubhouse, Burleigh Heads</td>
+        <td class="date-cell">Sat 23 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://tickets.oztix.com.au/outlet/event/e1dc9c78-0b70-4f6f-a7c3-c3e2fa26a345"><img class="poster" src="https://oztix.com.au/images/og/default.png" alt="poster" /></a></td>
+        <td><a href="https://tickets.oztix.com.au/outlet/event/e1dc9c78-0b70-4f6f-a7c3-c3e2fa26a345" target="_blank">Balcony Bash</a></td>
+        <td class="summary-cell">A mini fest featuring some of the Gold Coast&#x27;s best local bands for a day of live music, community and giving back.</td>
+        <td>Coolangatta Hotel, Gold Coast</td>
+        <td class="date-cell">Sun 24 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"><a href="https://stayhappening.com/e/dead-of-winter-festival-2026-band-competition-E2ISYHTSEEQ"><img class="poster" src="https://cdn.stayhappening.com/events8/banners/3e5116f9ec8c3cf9c3ee60fc740de7e87b7a258df7e150350f41c677ea7273b5-rimg-w1200-h628-dca946d7-gmir?v=1776872594" alt="poster" /></a></td>
+        <td><a href="https://stayhappening.com/e/dead-of-winter-festival-2026-band-competition-E2ISYHTSEEQ" target="_blank">Dead of Winter Festival - 2026 BAND COMPETITION</a></td>
+        <td class="summary-cell">A band competition as part of the Dead of Winter Festival.</td>
+        <td>Mo&#x27;s Desert Clubhouse, Burleigh Heads</td>
+        <td class="date-cell">Sun 24 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://miamimarketta.oztix.com.au/" target="_blank">Synergy Management Supports Tayla</a></td>
+        <td class="summary-cell">Catch Tayla live at Miami Marketta, supported by Synergy Management.</td>
+        <td>Miami Marketta, Gold Coast</td>
+        <td class="date-cell">Sun 24 May 2026</td>
+      </tr>
+
+      <tr>
+        <td class="poster-cell"></td>
+        <td><a href="https://www.facebook.com/events/2210103443129290/" target="_blank">Dead of Winter Festival Band Competition</a></td>
+        <td class="summary-cell">Band competition as part of the Dead of Winter Festival.</td>
+        <td>Burleigh, QLD</td>
+        <td class="date-cell">Sun 24 May 2026</td>
+      </tr>
+
+    </tbody>
+  </table>
+
+</body>
+</html>

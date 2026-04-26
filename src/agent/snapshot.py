@@ -11,7 +11,7 @@ from typing import Any
 from agent.models import Resource, resource_to_dict
 
 
-def _canonical_fingerprint(resources: list[Resource]) -> str:
+def canonical_fingerprint(resources: list[Resource]) -> str:
     """Stable hash from sorted URLs + titles."""
     pairs = sorted(
         (r.url.strip().lower(), r.title.strip().lower()) for r in resources if r.url
@@ -45,7 +45,7 @@ def save_snapshot(
 
 def fingerprint_changed(resources: list[Resource], path: Path) -> tuple[str, bool]:
     """Return (new_fingerprint, unchanged_vs_disk)."""
-    fp = _canonical_fingerprint(resources)
+    fp = canonical_fingerprint(resources)
     prev = load_snapshot(path)
     if not prev:
         return fp, False

@@ -55,8 +55,8 @@ def test_render_summary_shown() -> None:
 
 def test_render_no_image_when_no_thumbnail() -> None:
     r = _make_resource("Band A", "https://example.com/a", thumbnail_url=None)
-    html = render_html([r])
-    assert "<img" not in html
+    output = render_html([r])
+    assert '<img class="poster"' not in output
 
 
 def test_render_image_when_thumbnail_present() -> None:

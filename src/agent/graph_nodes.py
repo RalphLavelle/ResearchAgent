@@ -218,26 +218,36 @@ def node_local_output(state: AgentState) -> AgentState:
     fp = state.get("fingerprint") or ""
 
     try:
-        # Merge new events into the spreadsheet (also expires past events).
+        # Merge current-run events into the spreadsheet (also expires past events).
         write_output(resources, append_log_only=False, log_line=msg)
-        # Regenerate HTML from the spreadsheet (source of truth), not the
-        # current run's resources — ensures HTML is 1:1 with the spreadsheet.
-        write_html(load_spreadsheet_resources())
         save_snapshot(config.SNAPSHOT_PATH, fp, resources)
 
-        # Push to Notion when credentials exist and this fingerprint hasn't been synced yet.
+        # Read back the FULL spreadsheet — this is the source of truth for all
+        # downstream outputs.  The current run may only have added a few new
+        # events; the spreadsheet holds everything accumulated across all runs.
+        all_resources = load_spreadsheet_resources()
+
+        # Regenerate HTML 1:1 from the spreadsheet.
+        write_html(all_resources)
+
+        # Fingerprint the full spreadsheet so Notion syncs whenever the
+        # accumulated event list changes, not just when this run's results differ.
+        from agent.snapshot import canonical_fingerprint
+        spreadsheet_fp = canonical_fingerprint(all_resources)
+
+        # Sync to Notion using the full spreadsheet, not just this run's results.
         if (
             config.notion_sync_configured()
-            and notion_output.notion_sync_needed(fp, config.NOTION_SYNC_STATE_PATH)
+            and notion_output.notion_sync_needed(spreadsheet_fp, config.NOTION_SYNC_STATE_PATH)
         ):
             try:
                 notion_output.sync_research_page(
                     token=config.NOTION_INTEGRATION_TOKEN,
                     page_id_raw=config.NOTION_RESEARCH_PAGE_ID,
-                    resources=resources,
+                    resources=all_resources,
                     api_version=config.NOTION_API_VERSION,
                 )
-                notion_output.mark_notion_synced(fp, config.NOTION_SYNC_STATE_PATH)
+                notion_output.mark_notion_synced(spreadsheet_fp, config.NOTION_SYNC_STATE_PATH)
             except Exception as notion_exc:
                 logger.exception("Notion sync failed: %s", notion_exc)
                 ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

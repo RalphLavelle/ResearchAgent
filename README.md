@@ -1,4 +1,4 @@
-# AI Agent research → local Markdown
+# Research Agent
 
 Python app using **LangGraph** that searches for high-quality resources about building AI agents (books, ebooks, courses, websites), prefers **LangGraph** when a hit is framework-specific, and saves results as **Markdown** on your computer.
 

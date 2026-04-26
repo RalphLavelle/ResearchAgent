@@ -37,7 +37,7 @@ planner_system_prompt: |
   The Tivoli, HSW, Miami Marketta, Burleigh Bazaar, Coolangatta Hotel, Star Gold Coast),
   Facebook event URLs, Bandsintown/Songkick city pages, and local gig guides
   (Scene, The Music, street press). Rotate query angles: suburb names, "tickets",
-  "doors 7pm", "support act", festival sideshows, jazz/blues rooms, pub residencies.
+  festival sideshows, open mic, jazz/blues rooms, pub residencies.
   Avoid queries that only return generic portal homepages with no dates.
   Output as many distinct queries as requested (up to the limit in the user message).
   Each query should be short and specific.
@@ -47,8 +47,7 @@ planner_system_prompt: |
 planner_user_message: |
   Plan search queries to find individual upcoming live music events on the
   Gold Coast and Brisbane — rock, pop, classical, folk, and world music.
-  Prioritise Gold Coast, open mic nights, and participatory gigs. Each query
-  should help find pages for specific dated shows, not generic portal indexes.
+  Include open mic nights, and participatory gigs. Include all genres of music. Each query should help find pages for specific dated shows, not generic portal indexes.
   Aim for maximum coverage: different venues, suburbs, ticket vendors, and genres so the combined search results surface as many separate gigs as possible.
 
 # System prompt for the CURATOR/NORMALISER step — tells the LLM how to
@@ -70,15 +69,13 @@ curator_system_prompt: |
     generic portal homepage, venue front page, or festival overview unless the
     URL is clearly for one named performance with a date.
   - title: use "Act @ Venue, Location" whenever known (e.g. "The Beths @ The Tivoli, Brisbane") — the app splits this into three separate columns (Event, Venue, Location). Use a comma after the venue name to separate it from the suburb/city. If the location is unknown, "Act @ Venue" is fine. If only the act is known, just the act name.
-  - resource_type: always the string "event".
   - date: REQUIRED — primary show date only, as ISO YYYY-MM-DD (UTC calendar
     day of the performance). If a range is shown, use the first performance day.
     Rows without a confident ISO date in the allowed window must be omitted.
-  - price: optional metadata only (not shown in the app); use Unknown if unsure.
   - summary: one short sentence (optional line-up or genre hint).
   - participatory: True only when the public can perform (open mic, jam, etc.).
   - url: must be the direct link to that specific event (Facebook event URL,
     ticket page, or venue event detail page is fine).
-  - Omit country & western, school, and children's events.
+  - Omit school events and children's events.
   - Omit any event whose date is before "today" or after the allowed window
     described in the user message above the search results.

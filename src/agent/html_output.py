@@ -47,11 +47,18 @@ _ROW_END_MARKER = "<!-- ROW_TEMPLATE_END -->"
 # ── Template loading ──────────────────────────────────────────────────────────
 
 
-def _load_template() -> tuple[str, str]:
-    """Read the template and split it into (outer, row_template).
+def _load_template() -> tuple[str, str, int, int]:
+    """Read the template and locate the row marker section.
 
-    The row template is the text between the ROW_TEMPLATE_START/END comment
-    markers.  The outer template has ``{{ROWS}}`` where those markers were.
+    Returns:
+        (source, row_template, marker_start, marker_end) where:
+        - source        is the full template text
+        - row_template  is the HTML between the ROW_TEMPLATE_START/END markers
+        - marker_start  is the index of the first character of ROW_TEMPLATE_START
+        - marker_end    is the index just after ROW_TEMPLATE_END
+
+    At render time the caller replaces source[marker_start:marker_end] with the
+    rendered rows so there is exactly one injection point and no duplicate tokens.
 
     Raises:
         FileNotFoundError: Template file is missing.
@@ -73,12 +80,7 @@ def _load_template() -> tuple[str, str]:
             f"Template is missing {_ROW_START_MARKER} / {_ROW_END_MARKER} markers. "
             "Restore them from the original templates/event_table.html."
         )
-    row_template = m.group(1)
-    # Replace the whole marker+content block in the outer template with {{ROWS}}
-    outer = source[: m.start()] + "{{ROWS}}" + source[m.end() :]
-    # Also remove the large documentation comment block (everything after {{ROWS}})
-    outer = re.sub(r"\n<!--\n\s*═+.*?═+\n.*?-->\n", "", outer, flags=re.DOTALL)
-    return outer, row_template
+    return source, m.group(1), m.start(), m.end()
 
 
 # ── Row rendering ─────────────────────────────────────────────────────────────
@@ -121,8 +123,14 @@ def _render_row(row_tmpl: str, r: Resource) -> str:
 
 
 def render_html(resources: list[Resource]) -> str:
-    """Render the full HTML page from the template and event data."""
-    outer, row_tmpl = _load_template()
+    """Render the full HTML page from the template and event data.
+
+    The row marker section (ROW_TEMPLATE_START … ROW_TEMPLATE_END, including
+    the markers themselves) is replaced with the rendered rows.  All other
+    tokens ({{TITLE}}, {{GENERATED}}) are substituted afterwards.  This means
+    there is exactly one injection point, so rows can never appear twice.
+    """
+    source, row_tmpl, marker_start, marker_end = _load_template()
     resources = sort_resources_by_event_date_asc(list(resources))
 
     if resources:
@@ -135,10 +143,10 @@ def render_html(resources: list[Resource]) -> str:
             "</td></tr>\n"
         )
 
-    page = outer
+    # Splice rendered rows directly into the source at the marker position.
+    page = source[:marker_start] + rows_html + source[marker_end:]
     page = page.replace("{{TITLE}}", html.escape(config.SUBJECT.output_title))
     page = page.replace("{{GENERATED}}", html.escape(format_generated_timestamp()))
-    page = page.replace("{{ROWS}}", rows_html)
     return page
 
 

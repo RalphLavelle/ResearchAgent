@@ -105,8 +105,6 @@ def resource_to_dict(r: Resource) -> dict:
     return {
         "title": r.title,
         "url": r.url,
-        "resource_type": r.resource_type,
-        "price": r.price,
         "date": r.date,
         "summary": r.summary,
         "participatory": r.participatory,
