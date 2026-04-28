@@ -44,12 +44,12 @@ NOTION_SYNC_STATE_PATH = DATA_DIR / "notion_sync_state.json"
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
 
-# Markdown output: Desktop/AgentAI by default. Override with OUTPUT_DIR or AGENT_AI_DIR.
+# Spreadsheet, HTML, run_log: repo data/ by default (same as DATA_DIR). Override with OUTPUT_DIR or AGENT_AI_DIR.
 _output_raw = (os.environ.get("OUTPUT_DIR") or os.environ.get("AGENT_AI_DIR") or "").strip()
 if _output_raw:
     OUTPUT_DIR = Path(_output_raw).expanduser().resolve()
 else:
-    OUTPUT_DIR = Path.home() / "Desktop" / "AgentAI"
+    OUTPUT_DIR = DATA_DIR
 
 MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
 SEARCH_DELAY_SEC = float(os.environ.get("SEARCH_DELAY_SEC", "1.5"))

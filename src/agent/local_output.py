@@ -70,7 +70,7 @@ _COL_WIDTHS = [30, 22, 16, 18, 55, 45, 0, 40, 20]
 
 
 def output_directory() -> Path:
-    """Desktop/AgentAI by default; override with OUTPUT_DIR or AGENT_AI_DIR in .env."""
+    """Repo ``data/`` by default; override with OUTPUT_DIR or AGENT_AI_DIR in ``.env``."""
     return config.OUTPUT_DIR
 
 

@@ -1,0 +1,57 @@
+/* Root shell: page chrome only; event table styling lives inside the generated iframe. */
+
+:host {
+  --bg: #f0f2f5;
+  --text: #1a1a1a;
+  --muted: #5c6370;
+  display: block;
+  min-height: 100vh;
+  font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  z-index: 100;
+  padding: 0.5rem 1rem;
+  background: #fff;
+  color: var(--text);
+  border-radius: 4px;
+}
+
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+}
+
+.shell {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 1.25rem 1rem 2rem;
+}
+
+.masthead {
+  margin-bottom: 1rem;
+}
+
+.masthead h1 {
+  margin: 0 0 0.35rem;
+  font-size: 1.65rem;
+  font-weight: 600;
+}
+
+.lede {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.45;
+  color: var(--muted);
+}
+
+.lede code {
+  font-size: 0.88em;
+  padding: 0.1em 0.35em;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.06);
+}

@@ -1,0 +1,21 @@
+/* Embedded spreadsheet-rendered page (scoped iframe — avoids leaking styles into the shell). */
+
+:host {
+  display: block;
+}
+
+.list-frame-wrap {
+  background: #e8eaee;
+  border-radius: 10px;
+  padding: 0.35rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+}
+
+.research-frame {
+  display: block;
+  width: 100%;
+  min-height: 75vh;
+  border: none;
+  border-radius: 8px;
+  background: #fafafa;
+}

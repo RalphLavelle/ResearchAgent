@@ -1,14 +1,15 @@
 # Research Agent
 
-Python app using **LangGraph** that searches for high-quality resources about building AI agents (books, ebooks, courses, websites), prefers **LangGraph** when a hit is framework-specific, and saves results as **Markdown** on your computer.
+Python app using **LangGraph** that researches configurable topics, curates structured rows, and saves results to a **spreadsheet** plus generated HTML under **`data/`** (override with `.env`).
 
-**Default output folder:** `Desktop/AgentAI` (your user profile’s Desktop). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
+**Default output folder:** `data/` at the repo root (spreadsheet + logs + HTML). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
 
 Files written:
 
 | File | Purpose |
 |------|--------|
-| `agent_research.md` | Full curated list (rewritten when research results change) |
+| `agent_research.xlsx` | Spreadsheet source of truth (merge + dedupe each run) |
+| `agent_research.html` | Rendered event table (same content the Angular app embeds) |
 | `run_log.md` | Timestamped lines every run (append-only) |
 
 Search uses LangChain’s **`DuckDuckGoSearchRun`** (via its `api_wrapper`) — no search API key.
@@ -29,9 +30,9 @@ Copy `env.example` to `.env` and set `OPENAI_API_KEY` (and optional `OPENAI_MODE
 
 ### 3. Output folder (optional)
 
-By default the app uses:
+By default the app writes under:
 
-`%USERPROFILE%\Desktop\AgentAI`
+`.\data\`
 
 To use a different folder, set in `.env`:
 
@@ -51,7 +52,7 @@ Copy `config/schedule.example.yaml` to `config/schedule.yaml` and set `interval_
   .\venv\Scripts\python.exe -m agent run-once
   ```
 
-- **Dry run** (no Markdown files, no snapshot file):
+- **Dry run** (no spreadsheet / HTML / log writes):
 
   ```powershell
   .\venv\Scripts\python.exe -m agent run-once --dry-run
@@ -71,10 +72,22 @@ Copy `config/schedule.example.yaml` to `config/schedule.yaml` and set `interval_
 
 Or use `scripts\start_serve.ps1` after adjusting paths.
 
+### Web UI (Angular)
+
+The UI under **`web/`** embeds `data/agent_research.html` so you can browse the spreadsheet-backed table in the browser.
+
+```powershell
+cd web
+npm install
+npm start
+```
+
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). Run the Python agent at least once so `data/agent_research.html` exists.
+
 ## Behavior
 
-- If curated content **changed** since last run, **`agent_research.md`** is rewritten and a line is appended to **`run_log.md`**.
-- If nothing **meaningfully** changed, only **`run_log.md`** gets a new line (no rewrite of the main file).
+- If curated content **changed** since last run, the spreadsheet (and HTML) are updated and a line is appended to **`run_log.md`**.
+- If nothing **meaningfully** changed, only **`run_log.md`** gets a new line (no rewrite of the main spreadsheet/HTML).
 - `data/snapshot.json` stores a fingerprint (gitignored).
 
 ## Tests
@@ -85,4 +98,5 @@ Or use `scripts\start_serve.ps1` after adjusting paths.
 
 ## Layout
 
-- `src/agent/` — LangGraph workflow, DuckDuckGo search, local Markdown writer, scheduler.
+- `src/agent/` — LangGraph workflow, DuckDuckGo search, spreadsheet/HTML writer, scheduler.
+- `web/` — Angular shell that embeds the generated HTML from `data/`.
