@@ -9,6 +9,7 @@ model just validates that the shape is correct.
 from __future__ import annotations
 
 from typing import TypedDict
+from uuid import uuid4
 
 from pydantic import BaseModel, Field
 
@@ -16,6 +17,11 @@ from pydantic import BaseModel, Field
 class Resource(BaseModel):
     """One curated result written to the local Markdown output file."""
 
+    # Stable id for spreadsheet + JSON (not shown in the Angular table UI).
+    id: str = Field(
+        default_factory=lambda: str(uuid4()),
+        description="Stable UUID for deduplication and APIs.",
+    )
     title: str = Field(..., description="Display title of the event or resource.")
     url: str = Field(..., description="Canonical http(s) URL for the item.")
 
@@ -88,7 +94,8 @@ def resource_from_dict(data: dict) -> Resource:
     """
     # Support old snapshots that still have 'langgraph_specific'
     participatory = data.get("participatory") or data.get("langgraph_specific", False)
-    return Resource(
+    rid = data.get("id")
+    kwargs: dict = dict(
         title=str(data.get("title", "")),
         url=str(data.get("url", "")),
         resource_type=str(data.get("resource_type", "website")),
@@ -98,11 +105,15 @@ def resource_from_dict(data: dict) -> Resource:
         participatory=bool(participatory),
         thumbnail_url=data.get("thumbnail_url"),
     )
+    if isinstance(rid, str) and rid.strip():
+        kwargs["id"] = rid.strip()
+    return Resource(**kwargs)
 
 
 def resource_to_dict(r: Resource) -> dict:
     """Serialise a Resource to a plain dict for JSON snapshot storage."""
     return {
+        "id": r.id,
         "title": r.title,
         "url": r.url,
         "date": r.date,

@@ -2,9 +2,11 @@
 
 Key behaviours (Tasks 8, 9, 13, 14):
 - Output is ``agent_research.xlsx`` — the source of truth for all events.
-- Columns: Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added.
+- Columns: Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added, Event ID (hidden).
 - The spreadsheet **accumulates**: existing rows are merged, past events removed,
-  new events added.  Nothing is overwritten by new LLM text.
+  new events added.  Nothing is overwritten by new LLM text.  Rows are addressed
+  by **Event ID** so independent gigs **may reuse the same listing URL** — only an
+  identical URL **and** the same inferred act+date pair is skipped as a re-ingest.
 - Semantic deduplication (Task 13): before adding a row the pipeline checks
   whether an event with the same (act, date) already exists (venue ignored for
   exact matches because venue text can vary slightly).  If so the new URL is
@@ -25,6 +27,7 @@ import os
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
+from uuid import uuid4
 
 from openpyxl import Workbook, load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -51,6 +54,7 @@ RUN_LOG_FILENAME = "run_log.md"
 _COLS = [
     "Event", "Venue", "Location", "Date", "URL",
     "Sources", "Poster URL", "Summary", "Added",
+    "Event ID",
 ]
 _DATE_FORMAT = "ddd d mmm yyyy"
 
@@ -64,9 +68,10 @@ _IDX_SOURCES  = 5
 _IDX_POSTER   = 6
 _IDX_SUMMARY  = 7
 _IDX_ADDED    = 8
+_IDX_EVENT_ID = 9
 
 # Column widths (0 = hide the column)
-_COL_WIDTHS = [30, 22, 16, 18, 55, 45, 0, 40, 20]
+_COL_WIDTHS = [30, 22, 16, 18, 55, 45, 0, 40, 20, 0]
 
 
 def output_directory() -> Path:
@@ -84,6 +89,13 @@ def _domain(url: str) -> str:
         return netloc.lstrip("www.") if netloc.startswith("www.") else netloc
     except Exception:
         return ""
+
+
+def _row_event_id(row: list) -> str:
+    """Stable Event ID cell, if present."""
+    if len(row) <= _IDX_EVENT_ID:
+        return ""
+    return str(row[_IDX_EVENT_ID] or "").strip()
 
 
 def _dedup_key_from_row(row: list) -> tuple[str, date] | None:
@@ -156,17 +168,31 @@ def _find_partial_act_match(
     prevent merging genuinely different acts that happen to share a name fragment
     on different stages.
 
-    Returns the url_key of the first matching row, or None.
+    Returns the row's **Event ID** dict key, or None.
     """
     new_venue_norm = new_venue.strip().lower()
-    for url_key, row in existing.items():
+    for row_key, row in existing.items():
         if _row_date(row) != new_date:
             continue
         if str(row[_IDX_VENUE] or "").strip().lower() != new_venue_norm:
             continue
         if _acts_partially_match(new_act, str(row[_IDX_EVENT] or "")):
-            return url_key
+            return row_key
     return None
+
+
+def _already_have_url_and_show(
+    existing: dict[str, list], url_lower: str, dk: tuple[str, date] | None
+) -> bool:
+    """True when the same URL already represents this act+date pair (re-ingest)."""
+    if dk is None:
+        return False
+    for row in existing.values():
+        if str(row[_IDX_URL] or "").strip().lower() != url_lower:
+            continue
+        if _dedup_key_from_row(row) == dk:
+            return True
+    return False
 
 
 # ── Row ↔ Resource conversion ─────────────────────────────────────────────────
@@ -176,6 +202,7 @@ def _resource_to_row(r: Resource) -> list:
     """Convert a Resource to a list matching ``_COLS`` order."""
     act, venue, location = split_title_parts(r.title or "")
     raw_date = parse_event_sort_date(r.date)
+    rid = (r.id or "").strip() or str(uuid4())
     return [
         act or "—",                           # Event
         venue,                                # Venue
@@ -186,6 +213,7 @@ def _resource_to_row(r: Resource) -> list:
         (r.thumbnail_url or "").strip(),      # Poster URL (hidden)
         (r.summary or "").strip(),            # Summary
         format_generated_timestamp(),         # Added
+        rid,                                  # Event ID (hidden)
     ]
 
 
@@ -219,7 +247,12 @@ def _row_to_resource(row: list) -> Resource:
     venue_loc = ", ".join(filter(None, [venue, location]))
     title = f"{act} @ {venue_loc}" if venue_loc else act
 
+    eid = _row_event_id(row)
+    if not eid:
+        eid = str(uuid4())
+
     return Resource(
+        id=eid,
         title=title,
         url=url,
         date=raw_date.isoformat() if raw_date else "",
@@ -243,7 +276,10 @@ def load_spreadsheet_resources(path: Path | None = None) -> list[Resource]:
 
 
 def _load_existing_rows(path: Path) -> dict[str, list]:
-    """Load the spreadsheet as an ordered dict keyed by URL (lowercase).
+    """Load the spreadsheet as ``{Event ID → row}``.
+
+    Rows are keyed by the hidden **Event ID** column so several distinct gigs
+    can share one listing/calendar URL without overwriting each other.
 
     The loader is lenient about the Sources column: if every other expected
     column is present but Sources is absent (i.e. a spreadsheet written before
@@ -259,12 +295,14 @@ def _load_existing_rows(path: Path) -> dict[str, list]:
         header = [str(c.value or "") for c in next(ws.iter_rows(min_row=1, max_row=1))]
 
         missing = [n for n in _COLS if n not in header]
-        if missing and missing != ["Sources"]:
+        optional = frozenset({"Sources", "Event ID"})
+        missing_required = [n for n in missing if n not in optional]
+        if missing_required:
             # Too many missing columns — schema is incompatible.
             logger.warning(
                 "Spreadsheet is missing unexpected columns %s; "
                 "ignoring existing file (header: %s).",
-                missing,
+                missing_required,
                 header,
             )
             return rows
@@ -289,7 +327,11 @@ def _load_existing_rows(path: Path) -> dict[str, list]:
             # Ensure Sources is a string (not None) for safe appending later.
             if row_list[_IDX_SOURCES] is None:
                 row_list[_IDX_SOURCES] = ""
-            rows[url_key] = row_list
+            sid = str(row_list[_IDX_EVENT_ID] or "").strip() or str(uuid4())
+            while sid in rows:
+                sid = str(uuid4())
+            row_list[_IDX_EVENT_ID] = sid
+            rows[sid] = row_list
     except Exception as exc:
         logger.warning("Could not read existing spreadsheet (%s); starting fresh.", exc)
     return rows
@@ -361,6 +403,124 @@ def _write_workbook(path: Path, rows: dict[str, list]) -> None:
     logger.info("Spreadsheet written: %d events → %s", len(sorted_rows), path)
 
 
+def _pick_primary_pair(pairs: list[tuple[str, list]]) -> tuple[str, list]:
+    """Prefer a row with a poster, then richer summary / title."""
+    with_poster = [(uk, r) for uk, r in pairs if str(r[_IDX_POSTER] or "").strip()]
+    pool = with_poster or pairs
+    return max(
+        pool,
+        key=lambda x: (
+            len(str(x[1][_IDX_SUMMARY] or "")),
+            len(str(x[1][_IDX_EVENT] or "")),
+        ),
+    )
+
+
+def _merge_cluster_rows(pairs: list[tuple[str, list]]) -> tuple[str, list]:
+    """Return (canonical row storage key (= Event ID), merged row).
+
+    Maximises text + keeps a poster URL.
+    """
+    primary_uk, primary_row = _pick_primary_pair(pairs)
+    rows = [r for _, r in pairs]
+    merged = list(primary_row)
+
+    merged[_IDX_EVENT] = max((str(r[_IDX_EVENT] or "") for r in rows), key=len)
+    merged[_IDX_VENUE] = max((str(r[_IDX_VENUE] or "") for r in rows), key=len)
+    merged[_IDX_LOCATION] = max((str(r[_IDX_LOCATION] or "") for r in rows), key=len)
+
+    summaries = [
+        str(r[_IDX_SUMMARY] or "").strip()
+        for r in rows
+        if str(r[_IDX_SUMMARY] or "").strip()
+    ]
+    merged[_IDX_SUMMARY] = (
+        max(summaries, key=len) if summaries else str(merged[_IDX_SUMMARY] or "")
+    )
+
+    poster = ""
+    for r in rows:
+        p = str(r[_IDX_POSTER] or "").strip()
+        if p:
+            poster = p
+            break
+    merged[_IDX_POSTER] = poster
+
+    merged[_IDX_EVENT_ID] = str(primary_row[_IDX_EVENT_ID] or "").strip() or str(uuid4())
+    merged[_IDX_DATE] = primary_row[_IDX_DATE]
+    merged[_IDX_URL] = str(primary_row[_IDX_URL] or "").strip()
+
+    merged[_IDX_SOURCES] = str(primary_row[_IDX_SOURCES] or "").strip()
+    for uk, r in pairs:
+        if uk == primary_uk:
+            continue
+        u = str(r[_IDX_URL] or "").strip()
+        if u:
+            _add_source(merged, u)
+        for line in str(r[_IDX_SOURCES] or "").split("\n"):
+            u2 = line.strip()
+            if u2.startswith("http"):
+                _add_source(merged, u2)
+
+    return primary_uk, merged
+
+
+def run_llm_semantic_dedupe(path: Path | None = None) -> int:
+    """Second-pass dedup: LLM clusters same-day semantic duplicates; merge rows.
+
+    Returns the number of spreadsheet rows removed (not counting the kept row).
+    """
+    from agent.semantic_dedupe import find_same_event_clusters
+
+    if path is None:
+        path = output_directory() / RESEARCH_FILENAME
+    if not path.exists():
+        return 0
+
+    existing = _load_existing_rows(path)
+    if len(existing) < 2:
+        return 0
+
+    events: list[dict] = []
+    for _uk, row in existing.items():
+        d = _row_date(row)
+        events.append(
+            {
+                "id": _row_event_id(row),
+                "name": str(row[_IDX_EVENT] or ""),
+                "venue": str(row[_IDX_VENUE] or ""),
+                "location": str(row[_IDX_LOCATION] or ""),
+                "date": d.isoformat() if d else "",
+                "url": str(row[_IDX_URL] or ""),
+                "summary": str(row[_IDX_SUMMARY] or ""),
+                "poster_url": str(row[_IDX_POSTER] or ""),
+            }
+        )
+
+    clusters = find_same_event_clusters(events)
+    if not clusters:
+        return 0
+
+    removed = 0
+    for cluster in clusters:
+        id_set = {i.strip() for i in cluster if i.strip()}
+        if len(id_set) < 2:
+            continue
+        pairs = [(uk, row) for uk, row in existing.items() if _row_event_id(row) in id_set]
+        if len(pairs) < 2:
+            continue
+        primary_uk, merged = _merge_cluster_rows(pairs)
+        for uk, _ in pairs:
+            if uk != primary_uk:
+                del existing[uk]
+                removed += 1
+        existing[primary_uk] = merged
+
+    if removed:
+        _write_workbook(path, existing)
+    return removed
+
+
 # ── Merge + expire + dedup ────────────────────────────────────────────────────
 
 
@@ -368,15 +528,15 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
     """Merge new events into the persistent spreadsheet.
 
     Steps:
-    1. Load existing rows from disk.
+    1. Load existing rows from disk (keyed by Event ID).
     2. Drop rows whose event date is in the past.
     3. For each new resource:
-       a. Exact URL match → skip.
+       a. Same URL **and** identical act+date as an existing row → skip (re-ingest).
        b. Same act name + date (venue ignored) → exact semantic duplicate:
           add URL to Sources when domain differs.
        c. One act name is a substring of the other + same venue + same date →
           partial-name duplicate: keep the longer act name; add URL to Sources.
-       d. Otherwise → insert as a new row.
+       d. Otherwise → insert as a new row (several rows may share one listing URL).
     4. Sort soonest-first and save.
 
     Returns:
@@ -394,12 +554,12 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
     existing = {k: v for k, v in existing.items() if (_row_date(v) or date.max) >= today}
     removed_past = before - len(existing)
 
-    # Build semantic dedup index: (act_lower, venue_lower, date) → url_key
-    dedup_index: dict[tuple, str] = {}
-    for url_key, row in existing.items():
+    # Build semantic dedup index: act+date → row key (Event ID)
+    dedup_index: dict[tuple[str, date], str] = {}
+    for row_key, row in existing.items():
         dk = _dedup_key_from_row(row)
         if dk:
-            dedup_index[dk] = url_key
+            dedup_index[dk] = row_key
 
     added = 0
     skipped = 0
@@ -413,13 +573,15 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
         act, venue, _location = split_title_parts(r.title or "")
         r_date = parse_event_sort_date(r.date)
 
-        # (a) Exact URL duplicate
-        if url_key in existing:
+        dk = _dedup_key_from_resource(r)
+
+        # (a) Identical gig re-submitted — same portal URL cannot mean duplicate *shows*
+        #     anymore; skip only when act+date also match an existing URL row.
+        if _already_have_url_and_show(existing, url_key, dk):
             skipped += 1
             continue
 
         # (b) Exact semantic duplicate — same act name + date (venue ignored).
-        dk = _dedup_key_from_resource(r)
         if dk and dk in dedup_index:
             match_key = dedup_index[dk]
             source_added = _add_source(existing[match_key], url)
@@ -450,9 +612,16 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
 
         # (d) Genuinely new event
         new_row = _resource_to_row(r)
-        existing[url_key] = new_row
+        sid = str(new_row[_IDX_EVENT_ID] or "").strip()
+        if not sid:
+            sid = str(uuid4())
+            new_row[_IDX_EVENT_ID] = sid
+        while sid in existing:
+            sid = str(uuid4())
+            new_row[_IDX_EVENT_ID] = sid
+        existing[sid] = new_row
         if dk:
-            dedup_index[dk] = url_key
+            dedup_index[dk] = sid
         added += 1
 
     _write_workbook(path, existing)
@@ -478,6 +647,17 @@ def write_output(
     log_path = out_dir / RUN_LOG_FILENAME
 
     merge_and_write(resources)
+    if not append_log_only and config.OPENAI_API_KEY:
+        try:
+            n_removed = run_llm_semantic_dedupe()
+            if n_removed:
+                logger.info(
+                    "LLM semantic dedupe removed %d duplicate spreadsheet row(s).",
+                    n_removed,
+                )
+        except Exception as exc:
+            logger.warning("LLM semantic dedupe skipped: %s", exc)
+
     _append_log(log_path, log_line)
     logger.info("Appended run log entry to %s", log_path)
 

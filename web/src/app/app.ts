@@ -11,5 +11,5 @@ import { ListComponent } from './list/list';
 })
 export class App {
   /** Page title shown above the embedded research HTML. */
-  protected readonly title = signal('Research Agent');
+  protected readonly title = signal('Upcoming Live Music Events');
 }

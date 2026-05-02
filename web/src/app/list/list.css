@@ -1,21 +1,325 @@
-/* Embedded spreadsheet-rendered page (scoped iframe — avoids leaking styles into the shell). */
+/* Event list from agent JSON — musical palette, uniform row rhythm, date = outbound link. */
 
 :host {
   display: block;
 }
 
-.list-frame-wrap {
-  background: #e8eaee;
-  border-radius: 10px;
-  padding: 0.35rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+.events-panel {
+  margin-top: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-radius: 20px;
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.92) 0%,
+    rgba(255, 248, 252, 0.95) 40%,
+    rgba(240, 249, 255, 0.92) 100%
+  );
+  box-shadow:
+    0 8px 32px rgba(217, 119, 87, 0.12),
+    0 2px 8px rgba(59, 130, 180, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.8);
 }
 
-.research-frame {
-  display: block;
-  width: 100%;
-  min-height: 75vh;
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.panel-title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(100deg, #ea580c, #c026d3, #2563eb);
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.refresh-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.45rem 1rem;
   border: none;
+  border-radius: 999px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  color: #fff;
+  background: linear-gradient(135deg, #f97316 0%, #ec4899 55%, #6366f1 100%);
+  box-shadow: 0 2px 12px rgba(236, 72, 153, 0.35);
+  transition:
+    transform 0.15s ease,
+    box-shadow 0.15s ease;
+}
+
+.refresh-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(236, 72, 153, 0.42);
+}
+
+.refresh-btn:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.refresh-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+
+.generated-line {
+  margin: 0 0 1rem;
+  font-size: 0.88rem;
+  color: #6b5563;
+}
+
+.status-msg {
+  margin: 0;
+  padding: 1rem;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.75);
+}
+
+.status-msg.error {
+  border: 1px solid #fecaca;
+  color: #991b1b;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 2rem 1rem;
+}
+
+.empty-title {
+  margin: 0 0 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  color: #433f52;
+}
+
+.empty-hint {
+  margin: 0;
+  color: #6b6578;
+  max-width: 28rem;
+  margin-inline: auto;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border-radius: 14px;
+  border: 1px solid rgba(249, 115, 22, 0.15);
+  background: rgba(255, 255, 255, 0.98);
+}
+
+.event-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  table-layout: fixed;
+}
+
+.event-table thead th {
+  padding: 0.65rem 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: #fff;
+  background: linear-gradient(135deg, #c2410c 0%, #be185d 45%, #1d4ed8 100%);
+}
+
+.event-table tbody td {
+  padding: 0.65rem 1rem;
+  border-bottom: 1px solid #f3e8ff;
+  vertical-align: top;
+}
+
+/* Uniform row height: About text is clamped so long blurbs don’t stretch rows. */
+/* Minimum row rhythm; rows may grow when an event accordion is expanded. */
+.event-table tbody tr {
+  min-height: 5.75rem;
+}
+
+.event-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.event-table tbody tr:hover {
+  background: linear-gradient(90deg, rgba(255, 237, 213, 0.35), rgba(219, 234, 254, 0.35));
+}
+
+.col-poster {
+  width: 5rem;
+}
+
+.poster-cell {
+  text-align: center;
+  vertical-align: top;
+}
+
+img.poster {
+  width: 56px;
+  height: 56px;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  margin-inline: auto;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.poster-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  margin-inline: auto;
+  border-radius: 10px;
+  font-size: 1.75rem;
+  line-height: 1;
+  background: linear-gradient(145deg, #ffedd5, #fce7f3, #dbeafe);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+}
+
+.name-cell {
+  vertical-align: top;
+}
+
+.event-accordion {
+  margin: 0;
+  max-width: 100%;
+}
+
+.event-summary {
+  list-style: none;
+  cursor: pointer;
+  padding: 0.15rem 0;
+  font-weight: 600;
+  color: #0f172a;
   border-radius: 8px;
-  background: #fafafa;
+  transition: background-color 0.15s ease;
+}
+
+.event-summary::-webkit-details-marker {
+  display: none;
+}
+
+.event-summary::marker {
+  content: '';
+}
+
+.event-summary:hover .event-summary-text {
+  color: #c026d3;
+}
+
+.event-summary:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+}
+
+.event-summary-text {
+  border-bottom: 1px dashed rgba(192, 38, 211, 0.45);
+}
+
+/* Plain title when there are no same-act peers — not interactive (task 5). */
+.event-title-plain {
+  display: inline-block;
+  padding: 0.15rem 0;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.3;
+}
+
+.accordion-panel {
+  margin-top: 0.5rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  background: linear-gradient(180deg, rgba(255, 247, 237, 0.9), rgba(239, 246, 255, 0.85));
+  border: 1px solid rgba(251, 146, 60, 0.2);
+  font-size: 0.8rem;
+  max-height: 11rem;
+  overflow: auto;
+}
+
+.accordion-heading {
+  margin: 0 0 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9d174d;
+}
+
+.accordion-list {
+  margin: 0;
+  padding-left: 1.1rem;
+}
+
+.accordion-list li {
+  margin-bottom: 0.25rem;
+}
+
+.accordion-link {
+  color: #1d4ed8;
+  text-decoration: none;
+}
+
+.accordion-link:hover {
+  text-decoration: underline;
+}
+
+.summary-cell {
+  color: #4b4659;
+  font-size: 0.875rem;
+  line-height: 1.35;
+  max-width: 14rem;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+}
+
+.venue-cell {
+  color: #475569;
+  font-size: 0.875rem;
+  line-height: 1.35;
+}
+
+.date-cell {
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.date-link {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #86198f;
+  text-decoration: none;
+  border-bottom: 2px solid rgba(134, 25, 143, 0.4);
+}
+
+.date-link:hover {
+  color: #701a75;
+  border-bottom-color: #701a75;
+}
+
+.date-link:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

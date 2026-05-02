@@ -1,13 +1,19 @@
 /* Root shell: page chrome only; event table styling lives inside the generated iframe. */
 
 :host {
-  --bg: #f0f2f5;
-  --text: #1a1a1a;
-  --muted: #5c6370;
+  /* Warm coral / dusk blue — “gig poster” vibe instead of flat grey */
+  --bg-start: #fff5f0;
+  --bg-mid: #e8f4fc;
+  --bg-end: #fdeef8;
+  --text: #1f2937;
+  --muted: #5b6477;
   display: block;
   min-height: 100vh;
   font-family: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(120% 80% at 100% 0%, rgba(255, 183, 140, 0.35) 0%, transparent 55%),
+    radial-gradient(90% 70% at 0% 20%, rgba(129, 188, 255, 0.35) 0%, transparent 50%),
+    linear-gradient(165deg, var(--bg-start) 0%, var(--bg-mid) 45%, var(--bg-end) 100%);
   color: var(--text);
 }
 

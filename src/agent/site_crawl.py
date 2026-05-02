@@ -28,7 +28,43 @@ _BINARYISH = re.compile(
     re.I,
 )
 _MAX_HTML_BYTES = 600_000
-_MAX_TEXT_PER_PAGE = 7000
+# Default excerpt length overridden by ``config.CRAWL_MAX_TEXT_PER_PAGE``.
+
+
+def _link_event_priority(url: str) -> int:
+    """Rough score — event-detail URLs are enqueued sooner under crawl page caps."""
+    low = url.lower()
+    priority = 0
+    if "/facebook.com/events/" in low or "facebook.com/events/" in low:
+        priority += 12
+    for frag in (
+        "/e/",
+        "/events/",
+        "/event/",
+        "/gig/",
+        "/gigs/",
+        "/shows/",
+        "/show/",
+        "eventbrite",
+        "bandsintown",
+        "songkick",
+        "/tickets",
+        "-tickets",
+        "ticketmaster",
+        "moshtix",
+        "oztix",
+    ):
+        if frag in low:
+            priority += 10
+            break
+    for frag in ("allevents.", "meetup.", "bandsintown", "whats-on", "whatson", "calendar", "concerts"):
+        if frag in low:
+            priority += 2
+            break
+    # Long query-string listing URLs slightly lower priority than short /e/... paths
+    if low.count("?") > 1:
+        priority -= 1
+    return priority
 
 
 def _strip_url_trailing_junk(url: str) -> str:
@@ -85,13 +121,6 @@ def extract_seed_urls_from_ddg_blob(text: str, max_seeds: int) -> list[str]:
     return seeds[:max_seeds]
 
 
-def _same_host(a: str, b: str) -> bool:
-    try:
-        return urlparse(a).netloc.lower() == urlparse(b).netloc.lower()
-    except ValueError:
-        return False
-
-
 def _html_to_text(html: str, page_url: str) -> str:
     soup = BeautifulSoup(html[:_MAX_HTML_BYTES], "html.parser")
     for tag in soup(["script", "style", "noscript", "template", "svg"]):
@@ -99,14 +128,17 @@ def _html_to_text(html: str, page_url: str) -> str:
     text = soup.get_text(separator="\n", strip=True)
     lines = [ln for ln in text.splitlines() if ln.strip()]
     body = "\n".join(lines)
+    lim = max(4000, config.CRAWL_MAX_TEXT_PER_PAGE)
     header = f"### Fetched: {page_url}\n\n"
-    return header + body[:_MAX_TEXT_PER_PAGE]
+    return header + body[:lim]
 
 
 def _extract_internal_links(page_url: str, html: str, host: str) -> list[str]:
+    """Collect same-host links; prefer event-detail paths so BFS hits them first."""
     soup = BeautifulSoup(html[:_MAX_HTML_BYTES], "html.parser")
-    out: list[str] = []
+    found: list[str] = []
     seen: set[str] = set()
+    _max_discover = 220
     for a in soup.find_all("a", href=True):
         href = (a.get("href") or "").strip()
         if not href or href.startswith("#") or href.lower().startswith("javascript:"):
@@ -119,10 +151,11 @@ def _extract_internal_links(page_url: str, html: str, host: str) -> list[str]:
         if _BINARYISH.search(clean) or clean in seen:
             continue
         seen.add(clean)
-        out.append(clean)
-        if len(out) >= 40:
+        found.append(clean)
+        if len(found) >= _max_discover:
             break
-    return out
+    found.sort(key=lambda u: (-_link_event_priority(u), len(u)))
+    return found[:96]
 
 
 def deep_search_supplement(ddg_blob: str) -> str:

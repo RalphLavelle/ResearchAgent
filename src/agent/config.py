@@ -60,10 +60,16 @@ MAX_DDG_RESULTS_PER_QUERY = int(os.environ.get("MAX_DDG_RESULTS_PER_QUERY", "10"
 _crawl_raw = (os.environ.get("CRAWL_ENABLED") or "true").strip().lower()
 CRAWL_ENABLED = _crawl_raw in ("1", "true", "yes", "on")
 MAX_CRAWL_SEEDS = int(os.environ.get("MAX_CRAWL_SEEDS", "5"))
-MAX_CRAWL_PAGES_TOTAL = int(os.environ.get("MAX_CRAWL_PAGES_TOTAL", "20"))
+MAX_CRAWL_PAGES_TOTAL = int(os.environ.get("MAX_CRAWL_PAGES_TOTAL", "28"))
 MAX_CRAWL_DEPTH = int(os.environ.get("MAX_CRAWL_DEPTH", "2"))
-MAX_CRAWL_PAGES_PER_SEED = int(os.environ.get("MAX_CRAWL_PAGES_PER_SEED", "8"))
+MAX_CRAWL_PAGES_PER_SEED = int(os.environ.get("MAX_CRAWL_PAGES_PER_SEED", "12"))
 CRAWL_DELAY_SEC = float(os.environ.get("CRAWL_DELAY_SEC", "0.35"))
+
+# Larger excerpts keep whole calendar/listing HTML text for the curator (was 7000 in code default).
+CRAWL_MAX_TEXT_PER_PAGE = int(os.environ.get("CRAWL_MAX_TEXT_PER_PAGE", "38000"))
+
+# Characters from search+crawl forwarded to curator (preserve crawl suffix when trimming).
+CURATOR_INPUT_MAX_CHARS = int(os.environ.get("CURATOR_INPUT_MAX_CHARS", "260000"))
 
 # Optional: sync research to a Notion page.
 # Create an internal integration, paste its secret; share the target page with that integration.

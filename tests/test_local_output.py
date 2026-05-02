@@ -200,6 +200,22 @@ def test_longer_act_name_becomes_canonical(
     assert row[0] == "The Beths, with Wax Chattels"
 
 
+def test_shared_listing_url_two_distinct_gigs_kept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same portal URL allowed when act+date rows differ (Task 6 / aggregators)."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    d1 = (date.today() + timedelta(days=5)).isoformat()
+    d2 = (date.today() + timedelta(days=8)).isoformat()
+    listing = "https://allevents.example/miami-au/concerts"
+    r1 = Resource(title="Buzz Lovers @ Venue, Miami", url=listing, date=d1)
+    r2 = Resource(title="Baggy Trousers @ Pub, Miami", url=listing, date=d2)
+
+    merge_and_write([r1, r2])
+    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    assert urls.count(listing) == 2
+
+
 def test_partial_act_name_different_venue_not_duplicate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

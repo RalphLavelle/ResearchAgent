@@ -1,0 +1,19 @@
+---
+description: Modern web styling for frontend UI
+globs: ["**/*.{ts,html}"]
+alwaysApply: true
+---
+
+# Modern UI rules
+
+- Use a colourful, fun, modern aesthetic: clean but stylish.
+- Pick strong colours that work well together, using recognised palettes 
+- Prefer generous spacing, strong typography hierarchy, and rounded surfaces.
+- Use subtle gradients, soft shadows, and restrained motion.
+- Avoid generic default styling, crowded layouts, and overly saturated colors.
+- Always make pages responsive and accessible.
+- Prefer reusable components and consistent design tokens.
+- Use native CSS (especially Flexbox and Grid) classes for all styling.
+- Add polished empty states, loading states, and hover states.
+- Keep sections visually distinct with spacing and contrast.
+- Use emojis: musical, artistic, events, fun, etc. 

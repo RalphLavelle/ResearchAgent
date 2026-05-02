@@ -24,21 +24,22 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 
 Apply changes here when tasks mention duplicates or Sources:
 
-1. **Exact URL** — row skipped.
+1. **Identical ingest** — skip only when URL **and** the same semantic `(act, date)` already exist (`Event ID`-keyed storage allows many rows to share one listing URL).
 2. **Same normalized act + same date** (venue ignored for this match) — treat as duplicate; append new URL to **Sources** only if **different domain** than primary URL.
 3. **Partial act names** — one act string contains the other (min length 4), **and** same **venue** + same **date** — duplicate; keep **longer** act name as canonical Event cell; add URL to Sources per domain rule.
 4. **Past events** — removed on each merge (`utc_today()`).
 
-Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added`. Loader tolerates old files missing **Sources** only.
+Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added, Event ID`. Loader tolerates old files missing **Sources** only.
 
 ## LLM integration
 
 - **Planner**: `node_plan` → structured `PlanQueries`. No default queries if key missing; errors logged.
-- **Curator**: `node_normalize` → structured `ResourceListPayload`; input capped (~200k chars); then URL dedupe in node, date window filter, sort soonest-first.
+- **Normalize**: `node_normalize` → structured `ResourceListPayload`; input capped (env `CURATOR_INPUT_MAX_CHARS`); crawler tail preserved when clipping; curator dedupe is per `(url, date, title)` so many gigs may share one listing URL; then date window filter, sort soonest-first.
 
 ## Outputs
 
-- **HTML**: `templates/event_table.html` — row injection between `<!-- ROW_TEMPLATE_START -->` / `END`; do not duplicate `{{ROWS}}`-style placeholders (single splice point in `html_output.py`).
+- **Angular JSON**: `json_output.py` writes `events.json` (under `OUTPUT_DIR`) at local-output time — `{ generated, events[] }` in camelCase; the Angular app loads `/data/events.json`.
+- **HTML (optional/static)**: `templates/event_table.html` — row injection between `<!-- ROW_TEMPLATE_START -->` / `END`; same splice rules as before (`html_output.py`).
 - **Notion**: native table blocks; no inline images in cells (poster glyph pattern in `notion_output.py`).
 
 ## Config/env (do not overwrite `.env` without asking)
@@ -63,7 +64,8 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Graph wiring | `src/agent/workflow.py` |
 | Nodes + LLM calls | `src/agent/graph_nodes.py` |
 | Spreadsheet + dedup | `src/agent/local_output.py` |
-| HTML template render | `src/agent/html_output.py` |
+| Events JSON for Angular | `src/agent/json_output.py` |
+| HTML template render (optional) | `src/agent/html_output.py` |
 | Notion API | `src/agent/notion_output.py` |
 | Crawl | `src/agent/site_crawl.py` |
 | Date/window/title split | `src/agent/event_window.py` |

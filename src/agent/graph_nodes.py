@@ -20,6 +20,7 @@ from agent.enrich import enrich_thumbnails
 from agent.event_window import (
     curator_date_instruction,
     filter_events_in_upcoming_window,
+    parse_event_sort_date,
     planner_date_instruction,
     sort_resources_by_event_date_asc,
 )
@@ -35,6 +36,39 @@ from agent.search_tools import run_searches
 from agent.snapshot import fingerprint_changed, save_snapshot
 
 logger = logging.getLogger(__name__)
+
+CRAWL_SECTION_MARKER = "## Same-site crawl (bounded)"
+
+
+def _truncate_preserving_same_site_crawl(blob: str, max_chars: int) -> str:
+    """Prefer keeping the crawl block when clipping — it often holds full listing-page text."""
+    if len(blob) <= max_chars or CRAWL_SECTION_MARKER not in blob:
+        return blob[:max_chars]
+    idx = blob.find(CRAWL_SECTION_MARKER)
+    tail = blob[idx:]  # from marker onward (typically appended after DuckDuckGo text)
+    if len(tail) >= max_chars:
+        return tail[:max_chars]
+    head_room = max_chars - len(tail)
+    return blob[:head_room] + tail
+
+
+def _dedupe_curator_resources(resources: list[Resource]) -> list[Resource]:
+    """Drop repeats while allowing many gigs that share one calendar/listing URL."""
+    seen: set[tuple[str, str, str]] = set()
+    unique: list[Resource] = []
+    for r in resources:
+        u = (r.url or "").strip().lower()
+        if not u.startswith("http"):
+            continue
+        dp = parse_event_sort_date(r.date)
+        dk = dp.isoformat() if dp else (r.date or "").strip().lower()[:32]
+        title = " ".join((r.title or "").strip().lower().split())
+        key = (u, dk, title)
+        if key in seen:
+            continue
+        seen.add(key)
+        unique.append(r)
+    return unique
 
 
 def _llm() -> ChatOpenAI:
@@ -130,22 +164,14 @@ def node_normalize(state: AgentState) -> AgentState:
             f"{curator_date_instruction()}\n\n"
             "Here are web search results plus any same-site crawl excerpts below. "
             "Extract the curated resource list.\n\n"
-            f"{raw[:200_000]}"
+            f"{_truncate_preserving_same_site_crawl(raw, config.CURATOR_INPUT_MAX_CHARS)}"
         )
     )
     try:
         out: ResourceListPayload = llm.invoke(
             [SystemMessage(content=config.SUBJECT.curator_system_prompt), msg]
         )
-        # Deduplicate by URL so the same event listed on multiple sites appears once.
-        seen: set[str] = set()
-        unique: list[Resource] = []
-        for r in out.resources:
-            u = (r.url or "").strip().lower()
-            if not u.startswith("http") or u in seen:
-                continue
-            seen.add(u)
-            unique.append(r)
+        unique = _dedupe_curator_resources(list(out.resources or []))
         # Keep only dated events in the configured horizon; sort soonest first.
         windowed = filter_events_in_upcoming_window(unique)
         ordered = sort_resources_by_event_date_asc(windowed)
@@ -206,7 +232,7 @@ def node_local_output(state: AgentState) -> AgentState:
     - If the data changed: rewrite the main file and append to the run log.
     - After a full write, optionally push to Notion if credentials are set.
     """
-    from agent.html_output import write_html
+    from agent.json_output import write_events_json
     from agent.local_output import load_spreadsheet_resources, write_output
 
     msg = build_run_log_message(state)
@@ -227,8 +253,8 @@ def node_local_output(state: AgentState) -> AgentState:
         # events; the spreadsheet holds everything accumulated across all runs.
         all_resources = load_spreadsheet_resources()
 
-        # Regenerate HTML 1:1 from the spreadsheet.
-        write_html(all_resources)
+        # Regenerate events JSON 1:1 from the spreadsheet (Angular reads this).
+        write_events_json(all_resources)
 
         # Fingerprint the full spreadsheet so Notion syncs whenever the
         # accumulated event list changes, not just when this run's results differ.
