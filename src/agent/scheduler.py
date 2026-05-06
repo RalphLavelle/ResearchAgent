@@ -65,10 +65,16 @@ def serve() -> None:
     current_interval: tuple[str, int | float] | None = None
 
     def job() -> None:
+        start = time.perf_counter()
+        logger.info("Scheduled research pass starting.")
         try:
             run_once(dry_run=False)
         except Exception:
             logger.exception("Scheduled run failed")
+        finally:
+            logger.info(
+                "Scheduled research pass finished in %.1f s.", time.perf_counter() - start
+            )
 
     def reschedule_if_needed() -> None:
         nonlocal last_mtime, current_interval

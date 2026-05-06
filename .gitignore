@@ -1,13 +1,9 @@
 # Environment variables (never commit secrets)
 .env
-_archive/
 __pycache__/
 *.egg-info/
 .eggs/
 data/
-config/schedule.yaml
-dist/
-build/
 credentials.json
 *-service-account*.json
 service-account.json

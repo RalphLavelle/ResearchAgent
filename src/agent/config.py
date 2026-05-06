@@ -41,8 +41,69 @@ SNAPSHOT_PATH = DATA_DIR / "snapshot.json"
 # Last research fingerprint successfully pushed to Notion (under data/, gitignored).
 NOTION_SYNC_STATE_PATH = DATA_DIR / "notion_sync_state.json"
 
+def _env_flag(name: str, *, default: bool = True) -> bool:
+    """Parse ``true``/``false`` style env vars; *unset* keeps ``default``."""
+    raw = os.environ.get(name)
+    if raw is None or raw.strip() == "":
+        return default
+    return raw.strip().lower() in ("1", "true", "yes", "on")
+
+
+# Exactly one of these two flags should be True in .env.
+# Neither defaults to True — you must explicitly pick a backend.
+OPENAI_ENABLED = _env_flag("OPENAI_ENABLED", default=False)
+OLLAMA_ENABLED = _env_flag("OLLAMA_ENABLED", default=False)
+
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = os.environ.get("OPENAI_MODEL", "gpt-4o")
+
+OLLAMA_MODEL = (os.environ.get("OLLAMA_MODEL") or "qwen3.5:0.8b").strip()
+OLLAMA_BASE_URL = (os.environ.get("OLLAMA_BASE_URL") or "http://127.0.0.1:11434/v1").strip().rstrip("/")
+OLLAMA_API_KEY = (os.environ.get("OLLAMA_API_KEY") or "ollama").strip()
+OLLAMA_DISABLE_THINKING_TEMPLATE = _env_flag("OLLAMA_DISABLE_THINKING_TEMPLATE", default=True)
+OLLAMA_EXTRA_BODY_JSON = os.environ.get("OLLAMA_EXTRA_BODY_JSON", "")
+
+OLLAMA_THINKING_OFF_EXTRA_BODY: dict[str, dict[str, bool]] = {
+    "chat_template_kwargs": {"enable_thinking": False},
+}
+
+
+def is_ollama_cloud() -> bool:
+    """True when the Ollama backend targets a remote cloud service.
+
+    Detected two ways:
+    - The model tag contains ``cloud`` (e.g. ``kimi-k2.6:cloud``,
+      ``gpt-oss:120b-cloud``).  The tag is the part after the last ``:``.
+    - ``OLLAMA_BASE_URL`` points to a non-localhost host (e.g. ``https://ollama.com/v1``).
+
+    When True, local-Ollama-specific parameters like thinking-template
+    ``extra_body`` are skipped because cloud models don't support them.
+    """
+    from urllib.parse import urlparse
+
+    host = (urlparse(OLLAMA_BASE_URL).hostname or "").lower()
+    is_remote = host not in ("127.0.0.1", "localhost", "0.0.0.0", "::1", "")
+    # Tag is the portion after the last colon (e.g. "120b-cloud" or "cloud").
+    tag = OLLAMA_MODEL.rsplit(":", maxsplit=1)[-1].lower() if ":" in OLLAMA_MODEL else ""
+    is_cloud_model = "cloud" in tag
+    return is_remote or is_cloud_model
+
+
+def active_llm_model_label() -> str:
+    if OPENAI_ENABLED:
+        return OPENAI_MODEL
+    if OLLAMA_ENABLED:
+        return OLLAMA_MODEL
+    return "(no backend enabled)"
+
+
+def llm_inference_enabled() -> bool:
+    """True when planner/curator paths should invoke the configured chat backend."""
+    if OPENAI_ENABLED:
+        return bool(OPENAI_API_KEY.strip())
+    if OLLAMA_ENABLED:
+        return True
+    return False
 
 # Spreadsheet, HTML, run_log: repo data/ by default (same as DATA_DIR). Override with OUTPUT_DIR or AGENT_AI_DIR.
 _output_raw = (os.environ.get("OUTPUT_DIR") or os.environ.get("AGENT_AI_DIR") or "").strip()

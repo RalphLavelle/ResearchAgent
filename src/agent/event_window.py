@@ -1,23 +1,34 @@
 """Date window and sorting for event-style research (Task 4).
 
 The curator is asked to emit ISO dates (YYYY-MM-DD). These helpers parse
-that field, keep only events in the next N days from "today" (UTC), and
-sort rows for display (soonest upcoming first).
+that field, keep only events in the next N days from "today" (user's
+local timezone), and sort rows for display (soonest upcoming first).
 """
 
 from __future__ import annotations
 
 from datetime import date, datetime, timedelta, timezone
 
+from agent.display_time import display_timezone
 from agent.models import Resource
 
 # How far ahead to include events (matches subject-matter instructions).
 DEFAULT_EVENT_HORIZON_DAYS = 30
 
 
-def utc_today() -> date:
-    """Calendar date in UTC — used consistently for window and LLM hints."""
-    return datetime.now(timezone.utc).date()
+def local_today() -> date:
+    """Calendar date in the user's display timezone (e.g. Australia/Brisbane).
+
+    Used for pruning past events, window filtering, and LLM date hints.
+    This avoids the problem where UTC lags the user's local date — at
+    7 AM AEST, UTC is still yesterday, so events from yesterday would
+    not get pruned if we used UTC.
+    """
+    return datetime.now(display_timezone()).date()
+
+
+# Keep the old name as an alias so existing tests still import it.
+utc_today = local_today
 
 
 def parse_event_sort_date(date_str: str) -> date | None:
@@ -40,13 +51,24 @@ def parse_event_sort_date(date_str: str) -> date | None:
 
 def planner_date_instruction(*, days: int = DEFAULT_EVENT_HORIZON_DAYS) -> str:
     """Appended to the planner user message so queries target the right window."""
-    today = utc_today()
+    today = local_today()
     end = today + timedelta(days=days)
+    # When the window spans two months, remind the model to search both.
+    month_hint = ""
+    if today.month != end.month:
+        from calendar import month_name
+        month_hint = (
+            f"\nIMPORTANT: the window spans **{month_name[today.month]}** and "
+            f"**{month_name[end.month]}** — make sure some queries explicitly "
+            f"mention {month_name[end.month]} {end.year} so you catch events in "
+            "both months.\n"
+        )
     return (
-        f"\n\nToday (UTC) is {today.isoformat()}. Only plan queries for individual "
+        f"\n\nToday is {today.isoformat()}. Only plan queries for individual "
         f"gigs and concerts happening from {today.isoformat()} through "
         f"{end.isoformat()} inclusive — roughly the next {days} days. Avoid generic "
         "portal homepages; aim for pages that list specific dated events.\n"
+        f"{month_hint}"
         "**Gold Coast first:** the user lives on the Gold Coast — at least half of "
         "your queries should target Gold Coast suburbs, venues, and ticket pages; "
         "treat Brisbane as secondary."
@@ -55,7 +77,7 @@ def planner_date_instruction(*, days: int = DEFAULT_EVENT_HORIZON_DAYS) -> str:
 
 def curator_date_instruction(*, days: int = DEFAULT_EVENT_HORIZON_DAYS) -> str:
     """Prepended before search results for the normalisation step."""
-    today = utc_today()
+    today = local_today()
     end = today + timedelta(days=days)
     return (
         f"Today (UTC) is {today.isoformat()}. Only include individual gigs or concerts "
@@ -79,7 +101,7 @@ def filter_events_in_upcoming_window(
     days: int = DEFAULT_EVENT_HORIZON_DAYS,
 ) -> list[Resource]:
     """Drop rows whose ``date`` is missing or outside today..today+days (UTC)."""
-    today = utc_today()
+    today = local_today()
     end = today + timedelta(days=days)
     out: list[Resource] = []
     for r in resources:

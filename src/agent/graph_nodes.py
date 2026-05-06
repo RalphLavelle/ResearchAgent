@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
+from time import monotonic
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 
 from agent import config, notion_output
 from agent.enrich import enrich_thumbnails
@@ -24,6 +24,7 @@ from agent.event_window import (
     planner_date_instruction,
     sort_resources_by_event_date_asc,
 )
+from agent.llm_factory import build_chat_llm
 from agent.site_crawl import deep_search_supplement
 from agent.models import (
     AgentState,
@@ -32,6 +33,7 @@ from agent.models import (
     ResourceListPayload,
     resource_from_dict,
 )
+from agent.structured_output import invoke_structured
 from agent.search_tools import run_searches
 from agent.snapshot import fingerprint_changed, save_snapshot
 
@@ -71,13 +73,9 @@ def _dedupe_curator_resources(resources: list[Resource]) -> list[Resource]:
     return unique
 
 
-def _llm() -> ChatOpenAI:
-    """Return a zero-temperature ChatOpenAI client using settings from config."""
-    return ChatOpenAI(
-        model=config.OPENAI_MODEL,
-        temperature=0,
-        api_key=config.OPENAI_API_KEY or None,
-    )
+def _llm():
+    """Return a zero-temperature chat client — OpenAI cloud or Ollama (OpenAI-compat)."""
+    return build_chat_llm()
 
 
 def node_plan(state: AgentState) -> AgentState:
@@ -87,17 +85,17 @@ def node_plan(state: AgentState) -> AgentState:
     the pipeline continues with an empty query list (which produces no results
     and a log line). There are no fallback defaults (Task 8).
     """
-    if not config.OPENAI_API_KEY:
+    if not config.llm_inference_enabled():
         logger.error(
-            "OPENAI_API_KEY is not set — cannot plan queries. "
-            "Add the key to .env and restart."
+            "LLM unavailable for planner — check .env: "
+            "OPENAI_ENABLED + OPENAI_API_KEY, or OLLAMA_ENABLED + Ollama config."
         )
         return {
             "queries": [],
-            "run_log_message": "OPENAI_API_KEY missing; set it in .env and restart.",
+            "run_log_message": "Planner skipped: no LLM backend configured (see .env).",
         }
 
-    llm = _llm().with_structured_output(PlanQueries)
+    llm = _llm()
     msg = HumanMessage(
         content=(
             config.SUBJECT.planner_user_message
@@ -107,8 +105,10 @@ def node_plan(state: AgentState) -> AgentState:
     )
 
     try:
-        plan: PlanQueries = llm.invoke(
-            [SystemMessage(content=config.SUBJECT.planner_system_prompt), msg]
+        plan: PlanQueries = invoke_structured(
+            llm,
+            [SystemMessage(content=config.SUBJECT.planner_system_prompt), msg],
+            PlanQueries,
         )
         qs = (plan.queries or [])[: config.MAX_SEARCH_QUERIES]
         if not qs:
@@ -128,7 +128,17 @@ def node_search(state: AgentState) -> AgentState:
     if not queries:
         logger.warning("No queries available — search step skipped.")
         return {"raw_search_text": ""}
+    logger.info(
+        "Search step: querying DuckDuckGo with %s planned queries.", len(queries)
+    )
+    t0 = monotonic()
     text = run_searches(queries)
+    elapsed = monotonic() - t0
+    logger.info(
+        "Search step finished in %.1f s (~%s chars combined snippets).",
+        elapsed,
+        f"{len(text):,}",
+    )
     return {"raw_search_text": text}
 
 
@@ -136,9 +146,20 @@ def node_crawl(state: AgentState) -> AgentState:
     """Append same-site HTML text after search so the curator can mine more gigs."""
     raw = state.get("raw_search_text") or ""
     if not config.CRAWL_ENABLED:
+        logger.info("Crawl step skipped (CRAWL_ENABLED=false).")
         return {}
     try:
+        logger.info(
+            "Crawl step starting (runs after DuckDuckGo text is collected; downloads can take several minutes)."
+        )
+        t0 = monotonic()
         extra = deep_search_supplement(raw)
+        elapsed = monotonic() - t0
+        logger.info(
+            "Crawl step finished in %.1f s (~%s extra chars for curator).",
+            elapsed,
+            f"{len(extra):,}",
+        )
         if not extra.strip():
             return {}
         return {"raw_search_text": raw + "\n\n" + extra}
@@ -151,14 +172,17 @@ def node_normalize(state: AgentState) -> AgentState:
     """Ask the LLM to parse raw search text into structured Resource records."""
     raw = state.get("raw_search_text") or ""
 
-    if not config.OPENAI_API_KEY:
-        logger.error("OPENAI_API_KEY is not set — cannot normalise results.")
+    if not config.llm_inference_enabled():
+        logger.error(
+            "LLM unavailable for curator — check .env: "
+            "OPENAI_ENABLED + OPENAI_API_KEY, or OLLAMA_ENABLED + Ollama config."
+        )
         return {
             "resources": [],
-            "run_log_message": "OPENAI_API_KEY missing; set it in .env and restart.",
+            "run_log_message": "Normalize skipped: no LLM backend configured (see .env).",
         }
 
-    llm = _llm().with_structured_output(ResourceListPayload)
+    llm = _llm()
     msg = HumanMessage(
         content=(
             f"{curator_date_instruction()}\n\n"
@@ -168,13 +192,29 @@ def node_normalize(state: AgentState) -> AgentState:
         )
     )
     try:
-        out: ResourceListPayload = llm.invoke(
-            [SystemMessage(content=config.SUBJECT.curator_system_prompt), msg]
+        body_len = len(msg.content or "")
+        logger.info(
+            "Curator (normalize) step: invoking model %s (%s chars after crawl + truncate). "
+            "Large prompts on local Ollama can take many minutes — no HTTP spam until this returns.",
+            config.active_llm_model_label(),
+            f"{body_len:,}",
         )
+        t0 = monotonic()
+        out: ResourceListPayload = invoke_structured(
+            llm,
+            [SystemMessage(content=config.SUBJECT.curator_system_prompt), msg],
+            ResourceListPayload,
+        )
+        curator_s = monotonic() - t0
         unique = _dedupe_curator_resources(list(out.resources or []))
         # Keep only dated events in the configured horizon; sort soonest first.
         windowed = filter_events_in_upcoming_window(unique)
         ordered = sort_resources_by_event_date_asc(windowed)
+        logger.info(
+            "Curator finished in %.1f s producing %s resources after date window.",
+            curator_s,
+            len(ordered),
+        )
         return {
             "resources": [r.model_dump() for r in ordered],
             "run_log_message": "",
@@ -191,7 +231,19 @@ def node_enrich(state: AgentState) -> AgentState:
     """Fetch Open Graph thumbnail images for each resource where missing."""
     raw_res = state.get("resources") or []
     resources = [resource_from_dict(d) for d in raw_res]
+    need = sum(1 for r in resources if not r.thumbnail_url)
+    if need:
+        logger.info(
+            "Enrich step: fetching og:image for %s/%s event pages (one HTTP GET each ~12s timeout).",
+            need,
+            len(resources),
+        )
+    t0 = monotonic()
     enriched = enrich_thumbnails(resources)
+    if need:
+        logger.info(
+            "Enrich step finished in %.1f s.", monotonic() - t0
+        )
     return {"resources": [r.model_dump() for r in enriched]}
 
 
@@ -232,7 +284,6 @@ def node_local_output(state: AgentState) -> AgentState:
     - If the data changed: rewrite the main file and append to the run log.
     - After a full write, optionally push to Notion if credentials are set.
     """
-    from agent.json_output import write_events_json
     from agent.local_output import load_spreadsheet_resources, write_output
 
     msg = build_run_log_message(state)
@@ -244,17 +295,16 @@ def node_local_output(state: AgentState) -> AgentState:
     fp = state.get("fingerprint") or ""
 
     try:
+        logger.info(
+            "Output step: merging %s curated resources into spreadsheet, run log, events.json.",
+            len(resources),
+        )
         # Merge current-run events into the spreadsheet (also expires past events).
         write_output(resources, append_log_only=False, log_line=msg)
         save_snapshot(config.SNAPSHOT_PATH, fp, resources)
 
-        # Read back the FULL spreadsheet — this is the source of truth for all
-        # downstream outputs.  The current run may only have added a few new
-        # events; the spreadsheet holds everything accumulated across all runs.
+        # Reload for Notion (events.json refreshed inside ``write_output`` alongside the spreadsheet).
         all_resources = load_spreadsheet_resources()
-
-        # Regenerate events JSON 1:1 from the spreadsheet (Angular reads this).
-        write_events_json(all_resources)
 
         # Fingerprint the full spreadsheet so Notion syncs whenever the
         # accumulated event list changes, not just when this run's results differ.

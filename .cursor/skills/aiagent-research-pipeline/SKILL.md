@@ -27,12 +27,14 @@ Apply changes here when tasks mention duplicates or Sources:
 1. **Identical ingest** — skip only when URL **and** the same semantic `(act, date)` already exist (`Event ID`-keyed storage allows many rows to share one listing URL).
 2. **Same normalized act + same date** (venue ignored for this match) — treat as duplicate; append new URL to **Sources** only if **different domain** than primary URL.
 3. **Partial act names** — one act string contains the other (min length 4), **and** same **venue** + same **date** — duplicate; keep **longer** act name as canonical Event cell; add URL to Sources per domain rule.
-4. **Past events** — removed on each merge (`utc_today()`).
+4. **Past events** — removed on each merge (`local_today()` — uses display timezone, not UTC).
 
 Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added, Event ID`. Loader tolerates old files missing **Sources** only.
 
 ## LLM integration
 
+- **Backends**: `OPENAI_ENABLED=true` uses cloud OpenAI; `OLLAMA_ENABLED=true` uses OpenAI-compat **Ollama** — local or cloud (`OLLAMA_BASE_URL`, `OLLAMA_MODEL`, optional `OLLAMA_EXTRA_BODY_JSON`). Exactly one must be enabled. Wired through `agent/llm_factory.py` (`build_chat_llm`); CLI calls `verify_llm_at_startup()` before `run-once`/`serve`.
+- **Structured output**: All LLM calls go through `agent/structured_output.py` → `invoke_structured(llm, messages, PydanticModel)`. For backends that support native structured output (OpenAI, local Ollama), it uses `with_structured_output()`. For Ollama Cloud (which lacks `response_format` support), it falls back to embedding the JSON schema in the prompt and extracting/parsing JSON from the plain-text response.
 - **Planner**: `node_plan` → structured `PlanQueries`. No default queries if key missing; errors logged.
 - **Normalize**: `node_normalize` → structured `ResourceListPayload`; input capped (env `CURATOR_INPUT_MAX_CHARS`); crawler tail preserved when clipping; curator dedupe is per `(url, date, title)` so many gigs may share one listing URL; then date window filter, sort soonest-first.
 
@@ -63,6 +65,7 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 |------|------|
 | Graph wiring | `src/agent/workflow.py` |
 | Nodes + LLM calls | `src/agent/graph_nodes.py` |
+| Structured output fallback | `src/agent/structured_output.py` |
 | Spreadsheet + dedup | `src/agent/local_output.py` |
 | Events JSON for Angular | `src/agent/json_output.py` |
 | HTML template render (optional) | `src/agent/html_output.py` |

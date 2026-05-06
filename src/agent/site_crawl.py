@@ -162,15 +162,24 @@ def deep_search_supplement(ddg_blob: str) -> str:
     """Return extra markdown-style text for the curator, or empty string."""
     seeds = extract_seed_urls_from_ddg_blob(ddg_blob, config.MAX_CRAWL_SEEDS)
     if not seeds:
+        logger.info("Same-site crawl: no seed URLs extracted from DuckDuckGo blob.")
         return ""
+
+    max_total = max(1, config.MAX_CRAWL_PAGES_TOTAL)
+    max_depth = max(0, config.MAX_CRAWL_DEPTH)
+    per_seed = max(1, config.MAX_CRAWL_PAGES_PER_SEED)
+    logger.info(
+        "Same-site crawl starting: %d seed host(s); limits total_pages=%s depth=%s per_seed=%s delay_sec=%s",
+        len(seeds),
+        max_total,
+        max_depth,
+        per_seed,
+        config.CRAWL_DELAY_SEC,
+    )
 
     timeout = httpx.Timeout(18.0, connect=6.0)
     chunks: list[str] = []
     pages_done = 0
-    max_total = max(1, config.MAX_CRAWL_PAGES_TOTAL)
-    max_depth = max(0, config.MAX_CRAWL_DEPTH)
-    per_seed = max(1, config.MAX_CRAWL_PAGES_PER_SEED)
-
     headers = {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"}
 
     with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True) as client:
@@ -220,10 +229,17 @@ def deep_search_supplement(ddg_blob: str) -> str:
                     continue
 
     if not chunks:
+        logger.info("Same-site crawl finished: zero HTML pages harvested (timeouts or skips).")
         return ""
-    return (
+    block = (
         "## Same-site crawl (bounded)\n\n"
         "The following text was fetched by following links on the same host as a "
         "few promising search hits. Use it to find additional individual gigs.\n\n"
         + "\n\n---\n\n".join(chunks)
     )
+    logger.info(
+        "Same-site crawl finished: harvested %s page excerpts (~%s chars appended for curator).",
+        len(chunks),
+        f"{len(block):,}",
+    )
+    return block

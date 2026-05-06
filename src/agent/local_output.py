@@ -38,7 +38,7 @@ from agent.display_time import format_generated_timestamp
 from agent.event_window import (
     parse_event_sort_date,
     split_title_parts,
-    utc_today,
+    local_today,
 )
 from agent.models import Resource
 
@@ -545,7 +545,7 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
     out_dir = output_directory()
     out_dir.mkdir(parents=True, exist_ok=True)
     path = out_dir / RESEARCH_FILENAME
-    today = utc_today()
+    today = local_today()
 
     existing = _load_existing_rows(path)
 
@@ -641,13 +641,32 @@ def write_output(
     append_log_only: bool,
     log_line: str,
 ) -> None:
-    """Merge new events into the spreadsheet and append to run_log.md."""
+    """Merge spreadsheet, refresh ``events.json``, append ``run_log.md``, then optional LLM dedupe.
+
+    Critical files (events.json, run_log) are written immediately after
+    the spreadsheet merge so the frontend stays in sync even if the
+    optional LLM dedupe step hangs, is interrupted, or fails.
+    """
+    from agent.json_output import write_events_json
+
     out_dir = output_directory()
     out_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / RUN_LOG_FILENAME
+    xlsx_path = out_dir / RESEARCH_FILENAME
 
+    # 1. Merge new events + prune past events → write spreadsheet.
     merge_and_write(resources)
-    if not append_log_only and config.OPENAI_API_KEY:
+
+    # 2. Immediately refresh the frontend-critical files so they always
+    #    reflect the latest spreadsheet, even if nothing below completes.
+    synced = load_spreadsheet_resources(xlsx_path)
+    _append_log(log_path, log_line)
+    logger.info("Appended run log entry to %s", log_path.resolve())
+    write_events_json(synced)
+
+    # 3. Optional LLM dedupe — runs AFTER the critical writes above.
+    #    If it removes duplicates it re-writes events.json to stay in sync.
+    if not append_log_only and config.llm_inference_enabled():
         try:
             n_removed = run_llm_semantic_dedupe()
             if n_removed:
@@ -655,11 +674,10 @@ def write_output(
                     "LLM semantic dedupe removed %d duplicate spreadsheet row(s).",
                     n_removed,
                 )
+                synced = load_spreadsheet_resources(xlsx_path)
+                write_events_json(synced)
         except Exception as exc:
             logger.warning("LLM semantic dedupe skipped: %s", exc)
-
-    _append_log(log_path, log_line)
-    logger.info("Appended run log entry to %s", log_path)
 
 
 def _append_log(log_path: Path, log_line: str) -> None:

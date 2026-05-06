@@ -12,7 +12,7 @@ Files written:
 | `agent_research.html` | Rendered event table (same content the Angular app embeds) |
 | `run_log.md` | Timestamped lines every run (append-only) |
 
-Search uses LangChain’s **`DuckDuckGoSearchRun`** (via its `api_wrapper`) — no search API key.
+Search uses LangChain's **`DuckDuckGoSearchRun`** (via its `api_wrapper`) — no search API key.
 
 ## Setup
 
@@ -24,9 +24,27 @@ Python 3.11+ and a virtualenv (`venv/`).
 .\venv\Scripts\pip.exe install -e ".[dev]"
 ```
 
-### 2. OpenAI
+### 2. LLM backend
 
-Copy `env.example` to `.env` and set `OPENAI_API_KEY` (and optional `OPENAI_MODEL`).
+Copy `env.example` to `.env` and enable exactly one backend:
+
+**A. OpenAI** — set `OPENAI_ENABLED=true`, provide `OPENAI_API_KEY`, and optionally `OPENAI_MODEL`.
+
+**B. Ollama locally** — set `OLLAMA_ENABLED=true`. [Install Ollama](https://ollama.ai/) and run it (`ollama serve` is usually automatic after install), then `ollama pull` the model you configure (default in `env.example` is `qwen3.5:0.8b`). Point `OLLAMA_BASE_URL` at the OpenAI-compat endpoint (normally `http://127.0.0.1:11434/v1`). Many setups use `OLLAMA_API_KEY=ollama` as a harmless placeholder — local Ollama does not authenticate by default.
+
+**C. Ollama Cloud** — run large models without a local GPU. Set `OLLAMA_ENABLED=true` and pick one of two approaches:
+
+| | Via local Ollama | Direct cloud API |
+|---|---|---|
+| Requires local Ollama? | Yes (`ollama serve` + `ollama signin`) | No |
+| `OLLAMA_BASE_URL` | `http://127.0.0.1:11434/v1` | `https://ollama.com/v1` |
+| `OLLAMA_MODEL` | With `:cloud` suffix, e.g. `kimi-k2.6:cloud` | Without suffix, e.g. `kimi-k2.6` |
+| `OLLAMA_API_KEY` | Your [Ollama API key](https://ollama.com/settings/keys) | Your [Ollama API key](https://ollama.com/settings/keys) |
+| Extra setup | `ollama pull kimi-k2.6:cloud` | Just set `.env` |
+
+Cloud is auto-detected by the `:cloud` model-name suffix or a non-localhost base URL. Local-only parameters (like `OLLAMA_DISABLE_THINKING_TEMPLATE`) are automatically skipped for cloud. See the [Ollama Cloud docs](https://docs.ollama.com/cloud) for available models.
+
+**Startup check:** the agent probes the configured backend once at CLI startup (`run-once`, `serve`). If neither backend is enabled, or the enabled backend is misconfigured, you'll see an **`ERROR`** in the logs and exit code **`3`**.
 
 ### 3. Output folder (optional)
 

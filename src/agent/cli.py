@@ -13,6 +13,7 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
+logger = logging.getLogger(__name__)
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -31,6 +32,14 @@ def main(argv: list[str] | None = None) -> int:
     sub.add_parser("serve", help="Run on reloadable interval (see config/schedule.yaml).")
 
     args = parser.parse_args(argv)
+
+    from agent.llm_factory import verify_llm_at_startup
+
+    if args.command in ("run-once", "serve") and not verify_llm_at_startup():
+        logger.error(
+            "LLM backend is not reachable or misconfigured — fix .env then retry."
+        )
+        return 3
 
     if args.command == "run-once":
         result = run_once(dry_run=args.dry_run)

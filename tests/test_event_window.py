@@ -7,11 +7,11 @@ import pytest
 from agent.event_window import (
     filter_events_in_upcoming_window,
     format_event_weekday_date,
+    local_today,
     parse_event_sort_date,
     sort_resources_by_event_date_asc,
     split_band_venue_title,
     split_title_parts,
-    utc_today,
 )
 from agent.models import Resource
 
@@ -28,7 +28,7 @@ def test_parse_invalid() -> None:
 
 def test_filter_drops_outside_window(monkeypatch: pytest.MonkeyPatch) -> None:
     fixed = date(2026, 4, 1)
-    monkeypatch.setattr("agent.event_window.utc_today", lambda: fixed)
+    monkeypatch.setattr("agent.event_window.local_today", lambda: fixed)
     rows = [
         Resource(title="A", url="https://a.example/e", date="2026-04-15"),
         Resource(title="B", url="https://b.example/e", date="2026-03-01"),
@@ -50,8 +50,8 @@ def test_sort_ascending_soonest_first() -> None:
     assert [r.title for r in out] == ["Early", "Mid", "Late"]
 
 
-def test_utc_today_is_date() -> None:
-    assert isinstance(utc_today(), date)
+def test_local_today_is_date() -> None:
+    assert isinstance(local_today(), date)
 
 
 def test_format_event_weekday_date() -> None:

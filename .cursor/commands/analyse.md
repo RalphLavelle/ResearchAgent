@@ -9,6 +9,6 @@ Pay particular attention to how the LLM integrates into the app, what it does th
 For the time being, leave Notion out of the analysis - I've disabled that part of things, and don't need it in the analysis.
 
 ## Save analysis
-Save a file in my Obsidian vault (C:\Users\Lavelles\OneDrive\Documents\Obsidian Vault) in the 'Reasearch Agent' folder, called analysis.md, overwriting any you find already there.
+Save a file in my Obsidian vault (C:\Users\Lavelles\OneDrive\Documents\Obsidian Vault) in the 'Reasearch Agent' folder, called analysis.md, overwriting any you find already there. If there's no Obsidian vault, just save the file into the docs folder.
 
 This command will be available in chat with /analyse

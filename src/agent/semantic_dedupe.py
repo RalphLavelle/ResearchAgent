@@ -10,10 +10,11 @@ import json
 import logging
 
 from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from agent import config
+from agent.llm_factory import build_chat_llm
+from agent.structured_output import invoke_structured
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ def find_same_event_clusters(events: list[dict]) -> list[list[str]]:
     """Call the LLM; return disjoint clusters of event ids (same day, same event)."""
     if len(events) < 2:
         return []
-    if not config.OPENAI_API_KEY:
+    if not config.llm_inference_enabled():
         return []
 
     valid_ids = {str(e.get("id") or "").strip() for e in events}
@@ -82,14 +83,11 @@ def find_same_event_clusters(events: list[dict]) -> list[list[str]]:
         body = body[:180_000] + "\n…(truncated)"
         logger.warning("Semantic dedupe prompt truncated for size.")
 
-    llm = ChatOpenAI(
-        model=config.OPENAI_MODEL,
-        temperature=0,
-        api_key=config.OPENAI_API_KEY or None,
-    ).with_structured_output(SemanticDedupeClusters)
+    llm = build_chat_llm()
 
     try:
-        out: SemanticDedupeClusters = llm.invoke(
+        out: SemanticDedupeClusters = invoke_structured(
+            llm,
             [
                 SystemMessage(content=_SYSTEM),
                 HumanMessage(
@@ -99,7 +97,8 @@ def find_same_event_clusters(events: list[dict]) -> list[list[str]]:
                         f"{body}"
                     )
                 ),
-            ]
+            ],
+            SemanticDedupeClusters,
         )
     except Exception as exc:
         logger.warning("Semantic dedupe LLM call failed: %s", exc)
