@@ -1,11 +1,70 @@
-<a class="skip-link" href="#research-main">Skip to research list</a>
+<a class="skip-link" href="#main-content">Skip to main content</a>
 
-<main id="research-main" class="shell" tabindex="-1">
-  <header class="masthead">
-    <h1>{{ title() }}</h1>
-    <p class="lede">
-      What's on in your town.
+<div class="page-wrap">
+  <main id="main-content" class="shell" tabindex="-1">
+    <header class="masthead">
+      <div class="masthead-top">
+        <div class="masthead-titles">
+          <a
+            routerLink="/"
+            class="site-brand"
+            routerLinkActive="site-brand--active"
+            [routerLinkActiveOptions]="{ exact: true }"
+          >
+            <span class="site-brand__emoji" aria-hidden="true">🎵</span>
+            <span class="site-brand__text">Live music events</span>
+          </a>
+        </div>
+
+        <nav class="site-nav site-nav--desktop" aria-label="Primary navigation">
+          <a routerLink="/about" class="nav-link" routerLinkActive="nav-link--active">About</a>
+        </nav>
+
+        <button
+          #menuButton
+          type="button"
+          class="menu-toggle"
+          (click)="toggleNav()"
+          [attr.aria-expanded]="navOpen()"
+          aria-controls="mobile-nav-panel"
+          aria-label="Open navigation menu"
+        >
+          <span class="menu-toggle__box" aria-hidden="true">
+            <span class="menu-toggle__bar"></span>
+            <span class="menu-toggle__bar"></span>
+            <span class="menu-toggle__bar"></span>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    @if (navOpen()) {
+      <div class="nav-backdrop" (click)="closeNav()" aria-hidden="true"></div>
+    }
+
+    <nav
+      id="mobile-nav-panel"
+      class="mobile-nav-drawer"
+      [class.mobile-nav-drawer--open]="navOpen()"
+      [attr.aria-hidden]="navOpen() ? null : 'true'"
+      [attr.inert]="!navOpen() ? '' : null"
+      aria-label="Mobile navigation"
+    >
+      <a
+        #firstMobileLink
+        routerLink="/about"
+        class="mobile-nav-drawer__link"
+        routerLinkActive="mobile-nav-drawer__link--active"
+        (click)="closeNav()"
+        >About</a>
+    </nav>
+
+    <router-outlet />
+  </main>
+
+  <footer class="site-footer">
+    <p>
+      <a href="https://ralphlavelle.net" target="_blank" rel="noopener noreferrer">Ralph Lavelle</a>, 2026
     </p>
-  </header>
-  <app-list />
-</main>
+  </footer>
+</div>

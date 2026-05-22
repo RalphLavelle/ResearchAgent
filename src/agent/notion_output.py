@@ -149,8 +149,6 @@ def _notion_event_cell_segments(r: Resource) -> list[dict[str, Any]]:
         segs.append(_text_segment(act if act else "—", link_url=url))
     else:
         segs.append(_text_segment((act or (r.title or "")).strip() or "—"))
-    if r.participatory:
-        segs.append(_text_segment(" (open mic)", italic=True))
     return segs if segs else [_text_segment("—")]
 
 

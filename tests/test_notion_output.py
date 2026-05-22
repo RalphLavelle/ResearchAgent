@@ -60,11 +60,8 @@ def test_resources_to_notion_blocks_three_columns() -> None:
     r = Resource(
         title="The Beths @ The Tivoli, Brisbane",
         url="https://example.com/tickets/123",
-        resource_type="event",
-        price="Unknown",
         date="2026-06-03",
         summary="",
-        participatory=False,
         thumbnail_url="https://example.com/poster.webp",
     )
     blocks = resources_to_notion_blocks([r])

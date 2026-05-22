@@ -8,10 +8,13 @@ from openpyxl import load_workbook
 
 from agent.local_output import (
     RESEARCH_FILENAME,
+    _IDX_POSTER,
     _IDX_SOURCES,
     _IDX_URL,
+    MergeStats,
     load_spreadsheet_resources,
     merge_and_write,
+    write_output,
 )
 from agent.models import Resource
 
@@ -31,6 +34,12 @@ def _sources_from_sheet(path: Path) -> list[str]:
     wb = load_workbook(path)
     ws = wb.active
     return [str(row[_IDX_SOURCES] or "") for row in ws.iter_rows(min_row=2, values_only=True)]
+
+
+def _posters_from_sheet(path: Path) -> list[str]:
+    wb = load_workbook(path)
+    ws = wb.active
+    return [str(row[_IDX_POSTER] or "") for row in ws.iter_rows(min_row=2, values_only=True)]
 
 
 # ── Basic write / read ────────────────────────────────────────────────────────
@@ -251,3 +260,200 @@ def test_different_date_not_a_duplicate(
     assert added2 == 1
     urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
     assert len([u for u in urls if u.startswith("http")]) == 2
+
+
+# ── write_output → MergeStats contract (Task 12 follow-up) ────────────────────
+
+def test_write_output_returns_merge_stats(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``write_output`` must hand back a populated ``MergeStats`` so the run report
+    can show Section 4 counts."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("agent.config.OPENAI_ENABLED", False)
+    monkeypatch.setattr("agent.config.OLLAMA_ENABLED", False)
+
+    r1 = _make_resource("Band A @ Venue X, Brisbane", "https://example.com/a")
+    r2 = _make_resource("Band B @ Venue Y, Brisbane", "https://example.com/b")
+
+    stats = write_output([r1, r2])
+    assert isinstance(stats, MergeStats)
+    assert stats.added == 2
+    assert stats.skipped == 0
+    assert stats.removed_past == 0
+    assert stats.removed_exclusion == 0
+    assert stats.removed_dedupe == 0
+    assert stats.total_after == 2
+
+
+def test_write_output_counts_duplicates_and_total(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("agent.config.OPENAI_ENABLED", False)
+    monkeypatch.setattr("agent.config.OLLAMA_ENABLED", False)
+
+    r = _make_resource("Band A @ Venue X, Brisbane", "https://example.com/a")
+    write_output([r])  # seed
+    stats = write_output([r])  # same resource again
+
+    assert stats.added == 0
+    assert stats.skipped == 1
+    assert stats.total_after == 1
+
+
+# ── Poster URL self-heal during dedupe (Task 13 follow-up) ────────────────────
+
+
+def _make_resource_with_poster(
+    title: str, url: str, poster: str | None, days_ahead: int = 5
+) -> Resource:
+    """Helper for self-heal tests where the thumbnail matters."""
+    d = (date.today() + timedelta(days=days_ahead)).isoformat()
+    return Resource(title=title, url=url, date=d, thumbnail_url=poster)
+
+
+def test_exact_duplicate_upgrades_logo_poster_to_event_specific(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Stale 'logo' poster from an old run is replaced when the same gig
+    arrives again with an event-specific filename (Task 13 follow-up)."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    d = (date.today() + timedelta(days=7)).isoformat()
+    bad = "https://toowongnews.com.au/uploads/toowong-logo-600px.jpg"
+    good = "https://x/uploads/2026/05/Boy-Bear-with-The-Dreggs-May-8.jpg"
+
+    seed = Resource(
+        title="Boy & Bear @ Riverstage, Brisbane",
+        url="https://ticketek.com.au/boy-bear",
+        date=d,
+        thumbnail_url=bad,
+    )
+    rerun = Resource(
+        title="Boy & Bear @ Riverstage, Brisbane",
+        url="https://oztix.com.au/boy-bear",
+        date=d,
+        thumbnail_url=good,
+    )
+
+    merge_and_write([seed])
+    merge_and_write([rerun])
+
+    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    assert posters == [good]
+
+
+def test_exact_duplicate_does_not_downgrade_good_poster(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An existing event-specific poster must NOT be replaced by a logo on re-ingest."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    d = (date.today() + timedelta(days=7)).isoformat()
+    good = "https://x/uploads/2026/05/Boy-Bear-with-The-Dreggs.jpg"
+    bad = "https://x/uploads/site-logo.png"
+
+    seed = Resource(
+        title="Boy & Bear @ Riverstage, Brisbane",
+        url="https://ticketek.com.au/boy-bear",
+        date=d,
+        thumbnail_url=good,
+    )
+    rerun = Resource(
+        title="Boy & Bear @ Riverstage, Brisbane",
+        url="https://oztix.com.au/boy-bear",
+        date=d,
+        thumbnail_url=bad,
+    )
+
+    merge_and_write([seed])
+    merge_and_write([rerun])
+
+    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    assert posters == [good]
+
+
+def test_exact_duplicate_fills_empty_poster(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """An empty Poster URL is a free upgrade — anything beats nothing."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    d = (date.today() + timedelta(days=7)).isoformat()
+    good = "https://x/uploads/2026/05/Eskimo-Joe-Black-Fingernails.jpg"
+
+    seed = Resource(
+        title="Eskimo Joe @ The Triffid, Newstead",
+        url="https://ticketek.com.au/eskimo-joe",
+        date=d,
+        thumbnail_url=None,
+    )
+    rerun = Resource(
+        title="Eskimo Joe @ The Triffid, Newstead",
+        url="https://oztix.com.au/eskimo-joe",
+        date=d,
+        thumbnail_url=good,
+    )
+
+    merge_and_write([seed])
+    merge_and_write([rerun])
+
+    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    assert posters == [good]
+
+
+def test_url_reingest_upgrades_stale_poster(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Same URL + same act+date re-ingested with a better poster heals the row.
+
+    This is the (a) re-ingest branch — the row would otherwise be untouched,
+    but its Poster URL now self-upgrades to a fresher event-specific image.
+    """
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    d = (date.today() + timedelta(days=7)).isoformat()
+    url = "https://venue.example/whats-on"
+    bad = "https://venue.example/uploads/header-banner.png"
+    good = "https://venue.example/uploads/2026/05/Thundercat-May-8.jpg"
+
+    seed = Resource(
+        title="Thundercat @ Fortitude Music Hall, Brisbane",
+        url=url, date=d, thumbnail_url=bad,
+    )
+    rerun = Resource(
+        title="Thundercat @ Fortitude Music Hall, Brisbane",
+        url=url, date=d, thumbnail_url=good,
+    )
+
+    merge_and_write([seed])
+    merge_and_write([rerun])
+
+    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    assert posters == [good]
+
+
+def test_partial_name_duplicate_upgrades_poster(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The (c) partial-name dedupe path also upgrades posters by canonical act."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    d = (date.today() + timedelta(days=7)).isoformat()
+    bad = "https://x/uploads/toowong-logo.png"
+    good = "https://x/uploads/2026/05/The-Beths-Wax-Chattels.jpg"
+
+    seed = Resource(
+        title="The Beths @ The Tivoli, Brisbane",
+        url="https://ticketek.com.au/beths",
+        date=d,
+        thumbnail_url=bad,
+    )
+    rerun = Resource(
+        title="The Beths, with Wax Chattels @ The Tivoli, Brisbane",
+        url="https://oztix.com.au/beths",
+        date=d,
+        thumbnail_url=good,
+    )
+
+    merge_and_write([seed])
+    merge_and_write([rerun])
+
+    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    assert posters == [good]

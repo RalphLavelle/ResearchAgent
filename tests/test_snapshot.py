@@ -12,8 +12,6 @@ def test_fingerprint_unchanged_when_same_resources(tmp_path: Path) -> None:
         Resource(
             title="A",
             url="https://a.com/x",
-            resource_type="website",
-            price="Free",
             summary="s",
         )
     ]
@@ -31,14 +29,12 @@ def test_fingerprint_changes_when_url_changes(tmp_path: Path) -> None:
         Resource(
             title="A",
             url="https://a.com/1",
-            resource_type="website",
         )
     ]
     r2 = [
         Resource(
             title="A",
             url="https://a.com/2",
-            resource_type="website",
         )
     ]
     fp, _ = fingerprint_changed(r1, p)

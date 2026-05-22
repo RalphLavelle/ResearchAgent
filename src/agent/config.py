@@ -7,6 +7,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
+from agent.exclusion_config import EventExclusionsConfig, load_event_exclusions
 from agent.subject_config import SubjectConfig, load_subject_config
 
 # Load .env from project root when running as package
@@ -34,9 +35,18 @@ SUBJECT_MATTER_CONFIG_PATH = _get_path(
     _ROOT / "config" / "subject_matter.yaml",
 )
 
+EVENT_EXCLUSIONS_CONFIG_PATH = _get_path(
+    "EVENT_EXCLUSIONS_CONFIG",
+    _ROOT / "config" / "exclusions.yaml",
+)
+
 # Loaded once at startup; all other modules import config.SUBJECT to read
 # the prompts, queries, and labels for the current research topic.
 SUBJECT: SubjectConfig = load_subject_config(SUBJECT_MATTER_CONFIG_PATH)
+# Snapshot at import for introspection; ``exclusion_prune`` reloads this path each pass.
+EVENT_EXCLUSIONS: EventExclusionsConfig = load_event_exclusions(
+    EVENT_EXCLUSIONS_CONFIG_PATH
+)
 SNAPSHOT_PATH = DATA_DIR / "snapshot.json"
 # Last research fingerprint successfully pushed to Notion (under data/, gitignored).
 NOTION_SYNC_STATE_PATH = DATA_DIR / "notion_sync_state.json"
@@ -105,7 +115,7 @@ def llm_inference_enabled() -> bool:
         return True
     return False
 
-# Spreadsheet, HTML, run_log: repo data/ by default (same as DATA_DIR). Override with OUTPUT_DIR or AGENT_AI_DIR.
+# Spreadsheet, events.json, per-run reports: repo data/ by default (same as DATA_DIR). Override with OUTPUT_DIR or AGENT_AI_DIR.
 _output_raw = (os.environ.get("OUTPUT_DIR") or os.environ.get("AGENT_AI_DIR") or "").strip()
 if _output_raw:
     OUTPUT_DIR = Path(_output_raw).expanduser().resolve()

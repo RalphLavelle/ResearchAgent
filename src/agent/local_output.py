@@ -1,6 +1,6 @@
-"""Write curated events to a persistent .xlsx spreadsheet and run_log.md.
+"""Write curated events to a persistent .xlsx spreadsheet.
 
-Key behaviours (Tasks 8, 9, 13, 14):
+Key behaviours (Tasks 8, 9, 11, 13, 14):
 - Output is ``agent_research.xlsx`` — the source of truth for all events.
 - Columns: Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added, Event ID (hidden).
 - The spreadsheet **accumulates**: existing rows are merged, past events removed,
@@ -17,13 +17,15 @@ Key behaviours (Tasks 8, 9, 13, 14):
   identical, the two entries are treated as the same event.  The longer act
   name is kept as the canonical name; the duplicate URL is added to Sources if
   from a different domain.
-- ``run_log.md`` is unchanged.
+- The single ``run_log.md`` is gone (Task 11). Each run now produces its own
+  ``Run_<AEST timestamp>.md`` file via ``run_report.write_run_report``.
 """
 
 from __future__ import annotations
 
 import logging
 import os
+from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -35,6 +37,7 @@ from openpyxl.utils import get_column_letter
 
 from agent import config
 from agent.display_time import format_generated_timestamp
+from agent.enrich import poster_quality_score
 from agent.event_window import (
     parse_event_sort_date,
     split_title_parts,
@@ -45,7 +48,32 @@ from agent.models import Resource
 logger = logging.getLogger(__name__)
 
 RESEARCH_FILENAME = "agent_research.xlsx"
-RUN_LOG_FILENAME = "run_log.md"
+
+
+@dataclass(frozen=True)
+class MergeStats:
+    """How a single run changed the spreadsheet (Task 12 follow-up).
+
+    Captured by ``write_output`` and rendered as a footer section in each
+    per-run report file (see ``run_report.build_run_report``).
+
+    Attributes:
+        added:           New rows inserted from the curator's resources.
+        skipped:         Curator resources skipped as duplicates of existing rows
+                         (URL re-ingest, exact semantic match, or partial-name match).
+        removed_past:      Rows deleted because their event date had passed.
+        removed_exclusion: Rows removed after merge by ``apply_event_exclusions``
+                         (``drop_terms`` literal match and/or LLM interpretation of ``exclusions``).
+        removed_dedupe:    Rows merged away by the optional LLM semantic-dedupe pass.
+        total_after:       Final spreadsheet row count after all merging is done.
+    """
+
+    added: int
+    skipped: int
+    removed_past: int
+    removed_exclusion: int
+    removed_dedupe: int
+    total_after: int
 
 # ── Schema ────────────────────────────────────────────────────────────────────
 # Column names in display order.  The Date cell stores a Python date object
@@ -139,6 +167,29 @@ def _add_source(row: list, url: str) -> bool:
     existing_urls.append(url)
     row[_IDX_SOURCES] = "\n".join(existing_urls)
     return True
+
+
+def _maybe_upgrade_poster(row: list, new_poster: str | None, act: str) -> bool:
+    """Replace the row's Poster URL when the new candidate is a better fit.
+
+    "Better" is defined by ``agent.enrich.poster_quality_score`` (which
+    penalises empty / decoration / generic posters and rewards images
+    whose filename matches the act). The intent is for the spreadsheet
+    to *self-heal* over time: as the same event is re-ingested via the
+    dedupe paths in ``merge_and_write``, a stale logo/ad poster from an
+    old run gets swapped for a fresh, event-specific one.
+
+    Never downgrades — if the new candidate scores lower or equal, the
+    cell is left alone. Returns True only when the cell actually changed.
+    """
+    new_p = (new_poster or "").strip()
+    if not new_p:
+        return False  # never replace an existing poster with nothing
+    existing_p = str(row[_IDX_POSTER] or "").strip()
+    if poster_quality_score(new_p, act) > poster_quality_score(existing_p, act):
+        row[_IDX_POSTER] = new_p
+        return True
+    return False
 
 
 def _acts_partially_match(act1: str, act2: str) -> bool:
@@ -574,10 +625,23 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
         r_date = parse_event_sort_date(r.date)
 
         dk = _dedup_key_from_resource(r)
+        new_poster = (r.thumbnail_url or "").strip() or None
 
         # (a) Identical gig re-submitted — same portal URL cannot mean duplicate *shows*
         #     anymore; skip only when act+date also match an existing URL row.
         if _already_have_url_and_show(existing, url_key, dk):
+            # Re-ingests still get a chance to upgrade a stale logo/ad poster
+            # to the fresh thumbnail produced by the new (improved) Pass 1.
+            for row_key, row in existing.items():
+                if (
+                    str(row[_IDX_URL] or "").strip().lower() == url_key
+                    and _dedup_key_from_row(row) == dk
+                ):
+                    if _maybe_upgrade_poster(row, new_poster, act):
+                        logger.debug(
+                            "URL re-ingest for '%s' — upgraded Poster URL.", r.title,
+                        )
+                    break
             skipped += 1
             continue
 
@@ -589,6 +653,10 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
                 logger.debug(
                     "Exact-name duplicate for '%s' — added %s to Sources.",
                     r.title, url,
+                )
+            if _maybe_upgrade_poster(existing[match_key], new_poster, act):
+                logger.debug(
+                    "Exact-name duplicate for '%s' — upgraded Poster URL.", r.title,
                 )
             skipped += 1
             continue
@@ -607,6 +675,17 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
                         existing_act, act,
                     )
                 _add_source(existing[partial_key], url)
+                # Score the poster against the *canonical* (longer) act name
+                # so e.g. "The Beths, with Wax Chattels" still rewards posters
+                # whose filename mentions "Beths" or "Wax Chattels".
+                canonical_act = max(act, existing_act, key=len)
+                if _maybe_upgrade_poster(
+                    existing[partial_key], new_poster, canonical_act
+                ):
+                    logger.debug(
+                        "Partial-name duplicate for '%s' — upgraded Poster URL.",
+                        r.title,
+                    )
                 skipped += 1
                 continue
 
@@ -635,56 +714,72 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
 # ── Public API (called from graph_nodes) ─────────────────────────────────────
 
 
-def write_output(
-    resources: list[Resource],
-    *,
-    append_log_only: bool,
-    log_line: str,
-) -> None:
-    """Merge spreadsheet, refresh ``events.json``, append ``run_log.md``, then optional LLM dedupe.
+def write_output(resources: list[Resource]) -> MergeStats:
+    """Merge spreadsheet, apply exclusions once on the full workbook, JSON, then dedupe.
 
-    Critical files (events.json, run_log) are written immediately after
-    the spreadsheet merge so the frontend stays in sync even if the
-    optional LLM dedupe step hangs, is interrupted, or fails.
+    Event exclusions run **after** ``merge_and_write`` via ``apply_event_exclusions``:
+    deterministic ``drop_terms`` plus optional LLM phrase rules over every row.
+
+    The frontend-critical files (the xlsx + ``events.json``) are refreshed
+    immediately after that step so the UI stays in sync even if semantic dedupe fails.
+
+    Per-run logging (the ``Run_<AEST>.md`` markdown report) is written
+    separately by ``run_report.write_run_report`` from ``node_local_output``;
+    it consumes the returned ``MergeStats`` so each report can show a count
+    of events added, skipped, pruned, exclusion-dropped, and de-duplicated.
+
+    Task 14 — between exclusion handling and the JSON write, posters are downloaded
+    once into ``data/images/<event-id>.<ext>`` so the Angular app loads them
+    same-origin (no more broken-image icons from hotlink-protected sites).
+    Failed downloads degrade gracefully to ``thumbnail_url = None``.
     """
+    from agent.image_cache import cache_thumbnails, garbage_collect
     from agent.json_output import write_events_json
 
     out_dir = output_directory()
     out_dir.mkdir(parents=True, exist_ok=True)
-    log_path = out_dir / RUN_LOG_FILENAME
     xlsx_path = out_dir / RESEARCH_FILENAME
 
-    # 1. Merge new events + prune past events → write spreadsheet.
-    merge_and_write(resources)
+    added, skipped, removed_past = merge_and_write(resources)
 
-    # 2. Immediately refresh the frontend-critical files so they always
-    #    reflect the latest spreadsheet, even if nothing below completes.
+    removed_exclusion = 0
+    try:
+        from agent.exclusion_prune import apply_event_exclusions
+
+        removed_exclusion = apply_event_exclusions(xlsx_path)
+    except Exception as exc:
+        logger.warning("Event exclusions skipped: %s", exc)
+        removed_exclusion = 0
+
     synced = load_spreadsheet_resources(xlsx_path)
-    _append_log(log_path, log_line)
-    logger.info("Appended run log entry to %s", log_path.resolve())
+    # Self-host poster bytes + sweep stale files from removed/expired rows.
+    synced = cache_thumbnails(synced, output_dir=out_dir)
+    garbage_collect({r.id for r in synced}, output_dir=out_dir)
     write_events_json(synced)
 
-    # 3. Optional LLM dedupe — runs AFTER the critical writes above.
-    #    If it removes duplicates it re-writes events.json to stay in sync.
-    if not append_log_only and config.llm_inference_enabled():
+    removed_dedupe = 0
+    if config.llm_inference_enabled():
         try:
-            n_removed = run_llm_semantic_dedupe()
-            if n_removed:
+            removed_dedupe = run_llm_semantic_dedupe()
+            if removed_dedupe:
                 logger.info(
                     "LLM semantic dedupe removed %d duplicate spreadsheet row(s).",
-                    n_removed,
+                    removed_dedupe,
                 )
                 synced = load_spreadsheet_resources(xlsx_path)
+                synced = cache_thumbnails(synced, output_dir=out_dir)
+                garbage_collect({r.id for r in synced}, output_dir=out_dir)
                 write_events_json(synced)
         except Exception as exc:
             logger.warning("LLM semantic dedupe skipped: %s", exc)
+            removed_dedupe = 0
 
-
-def _append_log(log_path: Path, log_line: str) -> None:
-    """Append a single log line to the run log, creating it when missing."""
-    block = f"\n- {log_line}\n"
-    existing = log_path.read_text(encoding="utf-8") if log_path.exists() else ""
-    if not existing.strip():
-        log_path.write_text("# Run log\n\n" + block.lstrip(), encoding="utf-8")
-    else:
-        log_path.write_text(existing.rstrip() + block, encoding="utf-8")
+    total_after = len(synced)
+    return MergeStats(
+        added=added,
+        skipped=skipped,
+        removed_past=removed_past,
+        removed_exclusion=removed_exclusion,
+        removed_dedupe=removed_dedupe,
+        total_after=total_after,
+    )

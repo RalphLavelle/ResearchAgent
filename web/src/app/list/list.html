@@ -39,8 +39,8 @@
       <div class="table-scroll">
         <table class="event-table">
           <caption class="sr-only">
-            Upcoming events: poster; event names expand only when more gigs from the same act this
-            month exist; about; venue; date links to event page.
+            Upcoming events: poster; event name links to the listing site; about; venue; date (shown
+            once per calendar date).
           </caption>
           <thead>
             <tr>
@@ -52,18 +52,18 @@
             </tr>
           </thead>
           <tbody>
-            @for (ev of data.events; track ev.id) {
-              @let ctx = accordionPeers(ev, data.events);
+            @for (ev of data.events; track ev.id; let i = $index) {
+              @let showDate = i === 0 || data.events[i - 1].date !== ev.date;
               <tr>
                 <td class="poster-cell">
-                  @if (ev.thumbnailUrl) {
+                  @if (ev.thumbnailUrl && !posterErrors().has(ev.id)) {
                     <img
                       class="poster"
-                      [src]="ev.thumbnailUrl"
+                      [ngSrc]="ev.thumbnailUrl"
                       alt=""
                       width="56"
                       height="56"
-                      loading="lazy"
+                      (error)="onPosterError(ev.id)"
                     />
                   } @else {
                     <span class="poster-placeholder" aria-hidden="true">🎸</span>
@@ -71,46 +71,24 @@
                   }
                 </td>
                 <td class="name-cell">
-                  @if (ctx.peers.length > 0) {
-                    <details class="event-accordion">
-                      <summary class="event-summary">
-                        <span class="event-summary-text">{{ ev.eventName }}</span>
-                      </summary>
-                      <div class="accordion-panel">
-                        <p class="accordion-heading">{{ ctx.label }}</p>
-                        <ul class="accordion-list">
-                          @for (peer of ctx.peers; track peer.id) {
-                            <li>
-                              <a
-                                class="accordion-link"
-                                [href]="peer.url"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                              >
-                                {{ peer.eventName }} — {{ peer.date }}
-                                <span class="sr-only"> (opens in new tab) </span>
-                              </a>
-                            </li>
-                          }
-                        </ul>
-                      </div>
-                    </details>
-                  } @else {
-                    <span class="event-title-plain">{{ ev.eventName }}</span>
-                  }
-                </td>
-                <td class="summary-cell">{{ ev.summary }}</td>
-                <td class="venue-cell">{{ ev.venue }}</td>
-                <td class="date-cell">
                   <a
-                    class="date-link"
+                    class="event-name-link"
                     [href]="ev.url"
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    {{ ev.date }}
-                    <span class="sr-only">, open full event details (external site)</span>
+                    {{ ev.eventName }}
+                    <span class="sr-only"> (opens in new tab) </span>
                   </a>
+                </td>
+                <td class="summary-cell">{{ ev.summary }}</td>
+                <td class="venue-cell">{{ ev.venue }}</td>
+                <td class="date-cell">
+                  @if (showDate) {
+                    <span class="date-text">{{ ev.date }}</span>
+                  } @else {
+                    <span class="sr-only">{{ ev.date }}</span>
+                  }
                 </td>
               </tr>
             }

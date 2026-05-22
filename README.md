@@ -10,7 +10,8 @@ Files written:
 |------|--------|
 | `agent_research.xlsx` | Spreadsheet source of truth (merge + dedupe each run) |
 | `agent_research.html` | Rendered event table (same content the Angular app embeds) |
-| `run_log.md` | Timestamped lines every run (append-only) |
+| `events.json` | JSON feed consumed by the Angular UI |
+| `Run_<AEST>.md` | One per run: planner queries, crawled URLs (grouped by host), and curated `Resource` records |
 
 Search uses LangChain's **`DuckDuckGoSearchRun`** (via its `api_wrapper`) — no search API key.
 
@@ -18,11 +19,35 @@ Search uses LangChain's **`DuckDuckGoSearchRun`** (via its `api_wrapper`) — no
 
 ### 1. Python and install
 
-Python 3.11+ and a virtualenv (`venv/`).
+Requires **Python 3.11+**. Check what you have:
+
+```powershell
+python --version
+```
+
+Create a virtual environment named `venv/` in the repo root. A venv is an isolated Python sandbox so this project's packages don't clash with anything else on your machine. The `venv/` folder is gitignored.
+
+```powershell
+python -m venv venv
+```
+
+Install the project (and dev tools like `pytest`) into the venv. You can either call the venv's `pip.exe` directly:
 
 ```powershell
 .\venv\Scripts\pip.exe install -e ".[dev]"
 ```
+
+…or **activate** the venv first so `python` and `pip` resolve to the venv automatically:
+
+```powershell
+.\venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+```
+
+> If activation is blocked, run PowerShell once as your user with
+> `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` and try again.
+> Type `deactivate` to leave the venv. The rest of this README uses the
+> direct `.\venv\Scripts\python.exe` form so it works without activation.
 
 ### 2. LLM backend
 
@@ -104,8 +129,9 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 
 ## Behavior
 
-- If curated content **changed** since last run, the spreadsheet (and HTML) are updated and a line is appended to **`run_log.md`**.
-- If nothing **meaningfully** changed, only **`run_log.md`** gets a new line (no rewrite of the main spreadsheet/HTML).
+- Each successful run produces a fresh **`Run_<AEST timestamp>.md`** report under the output folder. The report has three sections — *Searches* (planner queries), *Search and crawl* (URLs grouped by host), *Normalize* (curated `Resource` JSON with source URLs) — so you can audit exactly what each LLM-driven step did.
+- If curated content **changed** since last run, the spreadsheet, `events.json`, and (when configured) Notion are also refreshed.
+- If nothing **meaningfully** changed, the spreadsheet and `events.json` are still rewritten so they always reflect the latest source-of-truth, but downstream Notion sync is skipped.
 - `data/snapshot.json` stores a fingerprint (gitignored).
 
 ## Tests

@@ -1,4 +1,4 @@
-import { DatePipe } from '@angular/common';
+import { DatePipe, NgOptimizedImage } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
@@ -29,7 +29,7 @@ export interface EventsPayload {
 
 @Component({
   selector: 'app-list',
-  imports: [DatePipe],
+  imports: [DatePipe, NgOptimizedImage],
   templateUrl: './list.html',
   styleUrl: './list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -40,53 +40,15 @@ export class ListComponent {
   protected readonly loading = signal(true);
   protected readonly error = signal<string | null>(null);
 
+  /**
+   * Defensive fallback (task 14): event IDs whose poster failed to load even
+   * though the pipeline cached it locally. Tracking the failures lets the
+   * template swap in the 🎸 placeholder instead of leaving a broken-image icon.
+   */
+  protected readonly posterErrors = signal<ReadonlySet<string>>(new Set());
+
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
-
-  /**
-   * Peers for the event-name accordion: only other rows with the same headline act in the same
-   * calendar month. No fallback list of unrelated “same month” events (task 5).
-   */
-  protected accordionPeers(
-    current: ResearchEvent,
-    all: ResearchEvent[],
-  ): { label: string; peers: ResearchEvent[] } {
-    const month = this.#monthKeyFromDisplay(current.date);
-    const headline = this.#normalizeHeadline(current.eventName);
-
-    const sameAct = all.filter((e) => {
-      if (e.id === current.id) {
-        return false;
-      }
-      if (!month || this.#monthKeyFromDisplay(e.date) !== month) {
-        return false;
-      }
-      return this.#normalizeHeadline(e.eventName) === headline;
-    });
-
-    if (sameAct.length > 0) {
-      return { label: 'More from this act (this month)', peers: sameAct.slice(0, 12) };
-    }
-
-    // No unrelated “same month” filler — peers only when the act matches (task 5).
-    return { label: '', peers: [] };
-  }
-
-  /** Last two tokens: “May 2026” — enough to group pipeline formatted dates. */
-  #monthKeyFromDisplay(displayDate: string): string | null {
-    const parts = displayDate.trim().split(/\s+/).filter(Boolean);
-    if (parts.length < 2) {
-      return null;
-    }
-    return `${parts[parts.length - 2]} ${parts[parts.length - 1]}`;
-  }
-
-  /** Compare headline act text before “ @ ” (spreadsheet act / event name). */
-  #normalizeHeadline(name: string): string {
-    const at = name.indexOf(' @ ');
-    const base = at >= 0 ? name.slice(0, at) : name;
-    return base.trim().toLowerCase().replace(/\s+/g, ' ');
-  }
 
   constructor() {
     this.#loadEvents();
@@ -94,7 +56,24 @@ export class ListComponent {
 
   /** User-triggered reload — uses cache-busting query param so the browser does not serve a stale asset. */
   protected refreshList(): void {
+    this.posterErrors.set(new Set());
     this.#loadEvents();
+  }
+
+  /**
+   * Hook for the poster `<img>`'s `(error)` event. Adding the id flips the
+   * template to the placeholder branch so the row stops trying to render the
+   * missing asset (task 14).
+   */
+  protected onPosterError(eventId: string): void {
+    this.posterErrors.update((current) => {
+      if (current.has(eventId)) {
+        return current;
+      }
+      const next = new Set(current);
+      next.add(eventId);
+      return next;
+    });
   }
 
   /** GET `/data/events.json` (copied from repo `data/` at build time). */

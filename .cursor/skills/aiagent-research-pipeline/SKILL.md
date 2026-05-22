@@ -12,7 +12,7 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 ## Source of truth
 
 - **`agent_research.xlsx`** (under `OUTPUT_DIR`, default repo `data/`) is the database. HTML and Notion are generated from **`load_spreadsheet_resources()`** after each merge, not from the current run’s `resources` alone.
-- **`run_log.md`** is append-only text.
+- **`Run_<AEST>.md`** (Task 11) is written once per real run by `run_report.write_run_report` from `node_local_output`. Three sections: *Searches* (planner queries), *Search and crawl* (`crawled_urls` from `node_crawl`, grouped by host), *Normalize* (curated `Resource` Pydantic models serialised as JSON, each with its source URL). The single append-only `run_log.md` is removed.
 - **`data/snapshot.json`** fingerprints the **current run’s** resources for log messaging; Notion sync uses a fingerprint of the **full spreadsheet** (`canonical_fingerprint(all_resources)`).
 
 ## Topic vs engine
@@ -28,6 +28,7 @@ Apply changes here when tasks mention duplicates or Sources:
 2. **Same normalized act + same date** (venue ignored for this match) — treat as duplicate; append new URL to **Sources** only if **different domain** than primary URL.
 3. **Partial act names** — one act string contains the other (min length 4), **and** same **venue** + same **date** — duplicate; keep **longer** act name as canonical Event cell; add URL to Sources per domain rule.
 4. **Past events** — removed on each merge (`local_today()` — uses display timezone, not UTC).
+5. **Poster URL self-heal (Task 13)** — every dedupe branch (URL re-ingest, exact match, partial match) calls `_maybe_upgrade_poster`, which uses `enrich.poster_quality_score` to replace stale/decorative existing Poster URLs with fresher event-specific ones from the new ingest. Never downgrades. Tiers: empty (-1) < decoration logo/ad/banner (0) < generic (1) < filename keywords overlap the act name (2+).
 
 Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added, Event ID`. Loader tolerates old files missing **Sources** only.
 
@@ -37,6 +38,8 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 - **Structured output**: All LLM calls go through `agent/structured_output.py` → `invoke_structured(llm, messages, PydanticModel)`. For backends that support native structured output (OpenAI, local Ollama), it uses `with_structured_output()`. For Ollama Cloud (which lacks `response_format` support), it falls back to embedding the JSON schema in the prompt and extracting/parsing JSON from the plain-text response.
 - **Planner**: `node_plan` → structured `PlanQueries`. No default queries if key missing; errors logged.
 - **Normalize**: `node_normalize` → structured `ResourceListPayload`; input capped (env `CURATOR_INPUT_MAX_CHARS`); crawler tail preserved when clipping; curator dedupe is per `(url, date, title)` so many gigs may share one listing URL; then date window filter, sort soonest-first.
+- **Per-event images (Tasks 12, 13)**: `site_crawl._html_to_text` keeps `[IMG alt="…" src=…]` markers inline (decorations like logos/ads/banners filtered, mid-name tokens too) so the curator prompt can pick a distinct image per event. After the LLM, `enrich.enrich_thumbnails` runs Pass 1 — for groups of resources sharing a URL it **preserves any LLM-chosen thumbnail that is unique within the group** and only re-assigns blank or duplicate slots, scoring candidates against both `alt` text **and** the image filename's keywords (`_best_img_for_title` returns `None` when no candidate has any title-word overlap, so the slot falls through to og:image rather than the first-non-excluded poster). Pass 2 then fills any remaining nulls with the page's og:image (cached per-URL).
+- **Local poster cache (Task 14)**: `image_cache.cache_thumbnails` runs inside `local_output.write_output`, between `load_spreadsheet_resources()` and `write_events_json()`. For every spreadsheet row with an `http(s)` poster URL, it downloads the bytes once into `data/images/<event-id>.<ext>` and rewrites `events.json`'s `thumbnailUrl` to the relative path `data/images/<id>.<ext>` so the Angular app loads same-origin (no more hotlink-protected broken icons). Failed downloads degrade to `thumbnail_url = None` so the 🎸 placeholder renders. A sidecar `data/images/_index.json` (event_id → source_url) makes re-runs zero-cost; only an URL change triggers a re-fetch. `image_cache.garbage_collect` is called right after to delete files for Event IDs no longer in the spreadsheet (kept lock-step with `merge_and_write`'s past-event pruning). The spreadsheet's **Poster URL** column always stores the **upstream** URL — only the JSON gets the local path.
 
 ## Outputs
 
@@ -67,14 +70,17 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Nodes + LLM calls | `src/agent/graph_nodes.py` |
 | Structured output fallback | `src/agent/structured_output.py` |
 | Spreadsheet + dedup | `src/agent/local_output.py` |
+| Per-run markdown report | `src/agent/run_report.py` |
 | Events JSON for Angular | `src/agent/json_output.py` |
 | HTML template render (optional) | `src/agent/html_output.py` |
 | Notion API | `src/agent/notion_output.py` |
-| Crawl | `src/agent/site_crawl.py` |
+| Crawl + image markers | `src/agent/site_crawl.py` |
+| Per-event image enrichment | `src/agent/enrich.py` |
+| Local poster cache + GC | `src/agent/image_cache.py` |
 | Date/window/title split | `src/agent/event_window.py` |
 | Models + `resource_from_dict` | `src/agent/models.py` |
 | Task specs | `docs/tasks/*.md` |
 
 ## `resource_from_dict`
 
-Must pass through **`resource_type`** and **`price`** (and all other `Resource` fields) so snapshots and tests round-trip correctly.
+Rebuilds **`Resource`** from graph-state dicts. Unknown legacy keys (`resource_type`, `price`, `participatory`, etc.) from older snapshots are ignored.

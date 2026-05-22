@@ -25,17 +25,6 @@ class Resource(BaseModel):
     title: str = Field(..., description="Display title of the event or resource.")
     url: str = Field(..., description="Canonical http(s) URL for the item.")
 
-    # The valid values for resource_type are declared in subject_matter.yaml
-    # (resource_types key) and enforced by the curator LLM prompt. Using a
-    # plain string here keeps the model topic-agnostic.
-    resource_type: str = Field(
-        default="website",
-        description="Category label as defined in the active subject_matter.yaml.",
-    )
-    price: str = Field(
-        default="Unknown",
-        description="Human-readable price: Free, $25, Unknown, etc.",
-    )
     # Date is especially relevant for event-based topics; left blank otherwise.
     date: str = Field(
         default="",
@@ -44,12 +33,6 @@ class Resource(BaseModel):
     summary: str = Field(
         default="",
         description="One or two sentences explaining why this item is worth listing.",
-    )
-    # For music events: True when the audience can actively perform (open mic,
-    # jam session, etc.). For other topics this can be left False.
-    participatory: bool = Field(
-        default=False,
-        description="True if attendees can actively participate (e.g. open mic night).",
     )
     thumbnail_url: str | None = Field(
         default=None,
@@ -77,6 +60,7 @@ class AgentState(TypedDict, total=False):
 
     queries: list[str]
     raw_search_text: str
+    crawled_urls: list[str]
     resources: list[dict]
     fingerprint: str
     fingerprint_unchanged: bool
@@ -88,21 +72,15 @@ class AgentState(TypedDict, total=False):
 def resource_from_dict(data: dict) -> Resource:
     """Build a Resource from a graph-state dictionary.
 
-    Handles both the new field names (participatory, date) and the old ones
-    (langgraph_specific) so that existing snapshot files still load without
-    crashing — old snapshots will just have participatory defaulting to False.
+    Older pipeline dumps may still contain dropped keys such as ``resource_type``,
+    ``price``, or ``participatory``; those are ignored.
     """
-    # Support old snapshots that still have 'langgraph_specific'
-    participatory = data.get("participatory") or data.get("langgraph_specific", False)
     rid = data.get("id")
     kwargs: dict = dict(
         title=str(data.get("title", "")),
         url=str(data.get("url", "")),
-        resource_type=str(data.get("resource_type", "website")),
-        price=str(data.get("price", "Unknown")),
         date=str(data.get("date", "")),
         summary=str(data.get("summary", "")),
-        participatory=bool(participatory),
         thumbnail_url=data.get("thumbnail_url"),
     )
     if isinstance(rid, str) and rid.strip():
@@ -118,6 +96,5 @@ def resource_to_dict(r: Resource) -> dict:
         "url": r.url,
         "date": r.date,
         "summary": r.summary,
-        "participatory": r.participatory,
         "thumbnail_url": r.thumbnail_url,
     }

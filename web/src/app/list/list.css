@@ -1,4 +1,4 @@
-/* Event list from agent JSON — musical palette, uniform row rhythm, date = outbound link. */
+/* Event list from agent JSON — musical palette; event name links out; date is plain text. */
 
 :host {
   display: block;
@@ -127,8 +127,10 @@
   padding: 0.65rem 1rem;
   text-align: left;
   font-weight: 600;
-  color: #fff;
-  background: linear-gradient(135deg, #c2410c 0%, #be185d 45%, #1d4ed8 100%);
+  color: #334155;
+  background: rgba(255, 255, 255, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  box-shadow: none;
 }
 
 .event-table tbody td {
@@ -138,7 +140,6 @@
 }
 
 /* Uniform row height: About text is clamped so long blurbs don’t stretch rows. */
-/* Minimum row rhythm; rows may grow when an event accordion is expanded. */
 .event-table tbody tr {
   min-height: 5.75rem;
 }
@@ -188,87 +189,25 @@ img.poster {
   vertical-align: top;
 }
 
-.event-accordion {
-  margin: 0;
-  max-width: 100%;
-}
-
-.event-summary {
-  list-style: none;
-  cursor: pointer;
-  padding: 0.15rem 0;
-  font-weight: 600;
-  color: #0f172a;
-  border-radius: 8px;
-  transition: background-color 0.15s ease;
-}
-
-.event-summary::-webkit-details-marker {
-  display: none;
-}
-
-.event-summary::marker {
-  content: '';
-}
-
-.event-summary:hover .event-summary-text {
-  color: #c026d3;
-}
-
-.event-summary:focus-visible {
-  outline: 3px solid #38bdf8;
-  outline-offset: 2px;
-}
-
-.event-summary-text {
-  border-bottom: 1px dashed rgba(192, 38, 211, 0.45);
-}
-
-/* Plain title when there are no same-act peers — not interactive (task 5). */
-.event-title-plain {
+.event-name-link {
   display: inline-block;
   padding: 0.15rem 0;
   font-weight: 600;
-  color: #0f172a;
+  color: #1d4ed8;
+  text-decoration: none;
+  border-bottom: 1px dashed rgba(29, 78, 216, 0.45);
   line-height: 1.3;
 }
 
-.accordion-panel {
-  margin-top: 0.5rem;
-  padding: 0.65rem 0.75rem;
-  border-radius: 10px;
-  background: linear-gradient(180deg, rgba(255, 247, 237, 0.9), rgba(239, 246, 255, 0.85));
-  border: 1px solid rgba(251, 146, 60, 0.2);
-  font-size: 0.8rem;
-  max-height: 11rem;
-  overflow: auto;
+.event-name-link:hover {
+  color: #1e40af;
+  border-bottom-color: rgba(30, 64, 175, 0.65);
 }
 
-.accordion-heading {
-  margin: 0 0 0.35rem;
-  font-size: 0.72rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #9d174d;
-}
-
-.accordion-list {
-  margin: 0;
-  padding-left: 1.1rem;
-}
-
-.accordion-list li {
-  margin-bottom: 0.25rem;
-}
-
-.accordion-link {
-  color: #1d4ed8;
-  text-decoration: none;
-}
-
-.accordion-link:hover {
-  text-decoration: underline;
+.event-name-link:focus-visible {
+  outline: 3px solid #38bdf8;
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 .summary-cell {
@@ -293,23 +232,10 @@ img.poster {
   vertical-align: top;
 }
 
-.date-link {
+.date-text {
   font-size: 0.9rem;
   font-weight: 600;
-  color: #86198f;
-  text-decoration: none;
-  border-bottom: 2px solid rgba(134, 25, 143, 0.4);
-}
-
-.date-link:hover {
-  color: #701a75;
-  border-bottom-color: #701a75;
-}
-
-.date-link:focus-visible {
-  outline: 3px solid #38bdf8;
-  outline-offset: 2px;
-  border-radius: 4px;
+  color: #475569;
 }
 
 .sr-only {

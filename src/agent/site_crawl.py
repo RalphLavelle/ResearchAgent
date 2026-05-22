@@ -121,10 +121,71 @@ def extract_seed_urls_from_ddg_blob(text: str, max_seeds: int) -> list[str]:
     return seeds[:max_seeds]
 
 
+# Mirrors the upgraded filter in ``enrich._is_candidate_image`` so the LLM
+# sees the same poster set that Pass 1 will pick from later (Task 13).
+_IMG_LIKELY_DECORATION = re.compile(
+    r"(?:^|[/_\-])(?:"
+    r"logo|favicon|sprite|icon|spinner|placeholder|tracking|pixel|"
+    r"advert|banner|header-|footer-|sidebar|promo|social|share-|arrow|navbar"
+    r")",
+    re.IGNORECASE,
+)
+_IMG_LIKELY_AD = re.compile(
+    r"(?:^|[/_\-])ads?(?:[/_\-.]|$)",
+    re.IGNORECASE,
+)
+
+
+def _is_likely_event_image(src: str, width: str | int | None, height: str | int | None) -> bool:
+    """Heuristic filter to drop obvious logos / tracking pixels (Task 12, refined Task 13).
+
+    Keeps the inline image markers focused on photos that could realistically
+    illustrate an event. The token list and matching logic mirrors
+    ``agent.enrich._is_candidate_image`` so the LLM-facing markers and the
+    deterministic per-event matcher reject the same junk.
+    """
+    if not src or src.startswith("data:"):
+        return False
+    if _IMG_LIKELY_DECORATION.search(src) or _IMG_LIKELY_AD.search(src):
+        return False
+    for dim in (width, height):
+        try:
+            if dim is not None and int(str(dim)) < 80:
+                return False
+        except (TypeError, ValueError):
+            pass
+    return True
+
+
 def _html_to_text(html: str, page_url: str) -> str:
+    """Convert one fetched page to curator-ready text (Task 12 image markers).
+
+    Images are not stripped any more: each ``<img>`` is replaced **in place**
+    with a ``[IMG alt="…" src=…]`` marker so the curator LLM can see image
+    URLs alongside their alt text and the surrounding event copy. Choosing
+    a distinct thumbnail per event then becomes a normal LLM extraction
+    task instead of relying on the page-level og:image.
+    """
     soup = BeautifulSoup(html[:_MAX_HTML_BYTES], "html.parser")
     for tag in soup(["script", "style", "noscript", "template", "svg"]):
         tag.decompose()
+
+    for img in list(soup.find_all("img")):
+        src = (img.get("src") or img.get("data-src") or img.get("data-lazy-src") or "").strip()
+        if not _is_likely_event_image(src, img.get("width"), img.get("height")):
+            img.decompose()
+            continue
+        try:
+            abs_src = urljoin(page_url, src)
+        except ValueError:
+            img.decompose()
+            continue
+        # Keep alt text short so a page with many images doesn't blow the prompt budget.
+        alt = (img.get("alt") or "").strip().replace("\n", " ").replace('"', "'")
+        if len(alt) > 140:
+            alt = alt[:137] + "…"
+        img.replace_with(f"[IMG alt=\"{alt}\" src={abs_src}]")
+
     text = soup.get_text(separator="\n", strip=True)
     lines = [ln for ln in text.splitlines() if ln.strip()]
     body = "\n".join(lines)
@@ -158,12 +219,19 @@ def _extract_internal_links(page_url: str, html: str, host: str) -> list[str]:
     return found[:96]
 
 
-def deep_search_supplement(ddg_blob: str) -> str:
-    """Return extra markdown-style text for the curator, or empty string."""
+def deep_search_supplement(ddg_blob: str) -> tuple[str, list[str]]:
+    """Crawl seeds and return ``(curator_text, fetched_urls)``.
+
+    The first element is the markdown-ish text appended for the curator LLM
+    (empty string when nothing useful is harvested). The second element is the
+    ordered list of URLs that were *successfully* fetched and turned into a
+    text excerpt — used by the per-run report (Task 11) so we can see exactly
+    which pages contributed to the curator input.
+    """
     seeds = extract_seed_urls_from_ddg_blob(ddg_blob, config.MAX_CRAWL_SEEDS)
     if not seeds:
         logger.info("Same-site crawl: no seed URLs extracted from DuckDuckGo blob.")
-        return ""
+        return "", []
 
     max_total = max(1, config.MAX_CRAWL_PAGES_TOTAL)
     max_depth = max(0, config.MAX_CRAWL_DEPTH)
@@ -179,6 +247,7 @@ def deep_search_supplement(ddg_blob: str) -> str:
 
     timeout = httpx.Timeout(18.0, connect=6.0)
     chunks: list[str] = []
+    fetched_urls: list[str] = []
     pages_done = 0
     headers = {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"}
 
@@ -212,6 +281,7 @@ def deep_search_supplement(ddg_blob: str) -> str:
                         continue
                     text_body = _html_to_text(blob, url)
                     chunks.append(text_body)
+                    fetched_urls.append(url)
                     pages_done += 1
                     seed_pages += 1
                 except Exception as exc:
@@ -230,7 +300,7 @@ def deep_search_supplement(ddg_blob: str) -> str:
 
     if not chunks:
         logger.info("Same-site crawl finished: zero HTML pages harvested (timeouts or skips).")
-        return ""
+        return "", fetched_urls
     block = (
         "## Same-site crawl (bounded)\n\n"
         "The following text was fetched by following links on the same host as a "
@@ -242,4 +312,4 @@ def deep_search_supplement(ddg_blob: str) -> str:
         len(chunks),
         f"{len(block):,}",
     )
-    return block
+    return block, fetched_urls

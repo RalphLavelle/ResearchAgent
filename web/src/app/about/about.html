@@ -1,0 +1,68 @@
+<article class="about">
+  <h1 class="about__title">How this site works</h1>
+  <p class="about__intro">
+    This page is a friendly front-end for a small
+    <strong>research agent</strong> that hunts for upcoming live music listings. The heavy lifting is
+    done in Python; <strong>large language models (LLMs)</strong> help plan searches and turn messy
+    web pages into neat rows you can browse here.
+  </p>
+
+  <section class="about__section" aria-labelledby="about-pipeline">
+    <h2 id="about-pipeline" class="about__h2">🎛️ The pipeline in plain English</h2>
+    <ol class="about__list">
+      <li>
+        <strong>Plan.</strong> An LLM suggests search queries from your topic configuration (venues,
+        locations, date window — all driven by config, not hard-coded in the app).
+      </li>
+      <li>
+        <strong>Search &amp; crawl.</strong> The agent runs those queries, fetches candidate pages,
+        and extracts text (and clues like images) for the next step.
+      </li>
+      <li>
+        <strong>Curate.</strong> Another structured LLM pass reads the noisy text and fills in a
+        spreadsheet-style row: act, venue, date, link, short summary, poster URL, and more. The goal
+        is <em>structured data you can trust</em>, not a wall of prose.
+      </li>
+      <li>
+        <strong>Merge &amp; de-duplicate.</strong> Deterministic code merges new finds with the
+        on-disk spreadsheet, drops past gigs, and folds duplicate listings so you don’t see the same
+        show three times.
+      </li>
+      <li>
+        <strong>Enrich &amp; cache.</strong> Thumbnails are scored and cached locally when possible,
+        so your browser loads posters from this site instead of fragile hotlinks.
+      </li>
+      <li>
+        <strong>Publish.</strong> The same database powers this Angular list (via
+        <code>events.json</code>), optional HTML, and other exports.
+      </li>
+    </ol>
+  </section>
+
+  <section class="about__section" aria-labelledby="about-llms">
+    <h2 id="about-llms" class="about__h2">🤖 Where LLMs fit (and where they don’t)</h2>
+    <p>
+      LLMs are great at turning unstructured blurbs into fields and at brainstorming queries — they
+      are <em>not</em> a database of facts. This project keeps them on a short leash: outputs are
+      validated, dates are checked against a window, and persistence is always the spreadsheet/JSON,
+      not “whatever the model said last.”
+    </p>
+    <p>
+      You can run against cloud OpenAI or a local OpenAI-compatible stack; the UI you’re reading
+      doesn’t need API keys — it only reads the published snapshot.
+    </p>
+  </section>
+
+  <section class="about__section" aria-labelledby="about-you">
+    <h2 id="about-you" class="about__h2">🎸 What you’re looking at</h2>
+    <p>
+      The event list is a read-only view of the latest merged data. Refresh or re-run the pipeline
+      when organisers post new shows — the agent does the busywork so this page stays current without
+      manual copy-paste.
+    </p>
+  </section>
+
+  <p class="about__footer-note">
+    <a routerLink="/" class="about__back">← Back to events</a>
+  </p>
+</article>

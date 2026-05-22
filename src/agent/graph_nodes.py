@@ -143,29 +143,35 @@ def node_search(state: AgentState) -> AgentState:
 
 
 def node_crawl(state: AgentState) -> AgentState:
-    """Append same-site HTML text after search so the curator can mine more gigs."""
+    """Append same-site HTML text after search so the curator can mine more gigs.
+
+    Also stores the list of URLs that were actually fetched on
+    ``state["crawled_urls"]`` so the per-run report (Task 11) can group them
+    by host.
+    """
     raw = state.get("raw_search_text") or ""
     if not config.CRAWL_ENABLED:
         logger.info("Crawl step skipped (CRAWL_ENABLED=false).")
-        return {}
+        return {"crawled_urls": []}
     try:
         logger.info(
             "Crawl step starting (runs after DuckDuckGo text is collected; downloads can take several minutes)."
         )
         t0 = monotonic()
-        extra = deep_search_supplement(raw)
+        extra, fetched_urls = deep_search_supplement(raw)
         elapsed = monotonic() - t0
         logger.info(
             "Crawl step finished in %.1f s (~%s extra chars for curator).",
             elapsed,
             f"{len(extra):,}",
         )
-        if not extra.strip():
-            return {}
-        return {"raw_search_text": raw + "\n\n" + extra}
+        out: AgentState = {"crawled_urls": list(fetched_urls)}
+        if extra.strip():
+            out["raw_search_text"] = raw + "\n\n" + extra
+        return out
     except Exception as exc:
         logger.warning("Site crawl step failed (continuing with search only): %s", exc)
-        return {}
+        return {"crawled_urls": []}
 
 
 def node_normalize(state: AgentState) -> AgentState:
@@ -277,14 +283,19 @@ def build_run_log_message(state: AgentState) -> str:
 
 
 def node_local_output(state: AgentState) -> AgentState:
-    """Write or update the local Markdown files.
+    """Write the per-run report and sync the spreadsheet/JSON outputs.
 
-    - If the data has not changed (fingerprint_unchanged): append to the run
-      log only — avoid rewriting the main research file unnecessarily.
-    - If the data changed: rewrite the main file and append to the run log.
-    - After a full write, optionally push to Notion if credentials are set.
+    Steps (Task 11):
+    1. Build resources + queries + crawled URL list from state.
+    2. Skip all file writes on dry-run.
+    3. Merge new resources into the spreadsheet and refresh ``events.json``.
+    4. Save the snapshot fingerprint.
+    5. Write a fresh ``Run_<AEST timestamp>.md`` markdown report capturing the
+       three LLM-driven steps in detail (Searches, Search and crawl, Normalize).
+    6. Optionally push the full spreadsheet to Notion.
     """
-    from agent.local_output import load_spreadsheet_resources, write_output
+    from agent.local_output import load_spreadsheet_resources, output_directory, write_output
+    from agent.run_report import write_run_report
 
     msg = build_run_log_message(state)
     dry = state.get("dry_run", False)
@@ -292,26 +303,35 @@ def node_local_output(state: AgentState) -> AgentState:
         return {"run_log_message": msg}
 
     resources = [resource_from_dict(d) for d in (state.get("resources") or [])]
+    queries = list(state.get("queries") or [])
+    crawled_urls = list(state.get("crawled_urls") or [])
     fp = state.get("fingerprint") or ""
 
     try:
         logger.info(
-            "Output step: merging %s curated resources into spreadsheet, run log, events.json.",
+            "Output step: merging %s curated resources into spreadsheet, events.json, run report.",
             len(resources),
         )
-        # Merge current-run events into the spreadsheet (also expires past events).
-        write_output(resources, append_log_only=False, log_line=msg)
+        merge_stats = write_output(resources)
         save_snapshot(config.SNAPSHOT_PATH, fp, resources)
 
-        # Reload for Notion (events.json refreshed inside ``write_output`` alongside the spreadsheet).
+        try:
+            report_path = write_run_report(
+                output_directory(),
+                queries=queries,
+                crawled_urls=crawled_urls,
+                resources=resources,
+                merge_stats=merge_stats,
+            )
+            logger.info("Run report saved to %s", report_path.name)
+        except Exception as report_exc:
+            logger.warning("Run report write failed (continuing): %s", report_exc)
+
         all_resources = load_spreadsheet_resources()
 
-        # Fingerprint the full spreadsheet so Notion syncs whenever the
-        # accumulated event list changes, not just when this run's results differ.
         from agent.snapshot import canonical_fingerprint
         spreadsheet_fp = canonical_fingerprint(all_resources)
 
-        # Sync to Notion using the full spreadsheet, not just this run's results.
         if (
             config.notion_sync_configured()
             and notion_output.notion_sync_needed(spreadsheet_fp, config.NOTION_SYNC_STATE_PATH)
@@ -328,7 +348,6 @@ def node_local_output(state: AgentState) -> AgentState:
                 logger.exception("Notion sync failed: %s", notion_exc)
                 ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
                 fail_line = f"{ts} - Notion sync failed: {notion_exc}"
-                write_output(resources, append_log_only=True, log_line=fail_line)
                 return {"run_log_message": f"{msg} | {fail_line}"}
 
     except Exception as exc:

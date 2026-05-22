@@ -12,7 +12,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict
 
 
 class SubjectConfig(BaseModel):
@@ -21,7 +21,12 @@ class SubjectConfig(BaseModel):
     Each field maps directly to a key in the subject_matter.yaml file.
     Pydantic validates the types and raises a clear error if the YAML is
     missing a required field — much friendlier than a raw KeyError.
+
+    Unknown keys (e.g. legacy ``resource_types``) are ignored so older YAML files
+    still load after slimming ``Resource``.
     """
+
+    model_config = ConfigDict(extra="ignore")
 
     # Short label shown in log lines and run summaries.
     topic: str
@@ -29,10 +34,6 @@ class SubjectConfig(BaseModel):
     # Heading and introductory paragraph written into the Markdown output.
     output_title: str
     output_description: str
-
-    # Category labels the LLM may assign to each result record.
-    # Defined here so the curator prompt and the Markdown formatter stay in sync.
-    resource_types: list[str] = Field(default_factory=lambda: ["website"])
 
     # ── LLM prompts ───────────────────────────────────────────────────────────
     # These are the exact strings passed to the language model.

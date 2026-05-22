@@ -1,1 +1,11 @@
 /* You can add global styles to this file, and also import other style files */
+
+body {
+  margin: 0;
+  padding: 0;
+}
+
+/* Set on <body> from App when the mobile nav overlay is open (scroll can’t escape under the sheet). */
+body.app-mobile-nav-open {
+  overflow: hidden;
+}
