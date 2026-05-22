@@ -284,7 +284,7 @@ def _row_to_resource(row: list) -> Resource:
     """Reconstruct a Resource from a spreadsheet row.
 
     The title is rebuilt in "Act @ Venue, Location" format so that
-    ``split_title_parts`` in html_output / notion_output can decompose it
+    ``split_title_parts`` in json_output / notion_output can decompose it
     the same way it was originally split.
     """
     act      = str(row[_IDX_EVENT]    or "").strip()

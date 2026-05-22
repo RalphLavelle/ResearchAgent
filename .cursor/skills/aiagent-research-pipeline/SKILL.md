@@ -1,6 +1,6 @@
 ---
 name: aiagent-research-pipeline
-description: Guides changes to the LangGraph music-events research agent, spreadsheet source-of-truth, deduplication, HTML/Notion outputs, and subject YAML. Use when editing this repo, docs/tasks, graph_nodes, local_output, notion_output, html_output, subject_matter.yaml, or when the user mentions AgentAI, agent_research.xlsx, dedup, or the research pipeline.
+description: Guides changes to the LangGraph music-events research agent, spreadsheet source-of-truth, deduplication, events JSON / Notion outputs, and subject YAML. Use when editing this repo, docs/tasks, graph_nodes, local_output, notion_output, subject_matter.yaml, or when the user mentions AgentAI, agent_research.xlsx, dedup, or the research pipeline.
 ---
 
 # AIAgent research pipeline
@@ -11,7 +11,7 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 
 ## Source of truth
 
-- **`agent_research.xlsx`** (under `OUTPUT_DIR`, default repo `data/`) is the database. HTML and Notion are generated from **`load_spreadsheet_resources()`** after each merge, not from the current run’s `resources` alone.
+- **`agent_research.xlsx`** (under `OUTPUT_DIR`, default repo `data/`) is the database. `events.json` and Notion are generated from **`load_spreadsheet_resources()`** after each merge, not from the current run's `resources` alone.
 - **`Run_<AEST>.md`** (Task 11) is written once per real run by `run_report.write_run_report` from `node_local_output`. Three sections: *Searches* (planner queries), *Search and crawl* (`crawled_urls` from `node_crawl`, grouped by host), *Normalize* (curated `Resource` Pydantic models serialised as JSON, each with its source URL). The single append-only `run_log.md` is removed.
 - **`data/snapshot.json`** fingerprints the **current run’s** resources for log messaging; Notion sync uses a fingerprint of the **full spreadsheet** (`canonical_fingerprint(all_resources)`).
 
@@ -44,7 +44,6 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 ## Outputs
 
 - **Angular JSON**: `json_output.py` writes `events.json` (under `OUTPUT_DIR`) at local-output time — `{ generated, events[] }` in camelCase; the Angular app loads `/data/events.json`.
-- **HTML (optional/static)**: `templates/event_table.html` — row injection between `<!-- ROW_TEMPLATE_START -->` / `END`; same splice rules as before (`html_output.py`).
 - **Notion**: native table blocks; no inline images in cells (poster glyph pattern in `notion_output.py`).
 
 ## Config/env (do not overwrite `.env` without asking)
@@ -72,7 +71,6 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Spreadsheet + dedup | `src/agent/local_output.py` |
 | Per-run markdown report | `src/agent/run_report.py` |
 | Events JSON for Angular | `src/agent/json_output.py` |
-| HTML template render (optional) | `src/agent/html_output.py` |
 | Notion API | `src/agent/notion_output.py` |
 | Crawl + image markers | `src/agent/site_crawl.py` |
 | Per-event image enrichment | `src/agent/enrich.py` |

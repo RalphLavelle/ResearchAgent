@@ -1,16 +1,15 @@
 # Research Agent
 
-Python app using **LangGraph** that researches configurable topics, curates structured rows, and saves results to a **spreadsheet** plus generated HTML under **`data/`** (override with `.env`).
+Python app using **LangGraph** that researches configurable topics, curates structured rows, and saves results to a **spreadsheet** plus **`events.json`** under **`data/`** (override with `.env`).
 
-**Default output folder:** `data/` at the repo root (spreadsheet + logs + HTML). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
+**Default output folder:** `data/` at the repo root (spreadsheet + logs + JSON + per-run reports). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
 
 Files written:
 
 | File | Purpose |
 |------|--------|
 | `agent_research.xlsx` | Spreadsheet source of truth (merge + dedupe each run) |
-| `agent_research.html` | Rendered event table (same content the Angular app embeds) |
-| `events.json` | JSON feed consumed by the Angular UI |
+| `events.json` | JSON feed consumed by the Angular UI (spreadsheet-derived) |
 | `Run_<AEST>.md` | One per run: planner queries, crawled URLs (grouped by host), and curated `Resource` records |
 
 Search uses LangChain's **`DuckDuckGoSearchRun`** (via its `api_wrapper`) — no search API key.
@@ -95,7 +94,7 @@ Copy `config/schedule.example.yaml` to `config/schedule.yaml` and set `interval_
   .\venv\Scripts\python.exe -m agent run-once
   ```
 
-- **Dry run** (no spreadsheet / HTML / log writes):
+- **Dry run** (no spreadsheet / JSON / log writes):
 
   ```powershell
   .\venv\Scripts\python.exe -m agent run-once --dry-run
@@ -117,7 +116,7 @@ Or use `scripts\start_serve.ps1` after adjusting paths.
 
 ### Web UI (Angular)
 
-The UI under **`web/`** embeds `data/agent_research.html` so you can browse the spreadsheet-backed table in the browser.
+The UI under **`web/`** loads `data/events.json` (copied alongside static assets when you build or serve the app) so you can browse the spreadsheet-backed lineup in the browser.
 
 ```powershell
 cd web
@@ -125,7 +124,7 @@ npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). Run the Python agent at least once so `data/agent_research.html` exists.
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). Run the Python agent at least once so `data/events.json` exists (Angular fetches `/data/events.json`).
 
 ## Behavior
 
@@ -142,5 +141,5 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 
 ## Layout
 
-- `src/agent/` — LangGraph workflow, DuckDuckGo search, spreadsheet/HTML writer, scheduler.
-- `web/` — Angular shell that embeds the generated HTML from `data/`.
+- `src/agent/` — LangGraph workflow, DuckDuckGo search, spreadsheet + JSON outputs, scheduler.
+- `web/` — Angular shell that reads the generated `events.json` from `data/`.
