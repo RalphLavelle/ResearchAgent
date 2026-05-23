@@ -1,9 +1,10 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
+import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
 
 import { ListComponent } from '../list/list';
+import { TopicService } from '../topic/topic.service';
 
 /**
- * Home route: hero text plus the events list loaded from `data/events.json`.
+ * Home route: hero text plus the events list for the active topic.
  */
 @Component({
   selector: 'app-home',
@@ -12,4 +13,6 @@ import { ListComponent } from '../list/list';
   styleUrl: './home.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
-export class HomeComponent {}
+export class HomeComponent {
+  protected readonly topic = inject(TopicService);
+}

@@ -1,0 +1,81 @@
+# Subject-matter configuration for the research pipeline.
+#
+# This file lives under topics/<topic-id>/ and tells the agent WHAT to research.
+# Switch topics by editing topics/topics.json (``active`` id) or ACTIVE_TOPIC in .env.
+
+# Short human-readable label used in log messages.
+topic: "Live Music Events - Galway City"
+
+# Heading and intro text written at the top of the output Markdown file.
+output_title: "Upcoming Live Music Events"
+output_description: >
+  (Documentation only.) One row per gig. Spreadsheet columns: Event, Venue,
+  Location, Date, URL, Poster URL, Summary, Added. Titles must use
+  "Act @ Venue, Location" when all three are known so the app can split them
+  into separate columns.
+
+# ── LLM PROMPTS ───────────────────────────────────────────────────────────────
+
+planner_system_prompt: |
+  You plan web search queries to find specific upcoming live music gigs
+  and concerts in Galway City, County Galway, Ireland.
+  Prefer queries that surface ticketing pages (Ticketmaster Ireland, Eventbrite,
+  Dice, See Tickets), venue "what's on" **event-detail** pages (Roisín Dubh,
+  Monroe's Live, Black Box, The Skeff, Crane Bar, Taaffe's Bar, Massimo,
+  Town Hall Theatre, Galway Arts Centre, Busker Browne's, The Docks),
+  Facebook event URLs, Bandsintown/Songkick Galway pages, and local gig guides
+  (Goldenplec, Galway Advertiser, Connacht Tribune listings). Rotate query angles:
+  upcoming, "tickets", trad sessions, open mic, jazz/folk rooms, pub residencies,
+  festivals. Avoid queries that only return generic portal homepages with no dates.
+  Output as many distinct queries as requested (up to the limit in the user message).
+  Each query should be short and specific.
+
+planner_user_message: |
+  Plan search queries to find individual upcoming live music events in Galway City
+  and nearby Galway city neighbourhoods (Salthill, Westside, Oranmore when listed
+  as Galway-area gigs) — rock, pop, trad, folk, jazz, electronic, and world music.
+  Include open mic nights, trad sessions, and jam-style listings alongside regular gigs.
+  Include all genres of music. Each query should help find pages for specific dated
+  shows, not generic portal indexes. Aim for maximum coverage: different venues,
+  ticket vendors, and genres so the combined search results surface as many separate
+  gigs as possible.
+
+curator_system_prompt: |
+  You turn noisy search results into a list of individual upcoming live music
+  events (one row per gig) for Galway City, County Galway, Ireland.
+
+  Recall is critical: extract every distinct gig you can justify from the
+  snippets and titles across ALL search results — not only the first few hits.
+  Treat **calendar and listing HTML** inside "Same-site crawl" as exhaustive:
+  enumerate **every** separate musical concert or gig dated in the window (read
+  the full block; gigs lower on long pages matter). Prefer the **direct event URL**
+  for each line item when anchors point to `/e/`... or `/events/`... paths; reuse
+  the listing URL **only when** only one generic URL ties to that row in the excerpt.
+  The same venue page may describe many shows — output **many** rows, not one.
+  Prefer rows backed by a concrete event or ticket URL even if the snippet is short.
+  Do not merge two different acts into one row.
+
+  Rules:
+  - Each resource is exactly ONE gig — not a vague portal row with **no named act
+    + date**. If multiple independent dated shows appear on one index page,
+    emit one resource per distinct show line.
+  - title: use "Act @ Venue, Location" whenever known (e.g. "The Academic @ Roisín Dubh, Galway") — the app splits this into three separate columns (Event, Venue, Location). Use a comma after the venue name to separate it from the suburb/city. If the location is unknown, "Act @ Venue" is fine. If only the act is known, just the act name.
+  - date: REQUIRED — primary show date only, as ISO YYYY-MM-DD (calendar
+    day of the performance in Ireland). If a range is shown, use the first performance day.
+    Rows without a confident ISO date in the allowed window must be omitted.
+  - summary: one short sentence (optional line-up or genre hint).
+  - url: use the clearest stable link for **that gig** (ticket page, venue detail,
+    Facebook events). Listing or calendar URLs are OK when nothing more specific
+    appears for that named show in the excerpt — downstream merge can still reconcile duplicates.
+  - thumbnail_url: the same-site crawl text contains inline image markers in
+    the form `[IMG alt="<alt-text>" src=<https://…>]`. For each event, choose
+    the image whose alt text or surrounding copy most clearly matches **that
+    specific event** (act name, support act, poster keywords) and copy its
+    src into thumbnail_url. **Never reuse the same image URL across multiple
+    events that share a listing URL** — distinct gigs deserve distinct posters.
+    If no event-specific marker is present (or every nearby marker is a
+    generic banner with no act-specific alt text), leave thumbnail_url blank
+    and the engine will fall back to the page's og:image.
+  - Omit school and/or children's events, bingo, drag stuff, stand up, comedy, mediums, psychics
+  - Omit any event whose date is before "today" or after the allowed window
+    described in the user message above the search results.

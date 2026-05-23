@@ -50,6 +50,11 @@
               },
               {
                 "glob": "**/*",
+                "input": "../topics",
+                "output": "/topics"
+              },
+              {
+                "glob": "**/*",
                 "input": "../data",
                 "output": "/data"
               }
@@ -109,6 +114,11 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "**/*",
+                "input": "../topics",
+                "output": "/topics"
               },
               {
                 "glob": "**/*",

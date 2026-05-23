@@ -1,0 +1,21 @@
+# Event exclusions: applied once per pipeline run **after** rows are merged
+# into agent_research.xlsx.
+
+drop_terms:
+  - drag
+  - bingo
+  - comedy
+  - psychic
+  - psychics
+  - medium
+  - mediums
+
+exclusions:
+  - Drag shows or drag-themed events. Anything drag related.
+  - Bingo
+  - Comedy, stand-up, standup
+  - Mediums, psychics
+  - School events
+  - Children's events
+  - Any event whose date is before "today" or after the allowed window
+    described in the user message above the search results.

@@ -24,7 +24,7 @@
       rgba(232, 244, 252, 0.78) 45%,
       rgba(253, 238, 248, 0.82) 100%
     ),
-    url("/bg.jpg");
+    var(--topic-bg-image, url("/bg.jpg"));
   background-size: cover;
   background-position: center top;
   background-repeat: no-repeat;

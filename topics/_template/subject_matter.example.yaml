@@ -1,0 +1,16 @@
+# Copy into topics/<your-topic-id>/subject_matter.yaml and edit prompts.
+
+topic: "Your topic label"
+output_title: "Upcoming events"
+output_description: >
+  One row per item. Spreadsheet columns: Event, Venue, Location, Date, URL,
+  Poster URL, Summary, Added.
+
+planner_system_prompt: |
+  You plan web search queries for …
+
+planner_user_message: |
+  Plan search queries to find …
+
+curator_system_prompt: |
+  You turn noisy search results into structured event rows …

@@ -8,7 +8,16 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 from agent.exclusion_config import EventExclusionsConfig, load_event_exclusions
+from agent.prompt_guides import load_prompt_guides
 from agent.subject_config import SubjectConfig, load_subject_config
+from agent.topics import (
+    load_topics,
+    migrate_legacy_flat_data,
+    resolve_output_dir,
+    rewrite_events_json_poster_paths,
+    topic_config_dir,
+    topic_data_dir,
+)
 
 # Load .env from project root when running as package
 _ROOT = Path(__file__).resolve().parents[2]
@@ -22,27 +31,42 @@ def _get_path(key: str, default: Path) -> Path:
     return default
 
 
+TOPICS_CONFIG_PATH = _get_path("TOPICS_CONFIG", _ROOT / "topics" / "topics.json")
+TOPICS = load_topics(TOPICS_CONFIG_PATH)
+
+_active_raw = (os.environ.get("ACTIVE_TOPIC") or "").strip()
+ACTIVE_TOPIC_ID = _active_raw or TOPICS.active
+if ACTIVE_TOPIC_ID not in TOPICS.topics:
+    raise ValueError(
+        f"Unknown active topic {ACTIVE_TOPIC_ID!r}. "
+        f"Set ACTIVE_TOPIC in .env or fix topics.json (available: {list(TOPICS.topics)})."
+    )
+ACTIVE_TOPIC = TOPICS.topics[ACTIVE_TOPIC_ID]
+TOPIC_DIR = topic_config_dir(_ROOT, ACTIVE_TOPIC_ID)
+
+# Base data root (topic subfolders live beneath this).
+DATA_BASE_DIR = _get_path("DATA_DIR", _ROOT / "data")
+DATA_DIR = topic_data_dir(DATA_BASE_DIR, ACTIVE_TOPIC)
+
 SCHEDULE_CONFIG_PATH = _get_path(
     "SCHEDULE_CONFIG_PATH",
-    _ROOT / "config" / "schedule.yaml",
+    TOPIC_DIR / "schedule.yaml",
 )
-DATA_DIR = _get_path("DATA_DIR", _ROOT / "data")
 
-# Path to the active subject-matter YAML. Point SUBJECT_MATTER_CONFIG in
-# your .env to a different file to research a completely different topic.
 SUBJECT_MATTER_CONFIG_PATH = _get_path(
     "SUBJECT_MATTER_CONFIG",
-    _ROOT / "config" / "subject_matter.yaml",
+    TOPIC_DIR / "subject_matter.yaml",
 )
 
 EVENT_EXCLUSIONS_CONFIG_PATH = _get_path(
     "EVENT_EXCLUSIONS_CONFIG",
-    _ROOT / "config" / "exclusions.yaml",
+    TOPIC_DIR / "exclusions.yaml",
 )
 
 # Loaded once at startup; all other modules import config.SUBJECT to read
 # the prompts, queries, and labels for the current research topic.
 SUBJECT: SubjectConfig = load_subject_config(SUBJECT_MATTER_CONFIG_PATH)
+PROMPT_GUIDES = load_prompt_guides(TOPIC_DIR / "prompt_guides.yaml")
 # Snapshot at import for introspection; ``exclusion_prune`` reloads this path each pass.
 EVENT_EXCLUSIONS: EventExclusionsConfig = load_event_exclusions(
     EVENT_EXCLUSIONS_CONFIG_PATH
@@ -115,12 +139,46 @@ def llm_inference_enabled() -> bool:
         return True
     return False
 
-# Spreadsheet, events.json, per-run reports: repo data/ by default (same as DATA_DIR). Override with OUTPUT_DIR or AGENT_AI_DIR.
+# Spreadsheet, events.json, per-run reports: data/<topic>/ by default.
+# OUTPUT_DIR=data (repo root) is treated as the data base — output goes to the active topic subfolder.
 _output_raw = (os.environ.get("OUTPUT_DIR") or os.environ.get("AGENT_AI_DIR") or "").strip()
-if _output_raw:
-    OUTPUT_DIR = Path(_output_raw).expanduser().resolve()
-else:
-    OUTPUT_DIR = DATA_DIR
+OUTPUT_DIR = resolve_output_dir(
+    data_base=DATA_BASE_DIR,
+    topic_dir=DATA_DIR,
+    env_override=_output_raw or None,
+)
+
+# One-time lift of pre-topic flat files (data/events.json → data/<topic>/events.json).
+try:
+    _migrated = migrate_legacy_flat_data(DATA_BASE_DIR, ACTIVE_TOPIC)
+    if _migrated:
+        import logging
+
+        logging.getLogger(__name__).info(
+            "Migrated %s legacy data item(s) from %s into %s",
+            _migrated,
+            DATA_BASE_DIR,
+            OUTPUT_DIR,
+        )
+except OSError as exc:
+    import logging
+
+    logging.getLogger(__name__).warning("Legacy data migration skipped: %s", exc)
+
+try:
+    if rewrite_events_json_poster_paths(
+        OUTPUT_DIR / "events.json",
+        topic_data_dir=ACTIVE_TOPIC.data_dir,
+    ):
+        import logging
+
+        logging.getLogger(__name__).info(
+            "Rewrote legacy poster URLs in %s", OUTPUT_DIR / "events.json"
+        )
+except OSError as exc:
+    import logging
+
+    logging.getLogger(__name__).warning("events.json poster URL rewrite skipped: %s", exc)
 
 MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
 SEARCH_DELAY_SEC = float(os.environ.get("SEARCH_DELAY_SEC", "1.5"))

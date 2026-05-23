@@ -11,6 +11,7 @@ from datetime import date, datetime, timedelta, timezone
 
 from agent.display_time import display_timezone
 from agent.models import Resource
+from agent.prompt_guides import PromptGuides
 
 # How far ahead to include events (matches subject-matter instructions).
 DEFAULT_EVENT_HORIZON_DAYS = 30
@@ -49,8 +50,13 @@ def parse_event_sort_date(date_str: str) -> date | None:
         return None
 
 
-def planner_date_instruction(*, days: int = DEFAULT_EVENT_HORIZON_DAYS) -> str:
+def planner_date_instruction(
+    guides: PromptGuides | None = None,
+    *,
+    days: int = DEFAULT_EVENT_HORIZON_DAYS,
+) -> str:
     """Appended to the planner user message so queries target the right window."""
+    g = guides or PromptGuides()
     today = local_today()
     end = today + timedelta(days=days)
     # When the window spans two months, remind the model to search both.
@@ -63,36 +69,45 @@ def planner_date_instruction(*, days: int = DEFAULT_EVENT_HORIZON_DAYS) -> str:
             f"mention {month_name[end.month]} {end.year} so you catch events in "
             "both months.\n"
         )
-    return (
+    body = (
         f"\n\nToday is {today.isoformat()}. Only plan queries for individual "
-        f"gigs and concerts happening from {today.isoformat()} through "
-        f"{end.isoformat()} inclusive — roughly the next {days} days. Avoid generic "
-        "portal homepages; aim for pages that list specific dated events.\n"
+        f"{g.resource_label_plural} happening from {today.isoformat()} through "
+        f"{end.isoformat()} inclusive — roughly the next {days} days. "
+        f"{g.portal_avoid_hint}\n"
         f"{month_hint}"
-        "**Gold Coast first:** the user lives on the Gold Coast — at least half of "
-        "your queries should target Gold Coast suburbs, venues, and ticket pages; "
-        "treat Brisbane as secondary."
     )
+    suffix = (g.planner_date_suffix or "").strip()
+    if suffix:
+        body += suffix if suffix.endswith("\n") else suffix + "\n"
+    return body
 
 
-def curator_date_instruction(*, days: int = DEFAULT_EVENT_HORIZON_DAYS) -> str:
+def curator_date_instruction(
+    guides: PromptGuides | None = None,
+    *,
+    days: int = DEFAULT_EVENT_HORIZON_DAYS,
+) -> str:
     """Prepended before search results for the normalisation step."""
+    g = guides or PromptGuides()
     today = local_today()
     end = today + timedelta(days=days)
-    return (
-        f"Today (UTC) is {today.isoformat()}. Only include individual gigs or concerts "
+    body = (
+        f"Today is {today.isoformat()}. Only include individual "
+        f"{g.curator_resource_label_plural} "
         f"with a primary performance date from {today.isoformat()} through "
         f"{end.isoformat()} inclusive (next {days} days). "
         "Prefer a **specific show URL** when the excerpt names one (aggregator `/e/` "
         "links, Facebook events, ticketing pages over generic index pages — but **do not** "
-        "skip multiple gigs visible on long listing pages.) "
+        "skip multiple events visible on long listing pages.) "
         "When one shared listing URL wraps many dated shows seen in text, emit **one row "
         "per distinct show** (different act names or dates) even if the **url field repeats** "
         "for rows that genuinely only have that portal link. Omit rows without an ISO "
         "date — YYYY-MM-DD — in range.\n"
-        "**Gold Coast balance:** include plenty of Gold Coast gigs, not only Brisbane — "
-        "when in doubt, prefer listings whose venue or address is on the Gold Coast."
     )
+    suffix = (g.curator_date_suffix or "").strip()
+    if suffix:
+        body += suffix if suffix.endswith("\n") else suffix + "\n"
+    return body
 
 
 def filter_events_in_upcoming_window(

@@ -56,7 +56,7 @@ def serve() -> None:
     """
     Run the agent on a reloadable interval until process exit.
 
-    Edit config/schedule.yaml while running; the next poll picks up the change.
+    Edit topics/<active-topic>/schedule.yaml while running; the next poll picks up the change.
     Set ``interval_minutes`` > 0 to override ``interval_hours`` entirely.
     """
     sched = BackgroundScheduler()

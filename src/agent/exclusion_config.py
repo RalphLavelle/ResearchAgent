@@ -1,6 +1,6 @@
 """YAML configuration for event exclusions (Task 19).
 
-Rules live in ``config/exclusions.yaml`` by default (override with
+Rules live in ``topics/<id>/exclusions.yaml`` by default (override with
 ``EVENT_EXCLUSIONS_CONFIG`` in ``.env``).
 
 - ``drop_terms``: deterministic word-boundary substring drops (no LLM).

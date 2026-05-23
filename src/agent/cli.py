@@ -29,11 +29,23 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not write Markdown files or snapshot.",
     )
 
-    sub.add_parser("serve", help="Run on reloadable interval (see config/schedule.yaml).")
+    sub.add_parser("serve", help="Run on reloadable interval (see topics/<id>/schedule.yaml).")
 
     args = parser.parse_args(argv)
 
+    from agent import config
+    from agent.image_cache import dedupe_images_for_all_topics
     from agent.llm_factory import verify_llm_at_startup
+
+    try:
+        removed = dedupe_images_for_all_topics(data_base=config.DATA_BASE_DIR)
+        if removed:
+            logger.info(
+                "Removed %s duplicate poster file(s) across topic image caches.",
+                removed,
+            )
+    except OSError as exc:
+        logger.warning("Image dedupe migration skipped: %s", exc)
 
     if args.command in ("run-once", "serve") and not verify_llm_at_startup():
         logger.error(

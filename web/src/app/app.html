@@ -11,8 +11,8 @@
             routerLinkActive="site-brand--active"
             [routerLinkActiveOptions]="{ exact: true }"
           >
-            <span class="site-brand__emoji" aria-hidden="true">🎵</span>
-            <span class="site-brand__text">Live music events</span>
+            <span class="site-brand__emoji" aria-hidden="true">{{ topic.active().site_emoji }}</span>
+            <span class="site-brand__text">{{ topic.active().site_title }}</span>
           </a>
         </div>
 

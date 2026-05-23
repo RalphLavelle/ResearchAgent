@@ -1,0 +1,14 @@
+# Topic-specific prompt fragments injected by the Python engine (date window, etc.).
+# Generic ISO date / window logic stays in src/agent/event_window.py.
+
+resource_label_plural: "gigs and concerts"
+curator_resource_label_plural: "gigs or concerts"
+
+planner_date_suffix: |
+  **Gold Coast first:** the user lives on the Gold Coast — at least half of
+  your queries should target Gold Coast suburbs, venues, and ticket pages;
+  treat Brisbane as secondary.
+
+curator_date_suffix: |
+  **Gold Coast balance:** include plenty of Gold Coast gigs, not only Brisbane —
+  when in doubt, prefer listings whose venue or address is on the Gold Coast.

@@ -99,7 +99,7 @@ def node_plan(state: AgentState) -> AgentState:
     msg = HumanMessage(
         content=(
             config.SUBJECT.planner_user_message
-            + planner_date_instruction()
+            + planner_date_instruction(config.PROMPT_GUIDES)
             + f"\n\nProduce up to {config.MAX_SEARCH_QUERIES} distinct search queries."
         )
     )
@@ -191,7 +191,7 @@ def node_normalize(state: AgentState) -> AgentState:
     llm = _llm()
     msg = HumanMessage(
         content=(
-            f"{curator_date_instruction()}\n\n"
+            f"{curator_date_instruction(config.PROMPT_GUIDES)}\n\n"
             "Here are web search results plus any same-site crawl excerpts below. "
             "Extract the curated resource list.\n\n"
             f"{_truncate_preserving_same_site_crawl(raw, config.CURATOR_INPUT_MAX_CHARS)}"

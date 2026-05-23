@@ -62,7 +62,7 @@ def load_subject_config(path: Path) -> SubjectConfig:
         raise FileNotFoundError(
             f"Subject-matter config not found: {path}\n"
             "Set SUBJECT_MATTER_CONFIG in .env to the correct path, "
-            "or copy config/subject_matter.yaml as a starting point."
+            "or add a topic under topics/ and set active in topics/topics.json."
         )
 
     raw = path.read_text(encoding="utf-8")

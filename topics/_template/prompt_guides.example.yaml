@@ -1,0 +1,13 @@
+# Copy to topics/<your-topic-id>/prompt_guides.yaml
+#
+# The engine appends planner_date_suffix / curator_date_suffix after generic
+# date-window text (today + next N days). Adjust labels for your domain.
+
+resource_label_plural: "events"
+curator_resource_label_plural: "events"
+
+planner_date_suffix: |
+  Optional extra planner hints (geography, priority venues, etc.).
+
+curator_date_suffix: |
+  Optional extra curator hints when normalising search results.

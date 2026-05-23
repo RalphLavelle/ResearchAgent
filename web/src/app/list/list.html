@@ -56,15 +56,17 @@
               @let showDate = i === 0 || data.events[i - 1].date !== ev.date;
               <tr>
                 <td class="poster-cell">
-                  @if (ev.thumbnailUrl && !posterErrors().has(ev.id)) {
+                  @if (posterSrc(ev.thumbnailUrl); as src) {
+                    @if (!posterErrors().has(ev.id)) {
                     <img
                       class="poster"
-                      [ngSrc]="ev.thumbnailUrl"
+                      [ngSrc]="src"
                       alt=""
                       width="56"
                       height="56"
                       (error)="onPosterError(ev.id)"
                     />
+                    }
                   } @else {
                     <span class="poster-placeholder" aria-hidden="true">🎸</span>
                     <span class="sr-only">No poster image for {{ ev.eventName }}</span>

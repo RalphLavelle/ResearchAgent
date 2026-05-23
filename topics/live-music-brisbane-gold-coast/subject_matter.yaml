@@ -1,13 +1,7 @@
 # Subject-matter configuration for the research pipeline.
 #
-# This file tells the agent WHAT to research and HOW to describe it.
-# The Python code (the "engine") reads this file at startup and stays
-# completely ignorant of the topic — swap this file (or point
-# SUBJECT_MATTER_CONFIG in your .env to a different YAML) to change
-# the entire research focus without touching any Python.
-#
-# All multi-line text uses the YAML literal-block style (lines starting
-# with |) so that line breaks are preserved exactly as written.
+# This file lives under topics/<topic-id>/ and tells the agent WHAT to research.
+# Switch topics by editing topics/topics.json (``active`` id) or ACTIVE_TOPIC in .env.
 
 # Short human-readable label used in log messages.
 topic: "Live Music Events - Gold Coast & Brisbane"

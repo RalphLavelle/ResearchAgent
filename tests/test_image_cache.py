@@ -1,9 +1,4 @@
-"""Tests for the local poster cache (Task 14).
-
-We never hit the real network here — the single ``_download`` helper is
-monkeypatched to return controlled ``(bytes, ext)`` tuples (or ``None`` for
-failure cases).  This mirrors the pattern in ``tests/test_enrich.py``.
-"""
+"""Tests for the local poster cache (Task 14) and URL deduplication (Task 2)."""
 
 from __future__ import annotations
 
@@ -17,16 +12,14 @@ from agent.image_cache import (
     INDEX_FILENAME,
     IMAGES_SUBDIR,
     cache_thumbnails,
+    dedupe_existing_images,
+    file_name_for_source,
     garbage_collect,
 )
 from agent.models import Resource
 
 
-# ── Fixtures / helpers ────────────────────────────────────────────────────────
-
-
 def _resource(eid: str, thumb: str | None) -> Resource:
-    """Build a Resource with just the fields cache_thumbnails reads."""
     return Resource(
         id=eid,
         title=f"Act {eid} @ Venue, City",
@@ -37,42 +30,62 @@ def _resource(eid: str, thumb: str | None) -> Resource:
 
 
 def _index(images_dir: Path) -> dict:
-    """Read the sidecar index from disk; empty dict if not yet written."""
     p = images_dir / INDEX_FILENAME
     if not p.exists():
         return {}
     return json.loads(p.read_text(encoding="utf-8"))
 
 
-# ── Successful download path ──────────────────────────────────────────────────
+def _local_url(tmp_path: Path, filename: str) -> str:
+    return f"/data/images/{filename}"
 
 
-def test_cache_thumbnails_writes_local_file_and_rewrites_url(
+def test_cache_thumbnails_writes_hash_named_file(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Successful 200 + image/jpeg → file on disk, JSON URL = data/images/<id>.jpg."""
+    url = "https://upstream.example/poster.jpg"
     fake_bytes = b"\xff\xd8\xff\xe0fakejpeg"
-    monkeypatch.setattr(image_cache, "_download", lambda url: (fake_bytes, ".jpg"))
+    monkeypatch.setattr(image_cache, "_download", lambda u: (fake_bytes, ".jpg"))
 
-    r = _resource("evt-1", "https://upstream.example/poster.jpg")
-    out = cache_thumbnails([r], output_dir=tmp_path)
+    out = cache_thumbnails([_resource("evt-1", url)], output_dir=tmp_path)
 
-    assert len(out) == 1
-    assert out[0].thumbnail_url == "data/images/evt-1.jpg"
-    written = tmp_path / IMAGES_SUBDIR / "evt-1.jpg"
+    fname = file_name_for_source(url, ".jpg")
+    assert out[0].thumbnail_url == _local_url(tmp_path, fname)
+    written = tmp_path / IMAGES_SUBDIR / fname
     assert written.exists()
     assert written.read_bytes() == fake_bytes
 
-    # Sidecar index records the source URL so re-runs can detect changes.
-    assert _index(tmp_path / IMAGES_SUBDIR) == {
-        "evt-1": "https://upstream.example/poster.jpg"
-    }
+    idx = _index(tmp_path / IMAGES_SUBDIR)
+    assert idx["version"] == 2
+    assert idx["events"]["evt-1"]["source"] == url
+    assert idx["events"]["evt-1"]["file"] == fname
+
+
+def test_cache_thumbnails_reuses_file_for_same_source_url(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    url = "https://upstream.example/shared.webp"
+    calls: list[str] = []
+    monkeypatch.setattr(
+        image_cache,
+        "_download",
+        lambda u: calls.append(u) or (b"webp-bytes", ".webp"),
+    )
+
+    r1 = _resource("evt-a", url)
+    r2 = _resource("evt-b", url)
+    out = cache_thumbnails([r1, r2], output_dir=tmp_path)
+
+    assert len(calls) == 1
+    fname = file_name_for_source(url, ".webp")
+    assert out[0].thumbnail_url == _local_url(tmp_path, fname)
+    assert out[1].thumbnail_url == out[0].thumbnail_url
+    assert len(list((tmp_path / IMAGES_SUBDIR).glob("*.webp"))) == 1
 
 
 def test_cache_thumbnails_supports_multiple_image_formats(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Each Content-Type maps to the right extension on disk."""
     formats = {
         "evt-jpg": ".jpg",
         "evt-png": ".png",
@@ -82,7 +95,7 @@ def test_cache_thumbnails_supports_multiple_image_formats(
     monkeypatch.setattr(
         image_cache,
         "_download",
-        lambda url: (b"bytes-for-" + url.encode(), formats[url.split("/")[-1]]),
+        lambda url: (b"bytes", formats[url.split("/")[-1]]),
     )
 
     resources = [
@@ -91,63 +104,59 @@ def test_cache_thumbnails_supports_multiple_image_formats(
     out = cache_thumbnails(resources, output_dir=tmp_path)
 
     for r, ext in zip(out, formats.values()):
-        assert r.thumbnail_url == f"data/images/{r.id}{ext}"
-        assert (tmp_path / IMAGES_SUBDIR / f"{r.id}{ext}").exists()
-
-
-# ── Failure paths ─────────────────────────────────────────────────────────────
+        url = f"https://upstream.example/{r.id}"
+        fname = file_name_for_source(url, ext)
+        assert r.thumbnail_url == _local_url(tmp_path, fname)
+        assert (tmp_path / IMAGES_SUBDIR / fname).exists()
 
 
 def test_cache_thumbnails_sets_none_on_download_failure(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Failed download → thumbnail_url is None, no file written, no index entry."""
     monkeypatch.setattr(image_cache, "_download", lambda url: None)
 
-    r = _resource("evt-fail", "https://upstream.example/missing.jpg")
-    out = cache_thumbnails([r], output_dir=tmp_path)
-
-    assert out[0].thumbnail_url is None
-    images_dir = tmp_path / IMAGES_SUBDIR
-    assert not list(p for p in images_dir.iterdir() if p.name != INDEX_FILENAME) \
-        or images_dir.exists() and not (images_dir / "evt-fail.jpg").exists()
-    assert _index(images_dir) == {}
-
-
-def test_cache_thumbnails_clears_stale_file_on_failure(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """A previously-cached file gets deleted when the URL changes and re-fetch fails.
-
-    This is the safety net for the failure-policy decision (option 2 in the
-    task answer): we never serve stale-and-possibly-wrong bytes.
-    """
-    images_dir = tmp_path / IMAGES_SUBDIR
-    images_dir.mkdir(parents=True)
-    stale = images_dir / "evt-x.jpg"
-    stale.write_bytes(b"old bytes")
-    (images_dir / INDEX_FILENAME).write_text(
-        json.dumps({"evt-x": "https://upstream.example/old.jpg"}),
-        encoding="utf-8",
+    out = cache_thumbnails(
+        [_resource("evt-fail", "https://upstream.example/missing.jpg")],
+        output_dir=tmp_path,
     )
 
-    monkeypatch.setattr(image_cache, "_download", lambda url: None)
-
-    r = _resource("evt-x", "https://upstream.example/new-and-broken.jpg")
-    out = cache_thumbnails([r], output_dir=tmp_path)
-
     assert out[0].thumbnail_url is None
-    assert not stale.exists()
-    assert _index(images_dir) == {}
+    idx = _index(tmp_path / IMAGES_SUBDIR)
+    assert idx.get("events") == {}
 
 
-# ── Pass-through cases ────────────────────────────────────────────────────────
+def test_cache_thumbnails_keeps_shared_file_when_one_event_fails(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    good_url = "https://upstream.example/good.jpg"
+    images_dir = tmp_path / IMAGES_SUBDIR
+    images_dir.mkdir(parents=True)
+    fname = file_name_for_source(good_url, ".jpg")
+    (images_dir / fname).write_bytes(b"shared")
+
+    def fake_download(url: str) -> tuple[bytes, str] | None:
+        if url == good_url:
+            return (b"shared", ".jpg")
+        return None
+
+    monkeypatch.setattr(image_cache, "_download", fake_download)
+
+    out = cache_thumbnails(
+        [
+            _resource("evt-ok", good_url),
+            _resource("evt-bad", "https://upstream.example/broken.jpg"),
+        ],
+        output_dir=tmp_path,
+    )
+
+    assert out[0].thumbnail_url == _local_url(tmp_path, fname)
+    assert out[1].thumbnail_url is None
+    assert (images_dir / fname).exists()
 
 
 def test_cache_thumbnails_skips_resources_without_thumbnail(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``thumbnail_url=None`` and empty strings are left untouched, no HTTP call."""
     calls: list[str] = []
     monkeypatch.setattr(
         image_cache,
@@ -155,21 +164,28 @@ def test_cache_thumbnails_skips_resources_without_thumbnail(
         lambda url: calls.append(url) or (b"x", ".jpg"),
     )
 
-    r1 = _resource("evt-none", None)
-    r2 = Resource(
-        id="evt-empty", title="A @ V", url="https://x", date="", thumbnail_url=""
+    out = cache_thumbnails(
+        [
+            _resource("evt-none", None),
+            Resource(
+                id="evt-empty",
+                title="A @ V",
+                url="https://x",
+                date="",
+                thumbnail_url="",
+            ),
+        ],
+        output_dir=tmp_path,
     )
-    out = cache_thumbnails([r1, r2], output_dir=tmp_path)
 
     assert out[0].thumbnail_url is None
-    assert out[1].thumbnail_url == ""  # Resource preserves the empty string
-    assert calls == []  # download never called for blank thumbnails
+    assert out[1].thumbnail_url == ""
+    assert calls == []
 
 
 def test_cache_thumbnails_passes_through_local_paths(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Already-local paths (e.g. from a previous run) survive a second pass."""
     calls: list[str] = []
     monkeypatch.setattr(
         image_cache,
@@ -177,103 +193,129 @@ def test_cache_thumbnails_passes_through_local_paths(
         lambda url: calls.append(url) or (b"x", ".jpg"),
     )
 
-    r = _resource("evt-local", "data/images/evt-local.jpg")
-    out = cache_thumbnails([r], output_dir=tmp_path)
+    images_dir = tmp_path / IMAGES_SUBDIR
+    images_dir.mkdir(parents=True)
+    fname = "abc123.jpg"
+    (images_dir / fname).write_bytes(b"x")
+    (images_dir / INDEX_FILENAME).write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "events": {
+                    "evt-local": {
+                        "source": "https://upstream.example/p.jpg",
+                        "file": fname,
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
 
-    assert out[0].thumbnail_url == "data/images/evt-local.jpg"
-    assert calls == []  # local paths never trigger a download
+    out = cache_thumbnails(
+        [_resource("evt-local", "data/images/evt-local.jpg")],
+        output_dir=tmp_path,
+    )
 
-
-# ── Idempotency / cache hits ──────────────────────────────────────────────────
+    assert out[0].thumbnail_url == _local_url(tmp_path, fname)
+    assert calls == []
 
 
 def test_cache_thumbnails_is_idempotent_when_url_unchanged(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Second call with the same URL must NOT re-download — cache hit."""
     calls: list[str] = []
+    url = "https://upstream.example/poster.jpg"
 
-    def fake_download(url: str) -> tuple[bytes, str]:
-        calls.append(url)
+    def fake_download(u: str) -> tuple[bytes, str]:
+        calls.append(u)
         return (b"jpeg", ".jpg")
 
     monkeypatch.setattr(image_cache, "_download", fake_download)
 
-    r = _resource("evt-cache", "https://upstream.example/poster.jpg")
+    r = _resource("evt-cache", url)
     cache_thumbnails([r], output_dir=tmp_path)
     cache_thumbnails([r], output_dir=tmp_path)
 
-    assert len(calls) == 1  # second call hit the cache
+    assert len(calls) == 1
 
 
 def test_cache_thumbnails_refetches_when_source_url_changes(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """When ``_maybe_upgrade_poster`` swaps in a fresher URL, we redownload."""
     calls: list[str] = []
 
     def fake_download(url: str) -> tuple[bytes, str]:
         calls.append(url)
-        # Different bytes per URL so we can verify the file actually got rewritten.
         return (url.encode(), ".jpg")
 
     monkeypatch.setattr(image_cache, "_download", fake_download)
 
-    r1 = _resource("evt-upgrade", "https://upstream.example/old.jpg")
-    cache_thumbnails([r1], output_dir=tmp_path)
+    old = "https://upstream.example/old.jpg"
+    new = "https://upstream.example/new-better.jpg"
+    cache_thumbnails([_resource("evt-upgrade", old)], output_dir=tmp_path)
+    out = cache_thumbnails([_resource("evt-upgrade", new)], output_dir=tmp_path)
 
-    r2 = _resource("evt-upgrade", "https://upstream.example/new-better.jpg")
-    out = cache_thumbnails([r2], output_dir=tmp_path)
-
-    assert calls == [
-        "https://upstream.example/old.jpg",
-        "https://upstream.example/new-better.jpg",
-    ]
-    written = tmp_path / IMAGES_SUBDIR / "evt-upgrade.jpg"
-    assert written.read_bytes() == b"https://upstream.example/new-better.jpg"
-    assert out[0].thumbnail_url == "data/images/evt-upgrade.jpg"
+    assert calls == [old, new]
+    fname = file_name_for_source(new, ".jpg")
+    assert (tmp_path / IMAGES_SUBDIR / fname).read_bytes() == new.encode()
+    assert out[0].thumbnail_url == _local_url(tmp_path, fname)
 
 
-def test_cache_thumbnails_replaces_extension_on_format_change(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+def test_dedupe_existing_images_merges_identical_bytes(
+    tmp_path: Path,
 ) -> None:
-    """If the format changes (jpg → webp), the old file is removed."""
-    calls: list[str] = []
-
-    def fake_download(url: str) -> tuple[bytes, str]:
-        calls.append(url)
-        ext = ".webp" if "v2" in url else ".jpg"
-        return (b"bytes-" + ext.encode(), ext)
-
-    monkeypatch.setattr(image_cache, "_download", fake_download)
-
-    r = _resource("evt-fmt", "https://upstream.example/v1.jpg")
-    cache_thumbnails([r], output_dir=tmp_path)
-
-    r2 = _resource("evt-fmt", "https://upstream.example/v2.webp")
-    cache_thumbnails([r2], output_dir=tmp_path)
-
-    images_dir = tmp_path / IMAGES_SUBDIR
-    assert not (images_dir / "evt-fmt.jpg").exists()
-    assert (images_dir / "evt-fmt.webp").exists()
-
-
-# ── Garbage collection ────────────────────────────────────────────────────────
-
-
-def test_garbage_collect_deletes_stale_files(tmp_path: Path) -> None:
-    """Files whose Event ID isn't active any more are removed; active ones stay."""
     images_dir = tmp_path / IMAGES_SUBDIR
     images_dir.mkdir(parents=True)
-    (images_dir / "evt-active.jpg").write_bytes(b"keep")
-    (images_dir / "evt-stale.png").write_bytes(b"drop")
-    (images_dir / "evt-other.webp").write_bytes(b"drop")
+    shared = b"same-image-bytes"
+    (images_dir / "alan-stivell-2026-05-26.webp").write_bytes(shared)
+    (images_dir / "daft-punk-experience-2026-05-31.webp").write_bytes(shared)
+    (images_dir / "unique-event.jpg").write_bytes(b"other")
+
+    url = "https://cdn.example/category_banner.webp"
     (images_dir / INDEX_FILENAME).write_text(
         json.dumps(
             {
-                "evt-active": "https://x/a",
-                "evt-stale": "https://x/s",
-                "evt-other": "https://x/o",
+                "alan-stivell-2026-05-26": url,
+                "daft-punk-experience-2026-05-31": url,
+                "unique-event": "https://cdn.example/unique.jpg",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    stats = dedupe_existing_images(output_dir=tmp_path)
+
+    assert stats.files_removed >= 1
+    remaining = [p.name for p in images_dir.iterdir() if p.suffix == ".webp"]
+    assert len(remaining) == 1
+    target = file_name_for_source(url, ".webp")
+    assert remaining[0] == target
+
+    idx = _index(images_dir)
+    assert idx["events"]["alan-stivell-2026-05-26"]["file"] == target
+    assert idx["events"]["daft-punk-experience-2026-05-31"]["file"] == target
+
+
+def test_garbage_collect_deletes_unreferenced_files(tmp_path: Path) -> None:
+    images_dir = tmp_path / IMAGES_SUBDIR
+    images_dir.mkdir(parents=True)
+    (images_dir / "keep.webp").write_bytes(b"keep")
+    (images_dir / "drop.webp").write_bytes(b"drop")
+    (images_dir / INDEX_FILENAME).write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "events": {
+                    "evt-active": {
+                        "source": "https://x/a",
+                        "file": "keep.webp",
+                    },
+                    "evt-stale": {
+                        "source": "https://x/s",
+                        "file": "drop.webp",
+                    },
+                },
             }
         ),
         encoding="utf-8",
@@ -281,29 +323,39 @@ def test_garbage_collect_deletes_stale_files(tmp_path: Path) -> None:
 
     removed = garbage_collect({"evt-active"}, output_dir=tmp_path)
 
-    assert removed == 2
-    assert (images_dir / "evt-active.jpg").exists()
-    assert not (images_dir / "evt-stale.png").exists()
-    assert not (images_dir / "evt-other.webp").exists()
-    # Index pruned in lock-step.
-    assert _index(images_dir) == {"evt-active": "https://x/a"}
+    assert removed == 1
+    assert (images_dir / "keep.webp").exists()
+    assert not (images_dir / "drop.webp").exists()
+    assert _index(images_dir)["events"] == {
+        "evt-active": {"source": "https://x/a", "file": "keep.webp"}
+    }
+
+
+def test_garbage_collect_keeps_shared_file_while_other_events_expire(
+    tmp_path: Path,
+) -> None:
+    images_dir = tmp_path / IMAGES_SUBDIR
+    images_dir.mkdir(parents=True)
+    (images_dir / "shared.webp").write_bytes(b"shared")
+    url = "https://x/shared.webp"
+    (images_dir / INDEX_FILENAME).write_text(
+        json.dumps(
+            {
+                "version": 2,
+                "events": {
+                    "evt-a": {"source": url, "file": "shared.webp"},
+                    "evt-b": {"source": url, "file": "shared.webp"},
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    removed = garbage_collect({"evt-a"}, output_dir=tmp_path)
+
+    assert removed == 0
+    assert (images_dir / "shared.webp").exists()
 
 
 def test_garbage_collect_no_op_when_cache_dir_missing(tmp_path: Path) -> None:
-    """First run: nothing exists yet — GC must be a safe no-op."""
     assert garbage_collect({"evt-1"}, output_dir=tmp_path) == 0
-
-
-def test_garbage_collect_preserves_index_file(tmp_path: Path) -> None:
-    """``_index.json`` itself must not be deleted by the GC sweep."""
-    images_dir = tmp_path / IMAGES_SUBDIR
-    images_dir.mkdir(parents=True)
-    (images_dir / INDEX_FILENAME).write_text(
-        json.dumps({"evt-1": "https://x/a"}), encoding="utf-8"
-    )
-    (images_dir / "evt-1.jpg").write_bytes(b"keep")
-
-    garbage_collect({"evt-1"}, output_dir=tmp_path)
-
-    assert (images_dir / INDEX_FILENAME).exists()
-    assert (images_dir / "evt-1.jpg").exists()

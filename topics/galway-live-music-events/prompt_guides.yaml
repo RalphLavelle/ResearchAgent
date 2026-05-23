@@ -1,0 +1,16 @@
+# Topic-specific prompt fragments injected by the Python engine (date window, etc.).
+# Generic ISO date / window logic stays in src/agent/event_window.py.
+
+resource_label_plural: "gigs and concerts"
+curator_resource_label_plural: "gigs or concerts"
+
+planner_date_suffix: |
+  **Galway City focus:** the user is based in Galway — at least three quarters of
+  your queries should target Galway City venues, pubs, and ticket pages. Include
+  Salthill and city-centre listings; treat Dublin or other counties as out of scope
+  unless the excerpt clearly names a Galway City venue.
+
+curator_date_suffix: |
+  **Galway City balance:** include gigs whose venue or address is in Galway City
+  (city centre, Salthill, Newcastle, Terryland, etc.). Omit events clearly outside
+  Galway City unless the listing explicitly places the show at a Galway venue.

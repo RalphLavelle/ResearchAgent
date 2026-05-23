@@ -1,10 +1,12 @@
 # Research Agent
 
-Python app using **LangGraph** that researches configurable topics, curates structured rows, and saves results to a **spreadsheet** plus **`events.json`** under **`data/`** (override with `.env`).
+Python app using **LangGraph** that researches **configurable topics**, curates structured rows, and saves results to a **spreadsheet** plus **`events.json`** under **`data/<topic>/`**.
 
-**Default output folder:** `data/` at the repo root (spreadsheet + logs + JSON + per-run reports). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
+**Topics registry:** `topics/topics.json` — the `active` id selects prompts, exclusions, schedule, UI chrome, and the data subfolder name.
 
-Files written:
+**Default output folder:** `data/<data_dir>/` for the active topic (e.g. `data/live-music-brisbane-gold-coast/`). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
+
+Files written (per active topic):
 
 | File | Purpose |
 |------|--------|
@@ -70,21 +72,29 @@ Cloud is auto-detected by the `:cloud` model-name suffix or a non-localhost base
 
 **Startup check:** the agent probes the configured backend once at CLI startup (`run-once`, `serve`). If neither backend is enabled, or the enabled backend is misconfigured, you'll see an **`ERROR`** in the logs and exit code **`3`**.
 
-### 3. Output folder (optional)
+### 3. Topics (optional)
+
+The bundled topic **Live music in Brisbane and the Gold Coast** lives under `topics/live-music-brisbane-gold-coast/` (`subject_matter.yaml`, `prompt_guides.yaml`, `exclusions.yaml`, `schedule.yaml`, `assets/`).
+
+To add a topic, use the **topic-creator** skill (`.cursor/skills/topic-creator/SKILL.md`) or copy the live-music folder and register a new entry in `topics.json`.
+
+If you previously wrote to a flat `data/` folder, the agent **auto-migrates** those files into `data/<data_dir>/` on startup (when the topic subfolder has no `events.json` yet). You can keep `OUTPUT_DIR=data` in `.env` — it now resolves to the active topic subfolder.
+
+### 4. Output folder (optional)
 
 By default the app writes under:
 
-`.\data\`
+`.\data\<active-topic-data_dir>\`
 
-To use a different folder, set in `.env`:
+To pin a custom folder, set in `.env`:
 
 ```env
 OUTPUT_DIR=D:\MyData\AgentAI
 ```
 
-### 4. Schedule file (optional)
+### 5. Schedule file (optional)
 
-Copy `config/schedule.example.yaml` to `config/schedule.yaml` and set `interval_hours`. Edit while `serve` runs to change cadence without restarting.
+Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` command reloads it without restarting.
 
 ## Commands
 
@@ -116,7 +126,7 @@ Or use `scripts\start_serve.ps1` after adjusting paths.
 
 ### Web UI (Angular)
 
-The UI under **`web/`** loads `data/events.json` (copied alongside static assets when you build or serve the app) so you can browse the spreadsheet-backed lineup in the browser.
+The UI under **`web/`** reads `topics/topics.json` for the active topic (title, background, data path) and loads `data/<topic>/events.json`.
 
 ```powershell
 cd web
@@ -124,14 +134,14 @@ npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). Run the Python agent at least once so `data/events.json` exists (Angular fetches `/data/events.json`).
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). Run the Python agent at least once so `data/<topic>/events.json` exists.
 
 ## Behavior
 
 - Each successful run produces a fresh **`Run_<AEST timestamp>.md`** report under the output folder. The report has three sections — *Searches* (planner queries), *Search and crawl* (URLs grouped by host), *Normalize* (curated `Resource` JSON with source URLs) — so you can audit exactly what each LLM-driven step did.
 - If curated content **changed** since last run, the spreadsheet, `events.json`, and (when configured) Notion are also refreshed.
 - If nothing **meaningfully** changed, the spreadsheet and `events.json` are still rewritten so they always reflect the latest source-of-truth, but downstream Notion sync is skipped.
-- `data/snapshot.json` stores a fingerprint (gitignored).
+- `data/<topic>/snapshot.json` stores a fingerprint (gitignored).
 
 ## Tests
 
@@ -141,5 +151,6 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 
 ## Layout
 
+- `topics/` — registry (`topics.json`) plus per-topic YAML, schedule, and UI assets.
 - `src/agent/` — LangGraph workflow, DuckDuckGo search, spreadsheet + JSON outputs, scheduler.
-- `web/` — Angular shell that reads the generated `events.json` from `data/`.
+- `web/` — Angular shell driven by `topics.json` and `data/<topic>/events.json`.

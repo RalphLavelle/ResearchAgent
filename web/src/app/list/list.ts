@@ -4,12 +4,15 @@ import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  effect,
   inject,
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
-/** One row from `data/events.json` produced by the Python pipeline. */
+import { TopicService } from '../topic/topic.service';
+
+/** One row from the topic's ``data/<topic>/events.json`` file. */
 export interface ResearchEvent {
   /** Stable spreadsheet id — not displayed; use for `track` / future features. */
   id: string;
@@ -49,15 +52,41 @@ export class ListComponent {
 
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
+  readonly #topic = inject(TopicService);
 
   constructor() {
-    this.#loadEvents();
+    // Reload when topics.json finishes and the active data_dir is known.
+    effect(() => {
+      const dataDir = this.#topic.active().data_dir;
+      if (!this.#topic.loading()) {
+        this.#loadEvents(dataDir);
+      }
+    });
   }
 
   /** User-triggered reload — uses cache-busting query param so the browser does not serve a stale asset. */
   protected refreshList(): void {
     this.posterErrors.set(new Set());
-    this.#loadEvents();
+    this.#loadEvents(this.#topic.active().data_dir);
+  }
+
+  /**
+   * Root-absolute poster URL for ``ngSrc`` (fixes legacy ``data/images/`` paths
+   * and route-relative resolution on nested pages like ``/about``).
+   */
+  protected posterSrc(url: string | null): string | null {
+    if (!url) {
+      return null;
+    }
+    if (url.startsWith('http://') || url.startsWith('https://')) {
+      return url;
+    }
+    let path = url.startsWith('/') ? url.slice(1) : url;
+    const topic = this.#topic.active().data_dir;
+    if (path.startsWith('data/images/')) {
+      path = `data/${topic}/images/${path.slice('data/images/'.length)}`;
+    }
+    return `/${path}`;
   }
 
   /**
@@ -76,13 +105,15 @@ export class ListComponent {
     });
   }
 
-  /** GET `/data/events.json` (copied from repo `data/` at build time). */
-  #loadEvents(): void {
+  /** GET ``data/<topic>/events.json``; falls back to legacy flat ``data/events.json``. */
+  #loadEvents(dataDir: string): void {
     this.loading.set(true);
     this.error.set(null);
-    const url = `data/events.json?t=${Date.now()}`;
+    const primary = `data/${dataDir}/events.json?t=${Date.now()}`;
+    const legacy = `data/events.json?t=${Date.now()}`;
+
     this.#http
-      .get<EventsPayload>(url)
+      .get<EventsPayload>(primary)
       .pipe(takeUntilDestroyed(this.#destroyRef))
       .subscribe({
         next: (data) => {
@@ -90,10 +121,21 @@ export class ListComponent {
           this.loading.set(false);
         },
         error: () => {
-          this.error.set(
-            'Could not load events.json. Run the research pipeline once so data/events.json exists.'
-          );
-          this.loading.set(false);
+          this.#http
+            .get<EventsPayload>(legacy)
+            .pipe(takeUntilDestroyed(this.#destroyRef))
+            .subscribe({
+              next: (data) => {
+                this.payload.set(data);
+                this.loading.set(false);
+              },
+              error: () => {
+                this.error.set(
+                  `Could not load events.json for topic "${dataDir}". Run the research pipeline once so data/${dataDir}/events.json exists.`
+                );
+                this.loading.set(false);
+              },
+            });
         },
       });
   }

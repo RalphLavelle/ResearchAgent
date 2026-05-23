@@ -103,7 +103,7 @@ _COL_WIDTHS = [30, 22, 16, 18, 55, 45, 0, 40, 20, 0]
 
 
 def output_directory() -> Path:
-    """Repo ``data/`` by default; override with OUTPUT_DIR or AGENT_AI_DIR in ``.env``."""
+    """Active topic folder under ``data/<data_dir>/`` (see ``config.OUTPUT_DIR``)."""
     return config.OUTPUT_DIR
 
 

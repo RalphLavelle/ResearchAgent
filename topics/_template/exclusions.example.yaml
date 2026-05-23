@@ -1,0 +1,5 @@
+# Copy into topics/<your-topic-id>/exclusions.yaml
+
+drop_terms: []
+
+exclusions: []

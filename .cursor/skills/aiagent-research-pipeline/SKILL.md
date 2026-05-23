@@ -11,13 +11,17 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 
 ## Source of truth
 
-- **`agent_research.xlsx`** (under `OUTPUT_DIR`, default repo `data/`) is the database. `events.json` and Notion are generated from **`load_spreadsheet_resources()`** after each merge, not from the current run's `resources` alone.
+- **`agent_research.xlsx`** (under `OUTPUT_DIR`, default `data/<topic>/`) is the database. `events.json` and Notion are generated from **`load_spreadsheet_resources()`** after each merge, not from the current run's `resources` alone.
 - **`Run_<AEST>.md`** (Task 11) is written once per real run by `run_report.write_run_report` from `node_local_output`. Three sections: *Searches* (planner queries), *Search and crawl* (`crawled_urls` from `node_crawl`, grouped by host), *Normalize* (curated `Resource` Pydantic models serialised as JSON, each with its source URL). The single append-only `run_log.md` is removed.
 - **`data/snapshot.json`** fingerprints the **current run’s** resources for log messaging; Notion sync uses a fingerprint of the **full spreadsheet** (`canonical_fingerprint(all_resources)`).
 
 ## Topic vs engine
 
-- **Topic-specific text** lives in `config/subject_matter.yaml` (planner/curator prompts, labels). Loaded as `config.SUBJECT`. Change YAML or `SUBJECT_MATTER_CONFIG` in `.env` to switch topics without editing Python.
+- **Topic-specific text** lives in `topics/<id>/`:
+  - `subject_matter.yaml` — planner/curator system prompts and labels (`config.SUBJECT`)
+  - `prompt_guides.yaml` — date-window suffixes and resource labels injected by `event_window.py` (`config.PROMPT_GUIDES`)
+  - `exclusions.yaml`, `schedule.yaml`, `assets/`
+- Use the **topic-creator** skill to scaffold new topics.
 - **Engine code** in `src/agent/` must stay topic-agnostic (no hard-coded “Gold Coast” etc. in logic—only in YAML).
 
 ## Deduplication (`local_output.merge_and_write`)
@@ -39,7 +43,7 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 - **Planner**: `node_plan` → structured `PlanQueries`. No default queries if key missing; errors logged.
 - **Normalize**: `node_normalize` → structured `ResourceListPayload`; input capped (env `CURATOR_INPUT_MAX_CHARS`); crawler tail preserved when clipping; curator dedupe is per `(url, date, title)` so many gigs may share one listing URL; then date window filter, sort soonest-first.
 - **Per-event images (Tasks 12, 13)**: `site_crawl._html_to_text` keeps `[IMG alt="…" src=…]` markers inline (decorations like logos/ads/banners filtered, mid-name tokens too) so the curator prompt can pick a distinct image per event. After the LLM, `enrich.enrich_thumbnails` runs Pass 1 — for groups of resources sharing a URL it **preserves any LLM-chosen thumbnail that is unique within the group** and only re-assigns blank or duplicate slots, scoring candidates against both `alt` text **and** the image filename's keywords (`_best_img_for_title` returns `None` when no candidate has any title-word overlap, so the slot falls through to og:image rather than the first-non-excluded poster). Pass 2 then fills any remaining nulls with the page's og:image (cached per-URL).
-- **Local poster cache (Task 14)**: `image_cache.cache_thumbnails` runs inside `local_output.write_output`, between `load_spreadsheet_resources()` and `write_events_json()`. For every spreadsheet row with an `http(s)` poster URL, it downloads the bytes once into `data/images/<event-id>.<ext>` and rewrites `events.json`'s `thumbnailUrl` to the relative path `data/images/<id>.<ext>` so the Angular app loads same-origin (no more hotlink-protected broken icons). Failed downloads degrade to `thumbnail_url = None` so the 🎸 placeholder renders. A sidecar `data/images/_index.json` (event_id → source_url) makes re-runs zero-cost; only an URL change triggers a re-fetch. `image_cache.garbage_collect` is called right after to delete files for Event IDs no longer in the spreadsheet (kept lock-step with `merge_and_write`'s past-event pruning). The spreadsheet's **Poster URL** column always stores the **upstream** URL — only the JSON gets the local path.
+- **Local poster cache (Task 14)**: `image_cache.cache_thumbnails` runs inside `local_output.write_output`, between `load_spreadsheet_resources()` and `write_events_json()`. Posters are stored **once per upstream URL** under `data/<topic>/images/<sha16>.<ext>` (Task 2) — many events can share one file; dedupe runs at CLI startup via `dedupe_images_for_all_topics`. For every spreadsheet row with an `http(s)` poster URL, it downloads only when that URL is not already cached, then rewrites `events.json`'s `thumbnailUrl` to `/data/<topic>/images/<hash>.<ext>`. Failed downloads degrade to `thumbnail_url = None`. Sidecar `data/<topic>/images/_index.json` (v2: event id → `{source, file}`) tracks mappings. `image_cache.garbage_collect` deletes files no longer referenced by any active event id. Spreadsheet **Poster URL** keeps the upstream URL.
 
 ## Outputs
 
@@ -48,7 +52,7 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 
 ## Config/env (do not overwrite `.env` without asking)
 
-- Schedule: `config/schedule.yaml` — `interval_minutes` wins over `interval_hours` when non-zero.
+- Schedule: `topics/<active>/schedule.yaml` — `interval_minutes` wins over `interval_hours` when non-zero.
 - Crawl toggles: `CRAWL_ENABLED`, limits in `config.py` / `.env`.
 
 ## Tests
@@ -76,7 +80,9 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Per-event image enrichment | `src/agent/enrich.py` |
 | Local poster cache + GC | `src/agent/image_cache.py` |
 | Date/window/title split | `src/agent/event_window.py` |
+| Topics registry + paths | `src/agent/topics.py`, `topics/topics.json` |
 | Models + `resource_from_dict` | `src/agent/models.py` |
+| New topic scaffolding | `.cursor/skills/topic-creator/SKILL.md` |
 | Task specs | `docs/tasks/*.md` |
 
 ## `resource_from_dict`
