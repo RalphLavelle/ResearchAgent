@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "digitalocean-apps": {
+      "url": "https://apps.mcp.digitalocean.com/mcp",
+      "envFile": "${workspaceFolder}/.env",
+      "headers": {
+        "Authorization": "Bearer ${env:DIGITALOCEAN_API_TOKEN}"
+      }
+    },
+    "digitalocean-docs": {
+      "url": "https://docs.mcp.digitalocean.com/mcp"
+    }
+  }
+}

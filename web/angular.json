@@ -79,6 +79,32 @@
               ],
               "outputHashing": "all"
             },
+            "production-deploy": {
+              "budgets": [
+                {
+                  "type": "initial",
+                  "maximumWarning": "500kB",
+                  "maximumError": "1MB"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "4kB",
+                  "maximumError": "8kB"
+                }
+              ],
+              "outputHashing": "all",
+              "assets": [
+                {
+                  "glob": "**/*",
+                  "input": "public"
+                },
+                {
+                  "glob": "**/*",
+                  "input": "../topics",
+                  "output": "/topics"
+                }
+              ]
+            },
             "development": {
               "optimization": false,
               "extractLicenses": false,
