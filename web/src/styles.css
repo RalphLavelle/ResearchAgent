@@ -1,10 +1,20 @@
-/* You can add global styles to this file, and also import other style files */
+@import './styles/variables.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  overflow-x: clip;
+}
 
 body {
   margin: 0;
   padding: 0;
+  overflow-x: clip;
 }
-
 /* Set on <body> from App when the mobile nav overlay is open (scroll can’t escape under the sheet). */
 body.app-mobile-nav-open {
   overflow: hidden;

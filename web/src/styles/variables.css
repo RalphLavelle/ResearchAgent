@@ -1,0 +1,135 @@
+/**
+ * Design tokens — the only file that may contain raw pixel lengths.
+ * Other stylesheets must reference these custom properties (or rem derived from them).
+ */
+:root {
+  /* Root scale (1rem = 16px in the browser) */
+  --font-root-px: 16px;
+
+  /* Breakpoints (rem so media queries avoid repeating px outside this file) */
+  --bp-sm-max: 47.9375rem;
+  --bp-md-min: 48rem;
+  --bp-lg-min: 64rem;
+
+  /* Spacing */
+  --space-0: 0;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-7: 2rem;
+  --space-8: 2.25rem;
+  --space-9: 2.5rem;
+  --space-10: 5rem;
+
+  /* Layout */
+  --shell-max-width: 65rem;
+  --masthead-brand-min: 12.5rem;
+  --poster-size: 3.5rem;
+  --poster-size-sm: 3rem;
+  --poster-cell-padding-inline: var(--space-2);
+  --poster-col-width: calc(var(--poster-size) + (2 * var(--poster-cell-padding-inline)));
+  --poster-col-width-sm: calc(var(--poster-size-sm) + (2 * var(--poster-cell-padding-inline)));
+  --drawer-width: min(20rem, 88vw);
+  --skip-offscreen: -624.9375rem;
+
+  /* Radii */
+  --radius-xs: 0.25rem;
+  --radius-sm: 0.625rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 0.875rem;
+  --radius-xl: 1.25rem;
+  --radius-pill: 999rem;
+
+  /* Typography */
+  --font-display: "Outfit", system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-body: system-ui, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --text-xs: 0.8125rem;
+  --text-sm: 0.875rem;
+  --text-base: 0.9375rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.05rem;
+  --text-xl: 1.15rem;
+  --text-2xl: 1.25rem;
+  --text-3xl: 1.35rem;
+  --text-4xl: clamp(1.35rem, 2.5vw, 1.65rem);
+  --text-brand: clamp(1.55rem, 4.25vw, 2.35rem);
+  --text-panel-title: 1.35rem;
+  --text-about-title: 1.65rem;
+
+  /* Borders & outlines */
+  --border-thin: 1px;
+  --border-medium: 2px;
+  --border-thick: 3px;
+  --outline-offset-sm: 0.125rem;
+  --outline-offset-md: 0.1875rem;
+
+  /* Shadows (blur/spread only — no layout px elsewhere) */
+  --shadow-panel: 0 0.5rem 2rem rgba(217, 119, 87, 0.12), 0 0.125rem 0.5rem rgba(59, 130, 180, 0.08);
+  --shadow-btn: 0 0.125rem 0.75rem rgba(236, 72, 153, 0.35);
+  --shadow-btn-hover: 0 0.25rem 1rem rgba(236, 72, 153, 0.42);
+  --shadow-poster: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
+  --shadow-brand-active: 0 0.125rem 0.625rem rgba(30, 42, 58, 0.08);
+  --shadow-nav: 0 0.125rem 0.5rem rgba(30, 42, 58, 0.06);
+  --shadow-nav-hover: 0 0.25rem 0.875rem rgba(37, 99, 235, 0.15);
+  --shadow-menu: 0 0.125rem 0.625rem rgba(30, 42, 58, 0.12);
+  --shadow-menu-hover: 0 0.25rem 1rem rgba(37, 99, 235, 0.18);
+  --shadow-footer: 0 -0.5rem 1.75rem rgba(15, 23, 42, 0.18);
+  --shadow-drawer: -0.75rem 0 2.5rem rgba(30, 42, 58, 0.2);
+
+  /* Page background overlay (higher alpha = less transparent) */
+  --page-overlay-start: rgba(255, 245, 240, 0.9);
+  --page-overlay-mid: rgba(232, 244, 252, 0.88);
+  --page-overlay-end: rgba(253, 238, 248, 0.9);
+
+  /* Panel/table surfaces */
+  --panel-surface: rgba(255, 255, 255, 0.98);
+  --panel-border: rgba(249, 115, 22, 0.15);
+  --table-head-bg: rgba(255, 255, 255, 0.45);
+  --table-head-border: rgba(148, 163, 184, 0.55);
+  --table-row-border: #f3e8ff;
+  --table-row-hover-start: rgba(255, 237, 213, 0.35);
+  --table-row-hover-end: rgba(219, 234, 254, 0.35);
+
+  /* Colors */
+  --color-text: #1f2937;
+  --color-muted: #5b6477;
+  --color-summary: #4b4659;
+  --color-venue: #475569;
+  --color-date: #475569;
+  --color-table-head: #334155;
+  --color-link: #1d4ed8;
+  --color-link-hover: #1e40af;
+  --color-error-border: #fecaca;
+  --color-error-text: #991b1b;
+  --color-focus: #38bdf8;
+  --color-nav-accent: #2563eb;
+  --color-empty-title: #433f52;
+  --color-empty-hint: #6b6578;
+  --color-generated: #6b5563;
+  --color-footer-bg: #1e2a3a;
+  --color-footer-text: #f1f5f9;
+  --color-footer-muted: #cbd5e1;
+
+  /* Gradients */
+  --gradient-panel-title: linear-gradient(100deg, #ea580c, #c026d3, #2563eb);
+  --gradient-refresh-btn: linear-gradient(135deg, #f97316 0%, #ec4899 55%, #6366f1 100%);
+  --gradient-poster-placeholder: linear-gradient(145deg, #ffedd5, #fce7f3, #dbeafe);
+  --gradient-footer: linear-gradient(180deg, #243447 0%, var(--color-footer-bg) 45%, #15212f 100%);
+  --gradient-drawer: linear-gradient(165deg, #fffefb 0%, #f0f7ff 50%, #fff5f8 100%);
+
+  /* Misc sizes */
+  --size-menu-toggle: 2.75rem;
+  --size-menu-bar-height: 0.125rem;
+  --size-menu-bar-gap: 0.3125rem;
+  --size-menu-icon-width: 1.25rem;
+  --size-sr-only: 1px;
+  --blur-backdrop: 0.125rem;
+  --row-min-height: 5.75rem;
+  --about-max-width: 42rem;
+  --empty-hint-max: 28rem;
+  --event-title-flex: 12rem;
+  --event-about-flex: 14rem;
+}

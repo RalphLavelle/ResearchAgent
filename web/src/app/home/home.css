@@ -1,15 +1,21 @@
-/* Single route intro line — promoted to h1 after removing the old headline (task 17). */
+/* Route intro line — secondary heading below the site h1 in the masthead. */
+:host {
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .lede {
-  margin: 0 0 1rem;
-  font-size: clamp(1.15rem, 2.5vw, 1.55rem);
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-4xl);
   font-weight: 600;
   line-height: 1.35;
-  color: var(--text, #1f2937);
+  color: var(--text, var(--color-text));
 }
 
 .lede code {
   font-size: 0.88em;
   padding: 0.1em 0.35em;
-  border-radius: 4px;
+  border-radius: var(--radius-xs);
   background: rgba(0, 0, 0, 0.06);
 }

@@ -6,7 +6,7 @@
           <span aria-hidden="true">🎵</span>
           Generated {{ data.generated | date: 'medium' }}
         </p>
-    }
+      }
     </h2>
     <button type="button" class="refresh-btn" (click)="refreshList()" [disabled]="loading()">
       @if (loading()) {
@@ -37,27 +37,18 @@
       </div>
     } @else {
       <div class="table-scroll">
-        <table class="event-table">
-          <caption class="sr-only">
-            Upcoming events: poster; event name links to the listing site; about; venue; date (shown
-            once per calendar date).
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col" class="col-poster"><span class="sr-only">Poster</span></th>
-              <th scope="col">Event</th>
-              <th scope="col">About</th>
-              <th scope="col">Venue</th>
-              <th scope="col">Date</th>
-            </tr>
-          </thead>
-          <tbody>
-            @for (ev of data.events; track ev.id; let i = $index) {
-              @let showDate = i === 0 || data.events[i - 1].date !== ev.date;
-              <tr>
-                <td class="poster-cell">
-                  @if (posterSrc(ev.thumbnailUrl); as src) {
-                    @if (!posterErrors().has(ev.id)) {
+        <div class="event-list" role="list" aria-label="Upcoming events">
+          @for (ev of data.events; track ev.id; let i = $index) {
+            @let showDate = i === 0 || data.events[i - 1].date !== ev.date;
+            @if (showDate) {
+              <div class="date-row" role="presentation">
+                <span class="date-row__label">{{ ev.date }}</span>
+              </div>
+            }
+            <article class="event-row" role="listitem">
+              <div class="poster-cell">
+                @if (posterSrc(ev.thumbnailUrl); as src) {
+                  @if (!posterErrors().has(ev.id)) {
                     <img
                       class="poster"
                       [ngSrc]="src"
@@ -66,36 +57,36 @@
                       height="56"
                       (error)="onPosterError(ev.id)"
                     />
+                  }
+                } @else {
+                  <span class="poster-placeholder" aria-hidden="true">🎸</span>
+                  <span class="sr-only">No poster image for {{ ev.eventName }}</span>
+                }
+              </div>
+              <div class="detail-cell">
+                <div class="event-detail">
+                  <div class="event-detail__head">
+                    <a
+                      class="event-name-link"
+                      [href]="ev.url"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      {{ ev.eventName }}
+                      <span class="sr-only"> (opens in new tab) </span>
+                    </a>
+                    @if (ev.summary) {
+                      <p class="event-summary">{{ ev.summary }}</p>
                     }
-                  } @else {
-                    <span class="poster-placeholder" aria-hidden="true">🎸</span>
-                    <span class="sr-only">No poster image for {{ ev.eventName }}</span>
+                  </div>
+                  @if (ev.venue) {
+                    <p class="event-venue">{{ ev.venue }}</p>
                   }
-                </td>
-                <td class="name-cell">
-                  <a
-                    class="event-name-link"
-                    [href]="ev.url"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
-                    {{ ev.eventName }}
-                    <span class="sr-only"> (opens in new tab) </span>
-                  </a>
-                </td>
-                <td class="summary-cell">{{ ev.summary }}</td>
-                <td class="venue-cell">{{ ev.venue }}</td>
-                <td class="date-cell">
-                  @if (showDate) {
-                    <span class="date-text">{{ ev.date }}</span>
-                  } @else {
-                    <span class="sr-only">{{ ev.date }}</span>
-                  }
-                </td>
-              </tr>
-            }
-          </tbody>
-        </table>
+                </div>
+              </div>
+            </article>
+          }
+        </div>
       </div>
     }
   }

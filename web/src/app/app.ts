@@ -64,7 +64,10 @@ export class App {
 
   /** Clears the mobile menu when the layout switches to the wide header links. */
   protected onViewportResize(): void {
-    if (this.document.defaultView && this.document.defaultView.innerWidth >= 768 && this.navOpen()) {
+    if (
+      this.document.defaultView?.matchMedia('(min-width: 48rem)').matches &&
+      this.navOpen()
+    ) {
       this.navOpen.set(false);
     }
   }
