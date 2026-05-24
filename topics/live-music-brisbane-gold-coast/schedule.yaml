@@ -8,5 +8,5 @@
 # Examples:
 #   interval_hours: 1,  interval_minutes: 0  → runs every 1 hour
 #   interval_hours: 12, interval_minutes: 5  → runs every 5 minutes
-interval_hours: 2
-interval_minutes: 30
+interval_hours: 1
+interval_minutes: 0

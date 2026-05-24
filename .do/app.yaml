@@ -14,14 +14,12 @@
 #   3. Create the app from this spec, or run: doctl apps create --spec .do/app.yaml
 #
 # MongoDB (events + poster images):
-#   Use MongoDB Atlas — set MONGODB_URI to your Atlas connection string (SECRET below).
-#   Do NOT add a DO managed MongoDB component with a "seed from URL" unless the dump file is
-#   publicly downloadable. A private GitHub raw URL or blob page returns HTTP 403 and fails with:
-#     /tmp/seed.py → urllib.error.HTTPError: HTTP Error 403: Forbidden
-#   After deploy, whitelist the app's outbound IP in Atlas (Network Access) and run the agent once
-#   (or migrate locally with `python -m agent migrate-mongodb`) to populate the database.
-#
-# Optional: copy local data/ into the running container once for a warm start (see deploy notes in task 2).
+#   External MongoDB Atlas only — set MONGODB_URI (SECRET below). No database seeding on deploy.
+#   Do NOT add a DigitalOcean managed MongoDB component to this app (especially not "Seed from URL").
+#   If you tried that in the control panel, remove the database component or clear the seed URL —
+#   otherwise deploy fails with /tmp/seed.py → HTTP 403 before your container starts.
+#   After deploy: whitelist the app IP in Atlas; data comes from the agent (`serve`) or one-off
+#   `python -m agent migrate-mongodb` from your machine.
 
 name: research-agent
 region: syd
