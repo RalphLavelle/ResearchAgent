@@ -12,9 +12,7 @@ from agent.prompt_guides import load_prompt_guides
 from agent.subject_config import SubjectConfig, load_subject_config
 from agent.topics import (
     load_topics,
-    migrate_legacy_flat_data,
     resolve_output_dir,
-    rewrite_events_json_poster_paths,
     topic_config_dir,
     topic_data_dir,
 )
@@ -44,9 +42,9 @@ if ACTIVE_TOPIC_ID not in TOPICS.topics:
 ACTIVE_TOPIC = TOPICS.topics[ACTIVE_TOPIC_ID]
 TOPIC_DIR = topic_config_dir(_ROOT, ACTIVE_TOPIC_ID)
 
-# Base data root (topic subfolders live beneath this).
+# Base data root — run reports and snapshots per topic id.
 DATA_BASE_DIR = _get_path("DATA_DIR", _ROOT / "data")
-DATA_DIR = topic_data_dir(DATA_BASE_DIR, ACTIVE_TOPIC)
+DATA_DIR = topic_data_dir(DATA_BASE_DIR, ACTIVE_TOPIC_ID)
 
 SCHEDULE_CONFIG_PATH = _get_path(
     "SCHEDULE_CONFIG_PATH",
@@ -139,8 +137,8 @@ def llm_inference_enabled() -> bool:
         return True
     return False
 
-# Spreadsheet, events.json, per-run reports: data/<topic>/ by default.
-# OUTPUT_DIR=data (repo root) is treated as the data base — output goes to the active topic subfolder.
+# Run reports, snapshots: data/<topic_id>/ by default.
+# Curated events + posters: MongoDB database named ACTIVE_TOPIC.db.
 _output_raw = (os.environ.get("OUTPUT_DIR") or os.environ.get("AGENT_AI_DIR") or "").strip()
 OUTPUT_DIR = resolve_output_dir(
     data_base=DATA_BASE_DIR,
@@ -148,37 +146,7 @@ OUTPUT_DIR = resolve_output_dir(
     env_override=_output_raw or None,
 )
 
-# One-time lift of pre-topic flat files (data/events.json → data/<topic>/events.json).
-try:
-    _migrated = migrate_legacy_flat_data(DATA_BASE_DIR, ACTIVE_TOPIC)
-    if _migrated:
-        import logging
-
-        logging.getLogger(__name__).info(
-            "Migrated %s legacy data item(s) from %s into %s",
-            _migrated,
-            DATA_BASE_DIR,
-            OUTPUT_DIR,
-        )
-except OSError as exc:
-    import logging
-
-    logging.getLogger(__name__).warning("Legacy data migration skipped: %s", exc)
-
-try:
-    if rewrite_events_json_poster_paths(
-        OUTPUT_DIR / "events.json",
-        topic_data_dir=ACTIVE_TOPIC.data_dir,
-    ):
-        import logging
-
-        logging.getLogger(__name__).info(
-            "Rewrote legacy poster URLs in %s", OUTPUT_DIR / "events.json"
-        )
-except OSError as exc:
-    import logging
-
-    logging.getLogger(__name__).warning("events.json poster URL rewrite skipped: %s", exc)
+MONGODB_URI = (os.environ.get("MONGODB_URI") or "").strip()
 
 MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
 SEARCH_DELAY_SEC = float(os.environ.get("SEARCH_DELAY_SEC", "1.5"))

@@ -8,15 +8,6 @@
         </p>
       }
     </h2>
-    <button type="button" class="refresh-btn" (click)="refreshList()" [disabled]="loading()">
-      @if (loading()) {
-        <span class="sr-only">Loading</span>
-        <span aria-hidden="true">⏳</span>
-      } @else {
-        <span aria-hidden="true">🔄</span>
-      }
-      Refresh
-    </button>
   </div>
 
   @if (loading()) {
@@ -47,21 +38,30 @@
             }
             <article class="event-row" role="listitem">
               <div class="poster-cell">
-                @if (posterSrc(ev.thumbnailUrl); as src) {
-                  @if (!posterErrors().has(ev.id)) {
-                    <img
-                      class="poster"
-                      [ngSrc]="src"
-                      alt=""
-                      width="56"
-                      height="56"
-                      (error)="onPosterError(ev.id)"
-                    />
+                <a
+                  class="poster-link"
+                  [href]="ev.url"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  [attr.aria-label]="'View listing for ' + ev.eventName + ' (opens in new tab)'"
+                >
+                  @if (posterSrc(ev.thumbnailUrl); as src) {
+                    @if (!posterErrors().has(ev.id)) {
+                      <img
+                        class="poster"
+                        [ngSrc]="src"
+                        alt=""
+                        width="56"
+                        height="56"
+                        (error)="onPosterError(ev.id)"
+                      />
+                    } @else {
+                      <span class="poster-placeholder" aria-hidden="true">🎸</span>
+                    }
+                  } @else {
+                    <span class="poster-placeholder" aria-hidden="true">🎸</span>
                   }
-                } @else {
-                  <span class="poster-placeholder" aria-hidden="true">🎸</span>
-                  <span class="sr-only">No poster image for {{ ev.eventName }}</span>
-                }
+                </a>
               </div>
               <div class="detail-cell">
                 <div class="event-detail">

@@ -1,7 +1,7 @@
-"""Write curated events to a persistent .xlsx spreadsheet.
+"""Write curated events to MongoDB (replaces the spreadsheet).
 
 Key behaviours (Tasks 8, 9, 11, 13, 14):
-- Output is ``agent_research.xlsx`` — the source of truth for all events.
+- Output is the topic's ``events`` collection — the source of truth for all events.
 - Columns: Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added, Event ID (hidden).
 - The spreadsheet **accumulates**: existing rows are merged, past events removed,
   new events added.  Nothing is overwritten by new LLM text.  Rows are addressed
@@ -31,11 +31,9 @@ from pathlib import Path
 from urllib.parse import urlparse
 from uuid import uuid4
 
-from openpyxl import Workbook, load_workbook
-from openpyxl.styles import Alignment, Font, PatternFill
-from openpyxl.utils import get_column_letter
-
 from agent import config
+from agent.event_store import load_existing_rows as _db_load_rows
+from agent.event_store import save_existing_rows as _db_save_rows
 from agent.display_time import format_generated_timestamp
 from agent.enrich import poster_quality_score
 from agent.event_window import (
@@ -47,7 +45,13 @@ from agent.models import Resource
 
 logger = logging.getLogger(__name__)
 
+# Legacy filename — kept for migration tooling only.
 RESEARCH_FILENAME = "agent_research.xlsx"
+
+
+def active_db_name() -> str:
+    """MongoDB database name for the active topic."""
+    return config.ACTIVE_TOPIC.db
 
 
 @dataclass(frozen=True)
@@ -103,7 +107,7 @@ _COL_WIDTHS = [30, 22, 16, 18, 55, 45, 0, 40, 20, 0]
 
 
 def output_directory() -> Path:
-    """Active topic folder under ``data/<data_dir>/`` (see ``config.OUTPUT_DIR``)."""
+    """Active topic folder for run reports and snapshots (see ``config.OUTPUT_DIR``)."""
     return config.OUTPUT_DIR
 
 
@@ -313,145 +317,29 @@ def _row_to_resource(row: list) -> Resource:
 
 
 def load_spreadsheet_resources(path: Path | None = None) -> list[Resource]:
-    """Read the current spreadsheet and return its rows as Resource objects.
+    """Read the current event store and return rows as Resource objects.
 
-    This is the public API for getting the source-of-truth event list.
+    *path* is ignored (kept for call-site compatibility). This is the public
+    API for getting the source-of-truth event list.
     """
-    if path is None:
-        path = output_directory() / RESEARCH_FILENAME
-    rows = _load_existing_rows(path)
+    _ = path
+    rows = _load_existing_rows(active_db_name())
     return [_row_to_resource(row) for row in rows.values()]
 
 
 # ── Spreadsheet I/O ───────────────────────────────────────────────────────────
 
 
-def _load_existing_rows(path: Path) -> dict[str, list]:
-    """Load the spreadsheet as ``{Event ID → row}``.
-
-    Rows are keyed by the hidden **Event ID** column so several distinct gigs
-    can share one listing/calendar URL without overwriting each other.
-
-    The loader is lenient about the Sources column: if every other expected
-    column is present but Sources is absent (i.e. a spreadsheet written before
-    Task 13 was deployed), the column is silently synthesised as empty.  Any
-    other schema mismatch logs a warning and returns an empty dict.
-    """
-    rows: dict[str, list] = {}
-    if not path.exists():
-        return rows
-    try:
-        wb = load_workbook(path)
-        ws = wb.active
-        header = [str(c.value or "") for c in next(ws.iter_rows(min_row=1, max_row=1))]
-
-        missing = [n for n in _COLS if n not in header]
-        optional = frozenset({"Sources", "Event ID"})
-        missing_required = [n for n in missing if n not in optional]
-        if missing_required:
-            # Too many missing columns — schema is incompatible.
-            logger.warning(
-                "Spreadsheet is missing unexpected columns %s; "
-                "ignoring existing file (header: %s).",
-                missing_required,
-                header,
-            )
-            return rows
-
-        # Build column index; Sources gets -1 when absent (pre-Task-13 file).
-        col_index = {
-            name: (header.index(name) if name in header else -1)
-            for name in _COLS
-        }
-        url_col = col_index["URL"]
-
-        for raw_row in ws.iter_rows(min_row=2, values_only=True):
-            if url_col < 0 or url_col >= len(raw_row):
-                continue
-            url_key = str(raw_row[url_col] or "").strip().lower()
-            if not url_key.startswith("http"):
-                continue
-            row_list = [
-                (raw_row[col_index[c]] if col_index[c] >= 0 and col_index[c] < len(raw_row) else None)
-                for c in _COLS
-            ]
-            # Ensure Sources is a string (not None) for safe appending later.
-            if row_list[_IDX_SOURCES] is None:
-                row_list[_IDX_SOURCES] = ""
-            sid = str(row_list[_IDX_EVENT_ID] or "").strip() or str(uuid4())
-            while sid in rows:
-                sid = str(uuid4())
-            row_list[_IDX_EVENT_ID] = sid
-            rows[sid] = row_list
-    except Exception as exc:
-        logger.warning("Could not read existing spreadsheet (%s); starting fresh.", exc)
-    return rows
+def _load_existing_rows(db_name: str | None = None) -> dict[str, list]:
+    """Load events as ``{Event ID → row}`` from MongoDB."""
+    name = db_name or active_db_name()
+    return _db_load_rows(name)
 
 
-def _write_workbook(path: Path, rows: dict[str, list]) -> None:
-    """Sort by date and save all rows to the spreadsheet file."""
-    def sort_key(row: list) -> date:
-        d = _row_date(row)
-        return d if d is not None else date.max
-
-    sorted_rows = sorted(rows.values(), key=sort_key)
-
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Events"
-
-    # Header row
-    header_font = Font(bold=True, color="FFFFFF")
-    header_fill = PatternFill(fill_type="solid", fgColor="2E4057")
-    for col_i, name in enumerate(_COLS, start=1):
-        cell = ws.cell(row=1, column=col_i, value=name)
-        cell.font = header_font
-        cell.fill = header_fill
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    # Data rows
-    for row_i, row_vals in enumerate(sorted_rows, start=2):
-        for col_i, value in enumerate(row_vals[: len(_COLS)], start=1):
-            cell = ws.cell(row=row_i, column=col_i, value=value)
-            cell.alignment = Alignment(wrap_text=True, vertical="top")
-            if col_i == _IDX_DATE + 1 and isinstance(value, (date, datetime)):
-                cell.number_format = _DATE_FORMAT
-            elif col_i == _IDX_URL + 1 and str(value or "").startswith("http"):
-                cell.hyperlink = str(value)
-                cell.font = Font(color="0563C1", underline="single")
-
-    # Column widths / visibility
-    for col_i, w in enumerate(_COL_WIDTHS, start=1):
-        letter = get_column_letter(col_i)
-        if w == 0:
-            ws.column_dimensions[letter].hidden = True
-        else:
-            ws.column_dimensions[letter].width = w
-
-    ws.freeze_panes = "A2"
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp_path = path.with_name(path.name + ".tmp")
-    wb.save(tmp_path)
-    try:
-        os.replace(tmp_path, path)
-    except PermissionError:
-        fallback = path.with_name(path.stem + "_unlock_me" + path.suffix)
-        try:
-            if fallback.exists():
-                fallback.unlink()
-        except OSError:
-            pass
-        os.replace(tmp_path, fallback)
-        logger.error(
-            "%s is locked (usually open in Excel). Latest data saved as %s — "
-            "close the workbook and rename it, or re-run the agent.",
-            path.name, fallback.name,
-        )
-        raise PermissionError(
-            f"{path.name} is in use (close it in Excel). "
-            f"Latest data saved as {fallback.name}."
-        ) from None
-    logger.info("Spreadsheet written: %d events → %s", len(sorted_rows), path)
+def _write_workbook(db_name: str | None, rows: dict[str, list]) -> None:
+    """Persist all rows to the topic's ``events`` collection."""
+    name = db_name or active_db_name()
+    _db_save_rows(name, rows)
 
 
 def _pick_primary_pair(pairs: list[tuple[str, list]]) -> tuple[str, list]:
@@ -516,19 +404,15 @@ def _merge_cluster_rows(pairs: list[tuple[str, list]]) -> tuple[str, list]:
     return primary_uk, merged
 
 
-def run_llm_semantic_dedupe(path: Path | None = None) -> int:
+def run_llm_semantic_dedupe(db_name: str | None = None) -> int:
     """Second-pass dedup: LLM clusters same-day semantic duplicates; merge rows.
 
-    Returns the number of spreadsheet rows removed (not counting the kept row).
+    Returns the number of event rows removed (not counting the kept row).
     """
     from agent.semantic_dedupe import find_same_event_clusters
 
-    if path is None:
-        path = output_directory() / RESEARCH_FILENAME
-    if not path.exists():
-        return 0
-
-    existing = _load_existing_rows(path)
+    name = db_name or active_db_name()
+    existing = _load_existing_rows(name)
     if len(existing) < 2:
         return 0
 
@@ -568,7 +452,7 @@ def run_llm_semantic_dedupe(path: Path | None = None) -> int:
         existing[primary_uk] = merged
 
     if removed:
-        _write_workbook(path, existing)
+        _write_workbook(name, existing)
     return removed
 
 
@@ -595,10 +479,10 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
     """
     out_dir = output_directory()
     out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / RESEARCH_FILENAME
+    db_name = active_db_name()
     today = local_today()
 
-    existing = _load_existing_rows(path)
+    existing = _load_existing_rows(db_name)
 
     # Remove past events
     before = len(existing)
@@ -703,9 +587,9 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
             dedup_index[dk] = sid
         added += 1
 
-    _write_workbook(path, existing)
+    _write_workbook(db_name, existing)
     logger.info(
-        "Spreadsheet: +%d added, %d duplicate/skipped, %d expired removed → %d total",
+        "Events DB: +%d added, %d duplicate/skipped, %d expired removed → %d total",
         added, skipped, removed_past, len(existing),
     )
     return added, skipped, removed_past
@@ -715,30 +599,26 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
 
 
 def write_output(resources: list[Resource]) -> MergeStats:
-    """Merge spreadsheet, apply exclusions once on the full workbook, JSON, then dedupe.
+    """Merge events in MongoDB, apply exclusions, cache posters, then dedupe.
 
     Event exclusions run **after** ``merge_and_write`` via ``apply_event_exclusions``:
     deterministic ``drop_terms`` plus optional LLM phrase rules over every row.
 
-    The frontend-critical files (the xlsx + ``events.json``) are refreshed
-    immediately after that step so the UI stays in sync even if semantic dedupe fails.
+    The Angular UI reads from the HTTP API backed by the same database.
 
     Per-run logging (the ``Run_<AEST>.md`` markdown report) is written
     separately by ``run_report.write_run_report`` from ``node_local_output``;
     it consumes the returned ``MergeStats`` so each report can show a count
     of events added, skipped, pruned, exclusion-dropped, and de-duplicated.
 
-    Task 14 — between exclusion handling and the JSON write, posters are downloaded
-    once into ``data/images/<event-id>.<ext>`` so the Angular app loads them
-    same-origin (no more broken-image icons from hotlink-protected sites).
-    Failed downloads degrade gracefully to ``thumbnail_url = None``.
+    Posters are downloaded into the ``images`` collection so the Angular app
+    loads them same-origin via ``/api/<db>/images/...``.
     """
     from agent.image_cache import cache_thumbnails, garbage_collect
-    from agent.json_output import write_events_json
 
     out_dir = output_directory()
     out_dir.mkdir(parents=True, exist_ok=True)
-    xlsx_path = out_dir / RESEARCH_FILENAME
+    db_name = active_db_name()
 
     added, skipped, removed_past = merge_and_write(resources)
 
@@ -746,30 +626,27 @@ def write_output(resources: list[Resource]) -> MergeStats:
     try:
         from agent.exclusion_prune import apply_event_exclusions
 
-        removed_exclusion = apply_event_exclusions(xlsx_path)
+        removed_exclusion = apply_event_exclusions()
     except Exception as exc:
         logger.warning("Event exclusions skipped: %s", exc)
         removed_exclusion = 0
 
-    synced = load_spreadsheet_resources(xlsx_path)
-    # Self-host poster bytes + sweep stale files from removed/expired rows.
-    synced = cache_thumbnails(synced, output_dir=out_dir)
-    garbage_collect({r.id for r in synced}, output_dir=out_dir)
-    write_events_json(synced)
+    synced = load_spreadsheet_resources()
+    synced = cache_thumbnails(synced, db_name=db_name)
+    garbage_collect({r.id for r in synced}, db_name=db_name)
 
     removed_dedupe = 0
     if config.llm_inference_enabled():
         try:
-            removed_dedupe = run_llm_semantic_dedupe()
+            removed_dedupe = run_llm_semantic_dedupe(db_name)
             if removed_dedupe:
                 logger.info(
-                    "LLM semantic dedupe removed %d duplicate spreadsheet row(s).",
+                    "LLM semantic dedupe removed %d duplicate event row(s).",
                     removed_dedupe,
                 )
-                synced = load_spreadsheet_resources(xlsx_path)
-                synced = cache_thumbnails(synced, output_dir=out_dir)
-                garbage_collect({r.id for r in synced}, output_dir=out_dir)
-                write_events_json(synced)
+                synced = load_spreadsheet_resources()
+                synced = cache_thumbnails(synced, db_name=db_name)
+                garbage_collect({r.id for r in synced}, db_name=db_name)
         except Exception as exc:
             logger.warning("LLM semantic dedupe skipped: %s", exc)
             removed_dedupe = 0

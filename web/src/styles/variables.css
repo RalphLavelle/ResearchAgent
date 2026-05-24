@@ -24,6 +24,10 @@
   --space-9: 2.5rem;
   --space-10: 5rem;
 
+  /* Footer */
+  --footer-padding-block: var(--space-4);
+  --footer-padding-inline: var(--space-4);
+
   /* Layout */
   --shell-max-width: 65rem;
   --masthead-brand-min: 12.5rem;

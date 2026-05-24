@@ -116,6 +116,21 @@ Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` comm
   .\venv\Scripts\python.exe -m agent serve
   ```
 
+- **REST API** (required for the Angular UI — serves events and poster images from MongoDB):
+
+  ```powershell
+  .\venv\Scripts\python.exe -m agent api --host 127.0.0.1 --port 8765
+  ```
+
+  Set **`MONGODB_URI`** in `.env` and run the research pipeline at least once so events exist in the database. In dev, the Angular dev server proxies `/api/*` to this port (`web/proxy.conf.json`).
+
+  | Endpoint | Purpose |
+  |----------|---------|
+  | `GET /api/{db}/events` | Event list for a topic (JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc`) |
+  | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
+
+  `{db}` accepts either the topic id or the raw database name. Example for the default topic: `http://127.0.0.1:8765/api/bgc/events`.
+
 ## Windows Task Scheduler (start at logon)
 
 - Program: `...\venv\Scripts\python.exe`
@@ -126,15 +141,21 @@ Or use `scripts\start_serve.ps1` after adjusting paths.
 
 ### Web UI (Angular)
 
-The UI under **`web/`** reads `topics/topics.json` for the active topic (title, background, data path) and loads `data/<topic>/events.json`.
+The UI under **`web/`** reads `topics/topics.json` for the active topic (title, background, MongoDB `db` name) and loads events from the **REST API** above — not from `events.json` on disk.
+
+Run **two processes** in separate terminals:
 
 ```powershell
+# Terminal 1 — API (MongoDB must be running; see MONGODB_URI in .env)
+.\venv\Scripts\python.exe -m agent api --host 127.0.0.1 --port 8765
+
+# Terminal 2 — Angular dev server
 cd web
 npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). Run the Python agent at least once so `data/<topic>/events.json` exists.
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
 
 ## Behavior
 
@@ -153,4 +174,4 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 
 - `topics/` — registry (`topics.json`) plus per-topic YAML, schedule, and UI assets.
 - `src/agent/` — LangGraph workflow, DuckDuckGo search, spreadsheet + JSON outputs, scheduler.
-- `web/` — Angular shell driven by `topics.json` and `data/<topic>/events.json`.
+- `web/` — Angular shell driven by `topics.json` and the MongoDB-backed REST API (`src/agent/api.py`).

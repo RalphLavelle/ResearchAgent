@@ -3,19 +3,17 @@
   "topics": {
     "live-music-brisbane-gold-coast": {
       "name": "Live music in Brisbane and the Gold Coast",
-      "data_dir": "live-music-brisbane-gold-coast",
+      "db": "bgc",
       "background_image": "/topics/live-music-brisbane-gold-coast/assets/bg.jpg",
       "site_title": "Live music events",
-      "site_emoji": "🎵",
-      "home_heading": "What's on in Brisbane and the Gold Coast"
+      "site_emoji": "🎵"
     },
     "galway-live-music-events": {
       "name": "Galway Live Music Events",
-      "data_dir": "galway-live-music-events",
+      "db": "galway-music",
       "background_image": "/topics/galway-live-music-events/assets/bg.jpg",
       "site_title": "Galway live music",
-      "site_emoji": "🎻",
-      "home_heading": "What's on in Galway City"
+      "site_emoji": "🎻"
     }
   }
 }

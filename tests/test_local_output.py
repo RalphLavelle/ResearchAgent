@@ -1,16 +1,19 @@
-"""Tests for the accumulating spreadsheet output (Tasks 8, 9, 13)."""
+"""Tests for the accumulating MongoDB event store (Tasks 8, 9, 13)."""
 
 from datetime import date, timedelta
 from pathlib import Path
 
 import pytest
-from openpyxl import load_workbook
 
+import agent.local_output as local_output
 from agent.local_output import (
-    RESEARCH_FILENAME,
+    _IDX_EVENT,
+    _IDX_LOCATION,
     _IDX_POSTER,
     _IDX_SOURCES,
     _IDX_URL,
+    _IDX_VENUE,
+    _load_existing_rows,
     MergeStats,
     load_spreadsheet_resources,
     merge_and_write,
@@ -24,46 +27,42 @@ def _make_resource(title: str, url: str, days_ahead: int = 5) -> Resource:
     return Resource(title=title, url=url, date=d)
 
 
-def _urls_from_sheet(path: Path) -> list[str]:
-    wb = load_workbook(path)
-    ws = wb.active
-    return [str(row[_IDX_URL] or "") for row in ws.iter_rows(min_row=2, values_only=True)]
+def _rows() -> dict[str, list]:
+    return _load_existing_rows(local_output.active_db_name())
 
 
-def _sources_from_sheet(path: Path) -> list[str]:
-    wb = load_workbook(path)
-    ws = wb.active
-    return [str(row[_IDX_SOURCES] or "") for row in ws.iter_rows(min_row=2, values_only=True)]
+def _urls_from_db() -> list[str]:
+    return [str(row[_IDX_URL] or "") for row in _rows().values()]
 
 
-def _posters_from_sheet(path: Path) -> list[str]:
-    wb = load_workbook(path)
-    ws = wb.active
-    return [str(row[_IDX_POSTER] or "") for row in ws.iter_rows(min_row=2, values_only=True)]
+def _sources_from_db() -> list[str]:
+    return [str(row[_IDX_SOURCES] or "") for row in _rows().values()]
+
+
+def _posters_from_db() -> list[str]:
+    return [str(row[_IDX_POSTER] or "") for row in _rows().values()]
 
 
 # ── Basic write / read ────────────────────────────────────────────────────────
 
-def test_merge_creates_spreadsheet(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_merge_creates_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
     r = _make_resource("Band A @ Venue X, Brisbane", "https://example.com/a")
     added, skipped, removed = merge_and_write([r])
     assert added == 1
     assert skipped == 0
     assert removed == 0
-    assert (tmp_path / RESEARCH_FILENAME).exists()
+    assert len(load_spreadsheet_resources()) == 1
 
 
-def test_title_splits_into_columns(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_title_splits_into_fields(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
     r = _make_resource("The Beths @ The Tivoli, Brisbane", "https://example.com/beths")
     merge_and_write([r])
-    wb = load_workbook(tmp_path / RESEARCH_FILENAME)
-    ws = wb.active
-    row = list(ws.iter_rows(min_row=2, max_row=2, values_only=True))[0]
-    assert row[0] == "The Beths"      # Event
-    assert row[1] == "The Tivoli"     # Venue
-    assert row[2] == "Brisbane"       # Location
+    row = next(iter(_rows().values()))
+    assert row[_IDX_EVENT] == "The Beths"
+    assert row[_IDX_VENUE] == "The Tivoli"
+    assert row[_IDX_LOCATION] == "Brisbane"
 
 
 def test_new_url_added_on_second_run(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -73,7 +72,7 @@ def test_new_url_added_on_second_run(tmp_path: Path, monkeypatch: pytest.MonkeyP
     merge_and_write([r1])
     added, _, _ = merge_and_write([r2])
     assert added == 1
-    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    urls = _urls_from_db()
     assert "https://example.com/a" in urls
     assert "https://example.com/b" in urls
 
@@ -85,7 +84,7 @@ def test_past_events_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     merge_and_write([past, future])
     _, _, removed = merge_and_write([])
     assert removed == 1
-    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    urls = _urls_from_db()
     assert "https://example.com/old" not in urls
     assert "https://example.com/new" in urls
 
@@ -96,7 +95,7 @@ def test_load_spreadsheet_resources_roundtrip(tmp_path: Path, monkeypatch: pytes
     r2 = _make_resource("Open Mic Night @ Burleigh Bazaar, Gold Coast", "https://example.com/mic")
     merge_and_write([r1, r2])
 
-    loaded = load_spreadsheet_resources(tmp_path / RESEARCH_FILENAME)
+    loaded = load_spreadsheet_resources()
     assert len(loaded) == 2
     urls = {r.url for r in loaded}
     assert "https://example.com/beths" in urls
@@ -114,7 +113,7 @@ def test_exact_url_duplicate_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyP
     assert added == 0
     assert skipped == 1
     # No source should be added for same-domain same-URL
-    sources = _sources_from_sheet(tmp_path / RESEARCH_FILENAME)
+    sources = _sources_from_db()
     assert all(s == "" for s in sources)
 
 
@@ -132,9 +131,9 @@ def test_semantic_duplicate_adds_source_different_domain(
 
     assert added == 0
     assert skipped == 1
-    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    urls = _urls_from_db()
     assert len([u for u in urls if u.startswith("http")]) == 1
-    sources = _sources_from_sheet(tmp_path / RESEARCH_FILENAME)
+    sources = _sources_from_db()
     assert any("oztix.com.au" in s for s in sources)
 
 
@@ -153,7 +152,7 @@ def test_semantic_duplicate_venue_variation_ignored(
 
     assert added == 0
     assert skipped == 1
-    sources = _sources_from_sheet(tmp_path / RESEARCH_FILENAME)
+    sources = _sources_from_db()
     assert any("oztix.com.au" in s for s in sources)
 
 
@@ -169,7 +168,7 @@ def test_semantic_duplicate_same_domain_no_source(
     merge_and_write([r1])
     merge_and_write([r2])
 
-    sources = _sources_from_sheet(tmp_path / RESEARCH_FILENAME)
+    sources = _sources_from_db()
     assert all("ticketek" not in s for s in sources)
 
 
@@ -187,7 +186,7 @@ def test_partial_act_name_same_venue_date_is_duplicate(
 
     assert added == 0
     assert skipped == 1
-    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    urls = _urls_from_db()
     assert len([u for u in urls if u.startswith("http")]) == 1
 
 
@@ -203,10 +202,8 @@ def test_longer_act_name_becomes_canonical(
     merge_and_write([r1])
     merge_and_write([r2])
 
-    wb = load_workbook(tmp_path / RESEARCH_FILENAME)
-    ws = wb.active
-    row = list(ws.iter_rows(min_row=2, max_row=2, values_only=True))[0]
-    assert row[0] == "The Beths, with Wax Chattels"
+    row = next(iter(_rows().values()))
+    assert row[_IDX_EVENT] == "The Beths, with Wax Chattels"
 
 
 def test_shared_listing_url_two_distinct_gigs_kept(
@@ -221,7 +218,7 @@ def test_shared_listing_url_two_distinct_gigs_kept(
     r2 = Resource(title="Baggy Trousers @ Pub, Miami", url=listing, date=d2)
 
     merge_and_write([r1, r2])
-    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    urls = _urls_from_db()
     assert urls.count(listing) == 2
 
 
@@ -239,7 +236,7 @@ def test_partial_act_name_different_venue_not_duplicate(
 
     assert added1 == 1
     assert added2 == 1
-    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    urls = _urls_from_db()
     assert len([u for u in urls if u.startswith("http")]) == 2
 
 
@@ -258,7 +255,7 @@ def test_different_date_not_a_duplicate(
 
     assert added1 == 1
     assert added2 == 1
-    urls = _urls_from_sheet(tmp_path / RESEARCH_FILENAME)
+    urls = _urls_from_db()
     assert len([u for u in urls if u.startswith("http")]) == 2
 
 
@@ -339,7 +336,7 @@ def test_exact_duplicate_upgrades_logo_poster_to_event_specific(
     merge_and_write([seed])
     merge_and_write([rerun])
 
-    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    posters = _posters_from_db()
     assert posters == [good]
 
 
@@ -368,7 +365,7 @@ def test_exact_duplicate_does_not_downgrade_good_poster(
     merge_and_write([seed])
     merge_and_write([rerun])
 
-    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    posters = _posters_from_db()
     assert posters == [good]
 
 
@@ -396,7 +393,7 @@ def test_exact_duplicate_fills_empty_poster(
     merge_and_write([seed])
     merge_and_write([rerun])
 
-    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    posters = _posters_from_db()
     assert posters == [good]
 
 
@@ -426,7 +423,7 @@ def test_url_reingest_upgrades_stale_poster(
     merge_and_write([seed])
     merge_and_write([rerun])
 
-    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    posters = _posters_from_db()
     assert posters == [good]
 
 
@@ -455,5 +452,5 @@ def test_partial_name_duplicate_upgrades_poster(
     merge_and_write([seed])
     merge_and_write([rerun])
 
-    posters = _posters_from_sheet(tmp_path / RESEARCH_FILENAME)
+    posters = _posters_from_db()
     assert posters == [good]

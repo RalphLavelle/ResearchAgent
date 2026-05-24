@@ -1,6 +1,6 @@
 ---
 name: aiagent-research-pipeline
-description: Guides changes to the LangGraph music-events research agent, spreadsheet source-of-truth, deduplication, events JSON / Notion outputs, and subject YAML. Use when editing this repo, docs/tasks, graph_nodes, local_output, notion_output, subject_matter.yaml, or when the user mentions AgentAI, agent_research.xlsx, dedup, or the research pipeline.
+description: Guides changes to the LangGraph music-events research agent, MongoDB source-of-truth, deduplication, REST API / Notion outputs, and subject YAML. Use when editing this repo, docs/tasks, graph_nodes, local_output, notion_output, subject_matter.yaml, or when the user mentions AgentAI, MongoDB, dedup, or the research pipeline.
 ---
 
 # AIAgent research pipeline
@@ -11,9 +11,9 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 
 ## Source of truth
 
-- **`agent_research.xlsx`** (under `OUTPUT_DIR`, default `data/<topic>/`) is the database. `events.json` and Notion are generated from **`load_spreadsheet_resources()`** after each merge, not from the current run's `resources` alone.
+- **MongoDB** (database name = topic's ``db`` property in ``topics.json``) is the database. Collections: ``events`` (curated rows) and ``images`` (poster BSON blobs). The Angular app reads via ``GET /api/<db>/events`` and ``GET /api/<db>/images/<id>``.
 - **`Run_<AEST>.md`** (Task 11) is written once per real run by `run_report.write_run_report` from `node_local_output`. Three sections: *Searches* (planner queries), *Search and crawl* (`crawled_urls` from `node_crawl`, grouped by host), *Normalize* (curated `Resource` Pydantic models serialised as JSON, each with its source URL). The single append-only `run_log.md` is removed.
-- **`data/snapshot.json`** fingerprints the **current run’s** resources for log messaging; Notion sync uses a fingerprint of the **full spreadsheet** (`canonical_fingerprint(all_resources)`).
+- **`data/snapshot.json`** fingerprints the **current run’s** resources for log messaging; Notion sync uses a fingerprint of the **full event store** (`canonical_fingerprint(all_resources)`).
 
 ## Topic vs engine
 
@@ -43,11 +43,11 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 - **Planner**: `node_plan` → structured `PlanQueries`. No default queries if key missing; errors logged.
 - **Normalize**: `node_normalize` → structured `ResourceListPayload`; input capped (env `CURATOR_INPUT_MAX_CHARS`); crawler tail preserved when clipping; curator dedupe is per `(url, date, title)` so many gigs may share one listing URL; then date window filter, sort soonest-first.
 - **Per-event images (Tasks 12, 13)**: `site_crawl._html_to_text` keeps `[IMG alt="…" src=…]` markers inline (decorations like logos/ads/banners filtered, mid-name tokens too) so the curator prompt can pick a distinct image per event. After the LLM, `enrich.enrich_thumbnails` runs Pass 1 — for groups of resources sharing a URL it **preserves any LLM-chosen thumbnail that is unique within the group** and only re-assigns blank or duplicate slots, scoring candidates against both `alt` text **and** the image filename's keywords (`_best_img_for_title` returns `None` when no candidate has any title-word overlap, so the slot falls through to og:image rather than the first-non-excluded poster). Pass 2 then fills any remaining nulls with the page's og:image (cached per-URL).
-- **Local poster cache (Task 14)**: `image_cache.cache_thumbnails` runs inside `local_output.write_output`, between `load_spreadsheet_resources()` and `write_events_json()`. Posters are stored **once per upstream URL** under `data/<topic>/images/<sha16>.<ext>` (Task 2) — many events can share one file; dedupe runs at CLI startup via `dedupe_images_for_all_topics`. For every spreadsheet row with an `http(s)` poster URL, it downloads only when that URL is not already cached, then rewrites `events.json`'s `thumbnailUrl` to `/data/<topic>/images/<hash>.<ext>`. Failed downloads degrade to `thumbnail_url = None`. Sidecar `data/<topic>/images/_index.json` (v2: event id → `{source, file}`) tracks mappings. `image_cache.garbage_collect` deletes files no longer referenced by any active event id. Spreadsheet **Poster URL** keeps the upstream URL.
+- **Local poster cache (Task 14, MongoDB Task 4)**: `image_cache.cache_thumbnails` runs inside `local_output.write_output`, between exclusion handling and semantic dedupe. Posters are stored **once per upstream URL** in the topic's MongoDB ``images`` collection — many events can share one blob. For every row with an `http(s)` poster URL, it downloads only when that URL is not already cached, then sets `thumbnail_url` to `/api/<db>/images/<hash>.<ext>`. Failed downloads degrade to `thumbnail_url = None`. `image_cache.garbage_collect` deletes blobs no longer referenced by any active event id. Event documents keep upstream **poster_url** for quality scoring / self-heal.
 
 ## Outputs
 
-- **Angular JSON**: `json_output.py` writes `events.json` (under `OUTPUT_DIR`) at local-output time — `{ generated, events[] }` in camelCase; the Angular app loads `/data/events.json`.
+- **Angular API**: `api.py` serves `GET /api/<db>/events` (camelCase payload via `json_output.build_events_payload`) and `GET /api/<db>/images/<id>`.
 - **Notion**: native table blocks; no inline images in cells (poster glyph pattern in `notion_output.py`).
 
 ## Config/env (do not overwrite `.env` without asking)
@@ -73,13 +73,15 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Nodes + LLM calls | `src/agent/graph_nodes.py` |
 | Structured output fallback | `src/agent/structured_output.py` |
 | Spreadsheet + dedup | `src/agent/local_output.py` |
+| MongoDB persistence | `src/agent/event_store.py`, `src/agent/image_store.py`, `src/agent/mongodb.py` |
+| REST API for Angular | `src/agent/api.py` |
+| Legacy file migration | `src/agent/migrate_mongodb.py` |
 | Per-run markdown report | `src/agent/run_report.py` |
 | Events JSON for Angular | `src/agent/json_output.py` |
 | Notion API | `src/agent/notion_output.py` |
 | Crawl + image markers | `src/agent/site_crawl.py` |
 | Per-event image enrichment | `src/agent/enrich.py` |
 | Local poster cache + GC | `src/agent/image_cache.py` |
-| Date/window/title split | `src/agent/event_window.py` |
 | Topics registry + paths | `src/agent/topics.py`, `topics/topics.json` |
 | Models + `resource_from_dict` | `src/agent/models.py` |
 | New topic scaffolding | `.cursor/skills/topic-creator/SKILL.md` |

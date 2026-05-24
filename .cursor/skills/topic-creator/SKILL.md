@@ -1,11 +1,11 @@
 ---
 name: topic-creator
-description: Scaffold a new research topic in topics/topics.json and topics/<id>/ with subject_matter.yaml, exclusions.yaml, schedule.yaml, assets, and data subfolder wiring. Use when the user asks to add a topic, switch subject matter, or create topic configuration.
+description: Scaffold a new research topic in topics/topics.json and topics/<id>/ with subject_matter.yaml, exclusions.yaml, schedule.yaml, assets, and MongoDB db wiring. Use when the user asks to add a topic, switch subject matter, or create topic configuration.
 ---
 
 # Topic creator
 
-Add a new entry to the multi-topic research pipeline. Each topic owns its YAML prompts, exclusions, schedule, UI assets, and a **`data/<data_dir>/`** output subfolder.
+Add a new entry to the multi-topic research pipeline. Each topic owns its YAML prompts, exclusions, schedule, UI assets, and a **MongoDB database** named by the `db` property.
 
 ## When to use
 
@@ -28,26 +28,29 @@ Add a new entry to the multi-topic research pipeline. Each topic owns its YAML p
    ```json
    "<id>": {
      "name": "<Human-readable title>",
-     "data_dir": "<id>",
+     "db": "<mongodb-database-name>",
      "background_image": "/topics/<id>/assets/bg.jpg",
      "site_title": "<Short nav label>",
-     "site_emoji": "🎵",
-     "home_heading": "<H1 on home page>"
+     "site_emoji": "🎵"
    }
    ```
-   Set `"active": "<id>"` when the user wants this topic to run immediately.
+   Set `"active": "<id>"` when the user wants this topic to run immediately. The `db` value becomes the MongoDB database name (collections: `events`, `images`).
 
-4. **Data folder** — pipeline writes to `data/<data_dir>/` by default. No manual folder required; the agent creates it on first run. If migrating flat `data/` files, move spreadsheet, `events.json`, `Run_*.md`, `images/`, and `snapshot.json` into `data/<data_dir>/`.
+4. **MongoDB** — no manual database setup required; the agent creates collections on first write. Ensure `MONGODB_URI` is set in `.env` (Atlas connection string).
 
-5. **Environment** — optional overrides in `.env`:
+5. **Local data folder** — run reports and snapshots still go to `data/<topic_id>/` on first pipeline run. Events and poster images are **not** stored there anymore.
+
+6. **Environment** — optional overrides in `.env`:
    - `ACTIVE_TOPIC=<id>` — override `topics.json` active without editing JSON
-   - `OUTPUT_DIR=` — remove or point at `data/<data_dir>/` if a legacy flat path was set
+   - `MONGODB_URI=` — Atlas connection string (required for pipeline + API)
+   - `OUTPUT_DIR=` — run reports folder override (legacy; defaults to `data/<topic_id>/`)
    - Per-file overrides still work: `SUBJECT_MATTER_CONFIG`, `EVENT_EXCLUSIONS_CONFIG`, `SCHEDULE_CONFIG_PATH`
 
-6. **Verify**
+7. **Verify**
    - Python: `venv\Scripts\python.exe -m pytest tests/test_topics.py -q`
    - Agent: `venv\Scripts\python.exe -m agent run-once --dry-run` (checks LLM + topic YAML load)
-   - Web: `cd web && npm start` — header, home heading, background, and `data/<data_dir>/events.json` should match the new topic after a pipeline run
+   - API: `venv\Scripts\python.exe -m agent api --port 8765`
+   - Web: `cd web && npm start` — header, home heading, background, and `GET /api/<db>/events` should match the new topic after a pipeline run
 
 ## Do not
 
@@ -70,8 +73,8 @@ topics/
     schedule.example.yaml
 data/
   live-music-brisbane-gold-coast/
-    agent_research.xlsx
-    events.json
     Run_*.md
-    images/
+    snapshot.json
 ```
+
+MongoDB (Atlas): database `bgc` → collections `events`, `images`.

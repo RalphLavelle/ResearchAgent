@@ -31,6 +31,20 @@ def main(argv: list[str] | None = None) -> int:
 
     sub.add_parser("serve", help="Run on reloadable interval (see topics/<id>/schedule.yaml).")
 
+    p_migrate = sub.add_parser(
+        "migrate-mongodb",
+        help="Move legacy spreadsheet/events.json/images into MongoDB.",
+    )
+    p_migrate.add_argument(
+        "--keep-files",
+        action="store_true",
+        help="Do not delete legacy files after migration.",
+    )
+
+    p_api = sub.add_parser("api", help="Run the HTTP API for the Angular app.")
+    p_api.add_argument("--host", default="127.0.0.1")
+    p_api.add_argument("--port", type=int, default=8765)
+
     args = parser.parse_args(argv)
 
     from agent import config
@@ -61,6 +75,34 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.command == "serve":
         serve()
+        return 0
+
+    if args.command == "migrate-mongodb":
+        from agent.migrate_mongodb import migrate_all_topics
+        from agent.mongodb import validate_mongodb_uri
+
+        try:
+            validate_mongodb_uri()
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 2
+        try:
+            results = migrate_all_topics(remove_files=not args.keep_files)
+        except Exception as exc:
+            logger.error("Migration failed: %s", exc)
+            return 1
+        for topic_id, stats in results.items():
+            print(
+                f"{topic_id}: {stats['events']} events, "
+                f"{stats['images']} images, "
+                f"{stats['files_removed']} legacy file(s) removed"
+            )
+        return 0
+
+    if args.command == "api":
+        import uvicorn
+
+        uvicorn.run("agent.api:app", host=args.host, port=args.port, log_level="info")
         return 0
 
     return 1

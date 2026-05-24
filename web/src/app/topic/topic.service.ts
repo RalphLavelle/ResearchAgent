@@ -5,11 +5,11 @@ import { take } from 'rxjs/operators';
 /** One topic entry from ``topics/topics.json``. */
 export interface TopicEntry {
   name: string;
-  data_dir: string;
+  /** MongoDB database name for this topic's events and images. */
+  db: string;
   background_image: string;
   site_title: string;
   site_emoji: string;
-  home_heading: string;
 }
 
 /** Root shape of ``topics/topics.json``. */
@@ -20,7 +20,7 @@ export interface TopicsRegistry {
 
 /**
  * Loads the active topic from ``/topics/topics.json`` (copied from repo ``topics/``).
- * Drives background image, site chrome, and the events JSON subfolder path.
+ * Drives background image, site chrome, and the MongoDB-backed API paths.
  */
 @Injectable({ providedIn: 'root' })
 export class TopicService {
@@ -44,20 +44,17 @@ export class TopicService {
     if (!reg) {
       return {
         name: 'Events',
-        data_dir: 'live-music-brisbane-gold-coast',
+        db: 'bgc',
         background_image: '/topics/live-music-brisbane-gold-coast/assets/bg.jpg',
         site_title: 'Live music events',
-        site_emoji: '🎵',
-        home_heading: "What's on",
+        site_emoji: '🎵'
       };
     }
     return reg.topics[reg.active];
   });
 
-  /** Relative URL for ``events.json`` under the topic data subfolder. */
-  readonly eventsJsonUrl = computed(
-    () => `data/${this.active().data_dir}/events.json`,
-  );
+  /** API URL for the active topic's events list. */
+  readonly eventsApiUrl = computed(() => `/api/${this.active().db}/events`);
 
   constructor() {
     this.#http

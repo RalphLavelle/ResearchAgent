@@ -142,7 +142,7 @@
 .site-footer {
   flex-shrink: 0;
   margin-top: auto;
-  padding: var(--space-8) var(--space-6) var(--space-9);
+  padding: var(--footer-padding-block) var(--footer-padding-inline);
   background: var(--gradient-footer);
   color: var(--footer-text);
   box-shadow: var(--shadow-footer);

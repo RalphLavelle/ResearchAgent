@@ -21,8 +21,8 @@ from pydantic import BaseModel, Field
 from agent import config
 from agent.exclusion_config import EventExclusionsConfig, load_event_exclusions
 from agent.llm_factory import build_chat_llm
+from agent import local_output
 from agent.local_output import (
-    RESEARCH_FILENAME,
     _IDX_EVENT,
     _IDX_LOCATION,
     _IDX_SUMMARY,
@@ -32,7 +32,6 @@ from agent.local_output import (
     _row_date,
     _row_event_id,
     _write_workbook,
-    output_directory,
 )
 from agent.structured_output import invoke_structured
 
@@ -64,9 +63,9 @@ def _active_exclusions_config() -> EventExclusionsConfig:
     return load_event_exclusions(config.EVENT_EXCLUSIONS_CONFIG_PATH)
 
 
-def _events_from_workbook(path: Path) -> tuple[dict[str, list], list[dict]]:
+def _events_from_store(db_name: str) -> tuple[dict[str, list], list[dict]]:
     """Return ``(existing_rows_dict, event_payloads_for_llm)``."""
-    existing = _load_existing_rows(path)
+    existing = _load_existing_rows(db_name)
     events: list[dict] = []
     for _uk, row in existing.items():
         d = _row_date(row)
@@ -164,11 +163,11 @@ def _llm_excluded_event_ids(events: list[dict], rules: list[str]) -> set[str]:
     return to_remove
 
 
-def apply_event_exclusions(path: Path | None = None) -> int:
+def apply_event_exclusions(db_name: str | None = None) -> int:
     """After merge: drop rows matching ``drop_terms`` and/or LLM ``exclusions``.
 
-    Runs once per ``write_output`` on the **full** workbook so new and old rows
-    are evaluated together.
+    Runs once per ``write_output`` on the **full** event store so new and old
+    rows are evaluated together.
 
     Returns how many rows were removed.
     """
@@ -179,17 +178,13 @@ def apply_event_exclusions(path: Path | None = None) -> int:
     if not terms and not rules:
         return 0
 
-    if path is None:
-        path = output_directory() / RESEARCH_FILENAME
-    if not path.exists():
-        return 0
-
-    existing, events = _events_from_workbook(path)
+    name = db_name or local_output.active_db_name()
+    existing, events = _events_from_store(name)
     if not existing:
         return 0
 
     logger.info(
-        "Event exclusions: %d spreadsheet row(s), %d drop_term(s), %d LLM phrase rule(s).",
+        "Event exclusions: %d event row(s), %d drop_term(s), %d LLM phrase rule(s).",
         len(events),
         len(terms),
         len(rules),
@@ -213,9 +208,9 @@ def apply_event_exclusions(path: Path | None = None) -> int:
         if _row_event_id(row) in to_remove:
             del existing[uk]
 
-    _write_workbook(path, existing)
+    _write_workbook(name, existing)
     logger.info(
-        "Event exclusions removed %d spreadsheet row(s) total.",
+        "Event exclusions removed %d event row(s) total.",
         len(to_remove),
     )
     return len(to_remove)

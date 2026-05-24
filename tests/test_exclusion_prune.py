@@ -9,7 +9,7 @@ import pytest
 
 from agent.exclusion_config import load_event_exclusions
 from agent.exclusion_prune import ExclusionPruneResult, apply_event_exclusions
-from agent.local_output import RESEARCH_FILENAME, load_spreadsheet_resources, merge_and_write
+from agent.local_output import load_spreadsheet_resources, merge_and_write
 from agent.models import Resource
 
 
@@ -60,12 +60,11 @@ def test_apply_event_exclusions_drop_terms_remove_drag_without_llm(
             ),
         ],
     )
-    xlsx = tmp_path / RESEARCH_FILENAME
-    assert len(load_spreadsheet_resources(xlsx)) == 2
+    assert len(load_spreadsheet_resources()) == 2
 
-    removed = apply_event_exclusions(xlsx)
+    removed = apply_event_exclusions()
     assert removed == 1
-    remaining = load_spreadsheet_resources(xlsx)
+    remaining = load_spreadsheet_resources()
     assert len(remaining) == 1
     assert "Indie Band" in (remaining[0].title or "")
 
@@ -106,7 +105,6 @@ def test_apply_event_exclusions_llm_union_with_drop_terms(
             ),
         ],
     )
-    xlsx = tmp_path / RESEARCH_FILENAME
 
     monkeypatch.setattr("agent.exclusion_prune.build_chat_llm", lambda: object())
 
@@ -116,9 +114,9 @@ def test_apply_event_exclusions_llm_union_with_drop_terms(
 
     monkeypatch.setattr("agent.exclusion_prune.invoke_structured", fake_invoke)
 
-    removed = apply_event_exclusions(xlsx)
+    removed = apply_event_exclusions()
     assert removed == 2
-    assert load_spreadsheet_resources(xlsx) == []
+    assert load_spreadsheet_resources() == []
 
 
 def test_apply_event_exclusions_skips_when_empty_config(
@@ -138,4 +136,4 @@ def test_apply_event_exclusions_skips_when_empty_config(
 
     monkeypatch.setattr("agent.exclusion_prune.invoke_structured", boom)
 
-    assert apply_event_exclusions(tmp_path / RESEARCH_FILENAME) == 0
+    assert apply_event_exclusions() == 0
