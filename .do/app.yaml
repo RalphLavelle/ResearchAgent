@@ -10,8 +10,16 @@
 #
 # Before first deploy:
 #   1. Push this repo to GitHub (RalphLavelle/ResearchAgent).
-#   2. In the DO control panel (or via MCP), set secret env vars: OLLAMA_API_KEY, etc.
+#   2. In the DO control panel (or via MCP), set secret env vars: MONGODB_URI, OLLAMA_API_KEY, etc.
 #   3. Create the app from this spec, or run: doctl apps create --spec .do/app.yaml
+#
+# MongoDB (events + poster images):
+#   Use MongoDB Atlas — set MONGODB_URI to your Atlas connection string (SECRET below).
+#   Do NOT add a DO managed MongoDB component with a "seed from URL" unless the dump file is
+#   publicly downloadable. A private GitHub raw URL or blob page returns HTTP 403 and fails with:
+#     /tmp/seed.py → urllib.error.HTTPError: HTTP Error 403: Forbidden
+#   After deploy, whitelist the app's outbound IP in Atlas (Network Access) and run the agent once
+#   (or migrate locally with `python -m agent migrate-mongodb`) to populate the database.
 #
 # Optional: copy local data/ into the running container once for a warm start (see deploy notes in task 2).
 
@@ -68,6 +76,9 @@ services:
         scope: RUN_TIME
         type: SECRET
       - key: NOTION_RESEARCH_PAGE_ID
+        scope: RUN_TIME
+        type: SECRET
+      - key: MONGODB_URI
         scope: RUN_TIME
         type: SECRET
 
