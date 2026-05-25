@@ -84,7 +84,7 @@ def _group_urls_by_host(urls: list[str]) -> dict[str, list[str]]:
 
 
 def _format_stats_section(stats: "MergeStats") -> list[str]:
-    """Render the spreadsheet-change footer as markdown table lines."""
+    """Render the event-store change footer as markdown table lines."""
     rows = [
         ("Added (new rows)", stats.added),
         ("Skipped as duplicate", stats.skipped),
@@ -94,11 +94,11 @@ def _format_stats_section(stats: "MergeStats") -> list[str]:
         ("Total rows after merge", stats.total_after),
     ]
     parts: list[str] = []
-    parts.append("## 4. Spreadsheet changes")
+    parts.append("## 4. Event store changes")
     parts.append("")
     parts.append(
         "Counts from `merge_and_write`, post-merge `apply_event_exclusions`, "
-        "and semantic-dedupe — under `OUTPUT_DIR/agent_research.xlsx`."
+        "and semantic-dedupe — persisted in MongoDB (topic ``db`` from ``topics.json``)."
     )
     parts.append("")
     parts.append("| Metric | Count |")

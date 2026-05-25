@@ -199,7 +199,7 @@ def test_two_writes_with_distinct_seconds_produce_distinct_files(tmp_path: Path)
     assert p1.exists() and p2.exists()
 
 
-# ── Spreadsheet-changes footer (Task 12 follow-up) ────────────────────────────
+# ── Event-store footer (Task 12 follow-up) ───────────────────────────────────
 
 
 _SAMPLE_STATS = MergeStats(
@@ -220,7 +220,7 @@ def test_report_omits_stats_section_when_no_stats_supplied() -> None:
         resources=[],
         now=_FIXED_NOW,
     )
-    assert "## 4. Spreadsheet changes" not in md
+    assert "## 4. Event store changes" not in md
 
 
 def test_report_appends_stats_footer_when_supplied() -> None:
@@ -231,7 +231,7 @@ def test_report_appends_stats_footer_when_supplied() -> None:
         merge_stats=_SAMPLE_STATS,
         now=_FIXED_NOW,
     )
-    assert "## 4. Spreadsheet changes" in md
+    assert "## 4. Event store changes" in md
     # Each metric label appears with its count.
     assert "| Added (new rows) | 3 |" in md
     assert "| Skipped as duplicate | 2 |" in md
@@ -251,7 +251,7 @@ def test_stats_section_is_the_last_thing_in_the_file() -> None:
         now=_FIXED_NOW,
     )
     last_heading = max(md.rfind(line) for line in md.splitlines() if line.startswith("## "))
-    assert md[last_heading:].startswith("## 4. Spreadsheet changes")
+    assert md[last_heading:].startswith("## 4. Event store changes")
 
 
 def test_write_run_report_persists_stats_footer(tmp_path: Path) -> None:
@@ -264,5 +264,5 @@ def test_write_run_report_persists_stats_footer(tmp_path: Path) -> None:
         now=_FIXED_NOW,
     )
     body = written.read_text(encoding="utf-8")
-    assert "## 4. Spreadsheet changes" in body
+    assert "## 4. Event store changes" in body
     assert "| Total rows after merge | 27 |" in body

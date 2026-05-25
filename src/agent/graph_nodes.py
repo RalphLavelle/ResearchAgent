@@ -279,20 +279,20 @@ def build_run_log_message(state: AgentState) -> str:
         return f"{ts} - dry-run: {n} results curated for '{topic}'; no files written."
     if unchanged:
         return f"{ts} - searched '{topic}'; no changes since last snapshot ({n} results tracked)."
-    return f"{ts} - searched '{topic}'; spreadsheet updated with {n} results."
+    return f"{ts} - searched '{topic}'; {n} events merged into MongoDB."
 
 
 def node_local_output(state: AgentState) -> AgentState:
-    """Write the per-run report and sync the spreadsheet/JSON outputs.
+    """Write the per-run report and sync events to MongoDB.
 
     Steps (Task 11):
     1. Build resources + queries + crawled URL list from state.
     2. Skip all file writes on dry-run.
-    3. Merge new resources into the spreadsheet and refresh ``events.json``.
+    3. Merge new resources into MongoDB (events + images collections).
     4. Save the snapshot fingerprint.
     5. Write a fresh ``Run_<AEST timestamp>.md`` markdown report capturing the
        three LLM-driven steps in detail (Searches, Search and crawl, Normalize).
-    6. Optionally push the full spreadsheet to Notion.
+    6. Optionally push the full event list to Notion.
     """
     from agent.local_output import load_spreadsheet_resources, output_directory, write_output
     from agent.run_report import write_run_report
@@ -309,7 +309,7 @@ def node_local_output(state: AgentState) -> AgentState:
 
     try:
         logger.info(
-            "Output step: merging %s curated resources into spreadsheet, events.json, run report.",
+            "Output step: merging %s curated resources into MongoDB and writing run report.",
             len(resources),
         )
         merge_stats = write_output(resources)
@@ -355,7 +355,7 @@ def node_local_output(state: AgentState) -> AgentState:
         ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         return {
             "run_log_message": (
-                f"{ts} - save failed during spreadsheet write ({len(resources)} results): {exc}"
+                f"{ts} - save failed during event store write ({len(resources)} results): {exc}"
             ),
         }
 

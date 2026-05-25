@@ -477,8 +477,6 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
     Returns:
         (added, skipped_duplicate, removed_past) counts.
     """
-    out_dir = output_directory()
-    out_dir.mkdir(parents=True, exist_ok=True)
     db_name = active_db_name()
     today = local_today()
 
@@ -616,8 +614,6 @@ def write_output(resources: list[Resource]) -> MergeStats:
     """
     from agent.image_cache import cache_thumbnails, garbage_collect
 
-    out_dir = output_directory()
-    out_dir.mkdir(parents=True, exist_ok=True)
     db_name = active_db_name()
 
     added, skipped, removed_past = merge_and_write(resources)

@@ -1,11 +1,8 @@
 """Tests for JSON output consumed by the Angular web app."""
 
 from datetime import date, timedelta
-from pathlib import Path
 
-import pytest
-
-from agent.json_output import JSON_FILENAME, build_events_payload, render_events_json, write_events_json
+from agent.json_output import build_events_payload, render_events_json
 from agent.models import Resource
 
 
@@ -70,11 +67,3 @@ def test_render_is_valid_json() -> None:
 
     data = json.loads(text)
     assert data["events"][0]["eventName"] == "Act"
-
-
-def test_write_events_json_creates_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
-    r = _make_resource("Band A @ Venue X, Gold Coast", "https://example.com/a")
-    path = write_events_json([r])
-    assert path == tmp_path / JSON_FILENAME
-    assert path.exists()

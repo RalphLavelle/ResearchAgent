@@ -4,7 +4,7 @@
 # The Angular UI and Python scheduler run in ONE container so they share /app/data at runtime.
 #
 # Data folder note:
-#   - At runtime, reports / xlsx / events.json / images all live under /app/data/<topic>/.
+#   - At runtime, run reports and snapshot.json live under /app/data/<topic>/.
 #   - App Platform disk is EPHEMERAL (wiped on redeploy). Fine for short-term use; for long-term
 #     persistence add DigitalOcean Spaces and point the agent at object storage later.
 #
@@ -27,6 +27,8 @@ region: syd
 services:
   - name: web-and-agent
     dockerfile_path: Dockerfile
+    # Use Dockerfile CMD (/app/deploy/start.sh). Do NOT override run_command in the DO
+    # control panel — a prior seed script there caused deploy failures (HTTP 403).
     source_dir: /
     github:
       repo: RalphLavelle/ResearchAgent

@@ -1,6 +1,8 @@
-"""Serialise spreadsheet-backed events to JSON for the Angular web app.
+"""Build the events JSON payload for the Angular web app (API-only).
 
-Writes ``events.json`` alongside the spreadsheet (default ``data/events.json``).
+The Angular UI loads events via ``GET /api/<db>/events``; this module builds
+that response shape in memory. Nothing is written to ``OUTPUT_DIR`` here.
+
 Shape::
 
     {
@@ -26,10 +28,8 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 
-from agent import config
 from agent.display_time import display_timezone
 from agent.event_window import (
     format_event_weekday_date,
@@ -39,8 +39,6 @@ from agent.event_window import (
 from agent.models import Resource
 
 logger = logging.getLogger(__name__)
-
-JSON_FILENAME = "events.json"
 
 
 def build_events_payload(resources: list[Resource]) -> dict[str, Any]:
@@ -72,20 +70,6 @@ def build_events_payload(resources: list[Resource]) -> dict[str, Any]:
 
 
 def render_events_json(resources: list[Resource]) -> str:
-    """Return pretty-printed JSON for ``resources`` (spreadsheet order)."""
+    """Return pretty-printed JSON for ``resources`` (in-memory serialisation)."""
     payload = build_events_payload(resources)
     return json.dumps(payload, indent=2, ensure_ascii=False) + "\n"
-
-
-def write_events_json(resources: list[Resource]) -> Path:
-    """Write ``events.json`` to the configured output directory."""
-    out_dir = config.OUTPUT_DIR
-    out_dir.mkdir(parents=True, exist_ok=True)
-    path = out_dir / JSON_FILENAME
-    try:
-        path.write_text(render_events_json(resources), encoding="utf-8")
-        logger.info("Events JSON written: %s", path)
-    except Exception as exc:
-        logger.error("Failed to write events JSON to %s: %s", path, exc)
-        raise
-    return path
