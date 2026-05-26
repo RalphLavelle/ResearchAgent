@@ -1,0 +1,132 @@
+<section class="reports-panel" aria-labelledby="reports-heading">
+  <header class="reports-header">
+    <h2 id="reports-heading" class="reports-title">
+      <span aria-hidden="true">📋</span>
+      Pipeline run reports
+    </h2>
+    <p class="reports-intro">
+      Each row is one agent run — click a row to expand full search, crawl, and merge details.
+    </p>
+  </header>
+
+  @if (loading()) {
+    <p class="status-msg" role="status">Loading reports…</p>
+  }
+
+  @if (error(); as errMsg) {
+    <p class="status-msg error" role="alert">{{ errMsg }}</p>
+  }
+
+  @if (!loading() && !error()) {
+    @if (reports().length === 0) {
+      <div class="empty-state">
+        <p class="empty-title">No reports yet</p>
+        <p class="empty-hint">
+          Run the agent once — each completed pipeline pass saves a report to MongoDB.
+        </p>
+      </div>
+    } @else {
+      <div class="table-scroll">
+        <table class="reports-table">
+          <caption class="sr-only">
+            Research pipeline run reports for the active topic
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">datetime</th>
+              <th scope="col">searches</th>
+              <th scope="col">urls</th>
+              <th scope="col">changes</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (report of reports(); track report.id) {
+              <tr
+                class="report-row"
+                [class.report-row--expanded]="isExpanded(report.id)"
+                tabindex="0"
+                role="button"
+                [attr.aria-expanded]="isExpanded(report.id)"
+                [attr.aria-controls]="'report-detail-' + report.id"
+                (click)="toggleReport(report.id)"
+                (keydown)="onRowKeydown($event, report.id)"
+              >
+                <td class="report-cell report-cell--datetime">
+                  <time [dateTime]="report.datetime">
+                    {{ report.datetime | date: 'medium' }}
+                  </time>
+                </td>
+                <td class="report-cell">{{ searchesSummary(report.searches) }}</td>
+                <td class="report-cell">{{ urlsSummary(report.urls) }}</td>
+                <td class="report-cell">{{ changesSummary(report.changes) }}</td>
+              </tr>
+              @if (isExpanded(report.id)) {
+                <tr class="report-detail-row" [id]="'report-detail-' + report.id">
+                  <td colspan="4">
+                    <div class="report-detail">
+                      <section class="detail-block" aria-label="Searches detail">
+                        <h3 class="detail-block__title">searches</h3>
+                        @if (report.searches.length) {
+                          <ul class="detail-list">
+                            @for (query of report.searches; track query) {
+                              <li>{{ query }}</li>
+                            }
+                          </ul>
+                        } @else {
+                          <p class="detail-empty">No planner queries recorded.</p>
+                        }
+                      </section>
+
+                      <section class="detail-block" aria-label="Crawled URLs detail">
+                        <h3 class="detail-block__title">urls</h3>
+                        @if (urlHosts(report.urls).length) {
+                          @for (host of urlHosts(report.urls); track host) {
+                            <div class="url-group">
+                              <h4 class="url-group__host">{{ host }}</h4>
+                              <ul class="detail-list detail-list--urls">
+                                @for (page of report.urls[host]; track page) {
+                                  <li>
+                                    <a
+                                      [href]="page"
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      (click)="$event.stopPropagation()"
+                                    >
+                                      {{ page }}
+                                    </a>
+                                  </li>
+                                }
+                              </ul>
+                            </div>
+                          }
+                        } @else {
+                          <p class="detail-empty">No pages were crawled this run.</p>
+                        }
+                      </section>
+
+                      <section class="detail-block" aria-label="Event store changes detail">
+                        <h3 class="detail-block__title">changes</h3>
+                        @if (changeEntries(report.changes).length) {
+                          <dl class="changes-dl">
+                            @for (entry of changeEntries(report.changes); track entry[0]) {
+                              <div class="changes-dl__row">
+                                <dt>{{ entry[0] }}</dt>
+                                <dd>{{ entry[1] }}</dd>
+                              </div>
+                            }
+                          </dl>
+                        } @else {
+                          <p class="detail-empty">No merge statistics recorded.</p>
+                        }
+                      </section>
+                    </div>
+                  </td>
+                </tr>
+              }
+            }
+          </tbody>
+        </table>
+      </div>
+    }
+  }
+</section>

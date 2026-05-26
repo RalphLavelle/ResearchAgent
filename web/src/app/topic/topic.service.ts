@@ -56,6 +56,9 @@ export class TopicService {
   /** API URL for the active topic's events list. */
   readonly eventsApiUrl = computed(() => `/api/${this.active().db}/events`);
 
+  /** API URL for pipeline run reports. */
+  readonly reportsApiUrl = computed(() => `/api/${this.active().db}/reports`);
+
   constructor() {
     this.#http
       .get<TopicsRegistry>('topics/topics.json?t=' + Date.now())

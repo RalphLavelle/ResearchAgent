@@ -128,6 +128,7 @@ Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` comm
   |----------|---------|
   | `GET /api/{db}/events` | Event list for a topic (JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc`) |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
+  | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by the `/reports` page |
 
   `{db}` accepts either the topic id or the raw database name. Example for the default topic: `http://127.0.0.1:8765/api/bgc/events`.
 
@@ -155,7 +156,7 @@ npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Reports** in the nav (or `/reports`) to browse pipeline run history from MongoDB. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
 
 ## Behavior
 

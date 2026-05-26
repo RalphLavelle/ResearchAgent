@@ -16,6 +16,7 @@ from agent.json_output import build_events_payload
 from agent.image_store import fetch_image
 from agent.local_output import _row_to_resource
 from agent.mongodb import EVENTS_COLLECTION, get_database
+from agent.report_store import list_reports
 from agent.topics import load_topics
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,22 @@ async def get_events(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+async def get_reports(request: Request) -> JSONResponse:
+    db_key = request.path_params["db"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        limit_raw = request.query_params.get("limit", "100")
+        limit = max(1, min(500, int(limit_raw)))
+        return JSONResponse({"reports": list_reports(db_name, limit=limit)})
+    except ValueError:
+        return JSONResponse({"error": "Invalid limit query parameter"}, status_code=400)
+    except Exception as exc:
+        logger.exception("API reports error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 async def get_image(request: Request) -> Response:
     db_key = request.path_params["db"]
     image_id = request.path_params["image_id"]
@@ -90,6 +107,7 @@ def create_app() -> Starlette:
     return Starlette(
         routes=[
             Route("/api/{db}/events", get_events, methods=["GET"]),
+            Route("/api/{db}/reports", get_reports, methods=["GET"]),
             Route("/api/{db}/images/{image_id}", get_image, methods=["GET"]),
             Route("/health", lambda r: JSONResponse({"ok": True}), methods=["GET"]),
         ],

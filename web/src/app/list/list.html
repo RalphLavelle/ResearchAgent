@@ -1,15 +1,5 @@
 <section class="events-panel" aria-labelledby="events-heading">
-  <div class="toolbar">
-    <h2 id="events-heading" class="panel-title">
-      @if (!loading() && !error() && payload(); as data) {
-        <p class="generated-line">
-          <span aria-hidden="true">🎵</span>
-          Generated {{ data.generated | date: 'medium' }}
-        </p>
-      }
-    </h2>
-  </div>
-
+  
   @if (loading()) {
     <p class="status-msg" role="status">Loading the latest gigs…</p>
   }

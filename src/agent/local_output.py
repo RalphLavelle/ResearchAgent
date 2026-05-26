@@ -17,8 +17,8 @@ Key behaviours (Tasks 8, 9, 11, 13, 14):
   identical, the two entries are treated as the same event.  The longer act
   name is kept as the canonical name; the duplicate URL is added to Sources if
   from a different domain.
-- The single ``run_log.md`` is gone (Task 11). Each run now produces its own
-  ``Run_<AEST timestamp>.md`` file via ``run_report.write_run_report``.
+- The single ``run_log.md`` is gone (Task 11). Each run now appends a document to
+  the MongoDB ``reports`` collection via ``report_store.save_run_report``.
 """
 
 from __future__ import annotations
@@ -58,8 +58,8 @@ def active_db_name() -> str:
 class MergeStats:
     """How a single run changed the spreadsheet (Task 12 follow-up).
 
-    Captured by ``write_output`` and rendered as a footer section in each
-    per-run report file (see ``run_report.build_run_report``).
+    Captured by ``write_output`` and stored on each run report in MongoDB
+    (``report_store.save_run_report``).
 
     Attributes:
         added:           New rows inserted from the curator's resources.
@@ -604,8 +604,8 @@ def write_output(resources: list[Resource]) -> MergeStats:
 
     The Angular UI reads from the HTTP API backed by the same database.
 
-    Per-run logging (the ``Run_<AEST>.md`` markdown report) is written
-    separately by ``run_report.write_run_report`` from ``node_local_output``;
+    Per-run reports are written to MongoDB by ``report_store.save_run_report``
+    from ``node_local_output``;
     it consumes the returned ``MergeStats`` so each report can show a count
     of events added, skipped, pruned, exclusion-dropped, and de-duplicated.
 

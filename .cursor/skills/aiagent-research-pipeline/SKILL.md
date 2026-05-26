@@ -11,8 +11,8 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 
 ## Source of truth
 
-- **MongoDB** (database name = topic's ``db`` property in ``topics.json``) is the database. Collections: ``events`` (curated rows) and ``images`` (poster BSON blobs). The Angular app reads via ``GET /api/<db>/events`` and ``GET /api/<db>/images/<id>``.
-- **`Run_<AEST>.md`** (Task 11) is written once per real run by `run_report.write_run_report` from `node_local_output`. Three sections: *Searches* (planner queries), *Search and crawl* (`crawled_urls` from `node_crawl`, grouped by host), *Normalize* (curated `Resource` Pydantic models serialised as JSON, each with its source URL). The single append-only `run_log.md` is removed.
+- **MongoDB** (database name = topic's ``db`` property in ``topics.json``) is the database. Collections: ``events``, ``images``, ``reports``. The Angular app reads via ``GET /api/<db>/events``, ``GET /api/<db>/reports``, and ``GET /api/<db>/images/<id>``.
+- **Run reports** are stored in MongoDB (``reports`` collection) at the end of each pipeline run: ``datetime`` (UTC), ``searches``, ``urls`` (crawled pages grouped by host), and ``changes`` (merge stats).
 - **`data/snapshot.json`** fingerprints the **current run’s** resources for log messaging; Notion sync uses a fingerprint of the **full event store** (`canonical_fingerprint(all_resources)`).
 
 ## Topic vs engine
@@ -47,7 +47,7 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 
 ## Outputs
 
-- **Angular API**: `api.py` serves `GET /api/<db>/events` (camelCase payload via `json_output.build_events_payload`) and `GET /api/<db>/images/<id>`.
+- **Angular API**: `api.py` serves `GET /api/<db>/events`, `GET /api/<db>/reports`, and `GET /api/<db>/images/<id>`.
 - **Notion**: native table blocks; no inline images in cells (poster glyph pattern in `notion_output.py`).
 
 ## Config/env (do not overwrite `.env` without asking)
@@ -73,10 +73,10 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Nodes + LLM calls | `src/agent/graph_nodes.py` |
 | Structured output fallback | `src/agent/structured_output.py` |
 | Spreadsheet + dedup | `src/agent/local_output.py` |
-| MongoDB persistence | `src/agent/event_store.py`, `src/agent/image_store.py`, `src/agent/mongodb.py` |
+| MongoDB persistence | `src/agent/event_store.py`, `src/agent/image_store.py`, `src/agent/report_store.py`, `src/agent/mongodb.py` |
 | REST API for Angular | `src/agent/api.py` |
 | Legacy file migration | `src/agent/migrate_mongodb.py` |
-| Per-run markdown report | `src/agent/run_report.py` |
+| Per-run reports (MongoDB) | `src/agent/report_store.py` |
 | Events JSON for Angular | `src/agent/json_output.py` |
 | Notion API | `src/agent/notion_output.py` |
 | Crawl + image markers | `src/agent/site_crawl.py` |

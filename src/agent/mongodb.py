@@ -1,7 +1,7 @@
 """MongoDB connection helpers for topic-scoped databases.
 
 Each research topic uses the ``db`` property from ``topics.json`` as its
-database name. Collections: ``events`` (curated rows) and ``images`` (poster bytes).
+database name. Collections: ``events``, ``images`` (poster blobs), and ``reports``.
 """
 
 from __future__ import annotations
@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 EVENTS_COLLECTION = "events"
 IMAGES_COLLECTION = "images"
+REPORTS_COLLECTION = "reports"
 
 # Hostnames that are NOT valid Atlas cluster endpoints (common copy-paste mistakes).
 _INVALID_ATLAS_HOSTS = frozenset(

@@ -4,7 +4,7 @@
 # The Angular UI and Python scheduler run in ONE container so they share /app/data at runtime.
 #
 # Data folder note:
-#   - At runtime, run reports and snapshot.json live under /app/data/<topic>/.
+#   - At runtime, snapshot.json may still live under /app/data/<topic>/ (fingerprint only).
 #   - App Platform disk is EPHEMERAL (wiped on redeploy). Fine for short-term use; for long-term
 #     persistence add DigitalOcean Spaces and point the agent at object storage later.
 #

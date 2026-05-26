@@ -20,6 +20,7 @@ def mongodb_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
 
     client["test-db"]["events"].drop()
     client["test-db"]["images"].drop()
+    client["test-db"]["reports"].drop()
 
     yield
 

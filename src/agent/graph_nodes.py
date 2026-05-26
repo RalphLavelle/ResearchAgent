@@ -290,12 +290,11 @@ def node_local_output(state: AgentState) -> AgentState:
     2. Skip all file writes on dry-run.
     3. Merge new resources into MongoDB (events + images collections).
     4. Save the snapshot fingerprint.
-    5. Write a fresh ``Run_<AEST timestamp>.md`` markdown report capturing the
-       three LLM-driven steps in detail (Searches, Search and crawl, Normalize).
+    5. Save a structured run report to MongoDB (``reports`` collection).
     6. Optionally push the full event list to Notion.
     """
-    from agent.local_output import load_spreadsheet_resources, output_directory, write_output
-    from agent.run_report import write_run_report
+    from agent.local_output import active_db_name, load_spreadsheet_resources, write_output
+    from agent.report_store import save_run_report
 
     msg = build_run_log_message(state)
     dry = state.get("dry_run", False)
@@ -316,16 +315,15 @@ def node_local_output(state: AgentState) -> AgentState:
         save_snapshot(config.SNAPSHOT_PATH, fp, resources)
 
         try:
-            report_path = write_run_report(
-                output_directory(),
+            report_id = save_run_report(
+                active_db_name(),
                 queries=queries,
                 crawled_urls=crawled_urls,
-                resources=resources,
                 merge_stats=merge_stats,
             )
-            logger.info("Run report saved to %s", report_path.name)
+            logger.info("Run report saved (id=%s)", report_id)
         except Exception as report_exc:
-            logger.warning("Run report write failed (continuing): %s", report_exc)
+            logger.warning("Run report save failed (continuing): %s", report_exc)
 
         all_resources = load_spreadsheet_resources()
 
