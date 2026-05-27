@@ -12,9 +12,8 @@ from starlette.routing import Route
 
 from agent import config
 from agent.event_store import load_existing_rows
-from agent.json_output import build_events_payload
+from agent.json_output import build_events_payload_from_rows
 from agent.image_store import fetch_image
-from agent.local_output import _row_to_resource
 from agent.mongodb import EVENTS_COLLECTION, get_database
 from agent.report_store import list_reports
 from agent.topics import load_topics
@@ -45,25 +44,19 @@ async def get_events(request: Request) -> JSONResponse:
         return JSONResponse({"error": "Unknown topic"}, status_code=404)
     try:
         rows = load_existing_rows(db_name)
-        resources = [_row_to_resource(row) for row in rows.values()]
-        # Apply cached poster API URLs from event image_id fields.
         coll = get_database(db_name)[EVENTS_COLLECTION]
-        image_map = {
-            str(doc["_id"]): str(doc.get("image_id") or "")
-            for doc in coll.find({}, {"_id": 1, "image_id": 1})
-        }
         from agent.image_cache import api_image_url
 
-        enriched = []
-        for r in resources:
-            iid = image_map.get(r.id, "").strip()
-            if iid:
-                enriched.append(
-                    r.model_copy(update={"thumbnail_url": api_image_url(db_name, iid)})
-                )
-            else:
-                enriched.append(r)
-        payload: dict[str, Any] = build_events_payload(enriched)
+        thumbnail_urls: dict[str, str | None] = {}
+        for doc in coll.find({}, {"_id": 1, "image_id": 1}):
+            eid = str(doc["_id"])
+            iid = str(doc.get("image_id") or "").strip()
+            thumbnail_urls[eid] = api_image_url(db_name, iid) if iid else None
+
+        payload: dict[str, Any] = build_events_payload_from_rows(
+            rows,
+            thumbnail_urls=thumbnail_urls,
+        )
         return JSONResponse(payload)
     except Exception as exc:
         logger.exception("API events error for db=%s", db_name)

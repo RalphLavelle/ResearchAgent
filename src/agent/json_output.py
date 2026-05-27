@@ -11,10 +11,12 @@ Shape::
         {
           "eventName": "...",
           "venue": "...",
+          "location": "...",
           "date": "...",
           "url": "...",
           "summary": "...",
           "thumbnailUrl": "<url or null>",
+          "venueId": "<venues collection id or null>",
           "id": "<stable uuid — for keys, not shown in UI>"
         }
       ]
@@ -27,18 +29,79 @@ from __future__ import annotations
 
 import json
 import logging
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any
 
 from agent.display_time import display_timezone
+from agent.event_store import (
+    IDX_EVENT,
+    IDX_EVENT_ID,
+    IDX_LOCATION,
+    IDX_POSTER,
+    IDX_SUMMARY,
+    IDX_URL,
+    IDX_VENUE,
+    IDX_VENUE_ID,
+)
 from agent.event_window import (
     format_event_weekday_date,
     sort_resources_by_event_date_asc,
     split_title_parts,
 )
 from agent.models import Resource
+from agent.local_output import _row_date
 
 logger = logging.getLogger(__name__)
+
+
+def _event_item_from_row(
+    row: list,
+    *,
+    thumbnail_url: str | None = None,
+) -> dict[str, Any]:
+    """Build one API event object — ``venue`` is always a plain name string."""
+    act = str(row[IDX_EVENT] or "").strip() or "—"
+    venue_name = str(row[IDX_VENUE] or "").strip()
+    location = str(row[IDX_LOCATION] or "").strip()
+    raw_date = _row_date(row)
+    date_label = format_event_weekday_date(raw_date.isoformat() if raw_date else "")
+    eid = str(row[IDX_EVENT_ID] or "").strip()
+    thumb = (thumbnail_url or str(row[IDX_POSTER] or "")).strip()
+    venue_id = str(row[IDX_VENUE_ID] or "").strip() if len(row) > IDX_VENUE_ID else ""
+
+    return {
+        "eventName": act,
+        "venue": venue_name,
+        "location": location,
+        "date": date_label,
+        "url": str(row[IDX_URL] or "").strip(),
+        "summary": str(row[IDX_SUMMARY] or "").strip(),
+        "thumbnailUrl": thumb if thumb else None,
+        "venueId": venue_id or None,
+        "id": eid,
+    }
+
+
+def build_events_payload_from_rows(
+    rows: dict[str, list],
+    *,
+    thumbnail_urls: dict[str, str | None] | None = None,
+) -> dict[str, Any]:
+    """Build the API payload directly from MongoDB rows (canonical venue names)."""
+    thumb_map = thumbnail_urls or {}
+    ordered = sorted(
+        rows.values(),
+        key=lambda row: (_row_date(row) is None, _row_date(row) or date.max),
+    )
+    events = [
+        _event_item_from_row(row, thumbnail_url=thumb_map.get(str(row[IDX_EVENT_ID] or "")))
+        for row in ordered
+    ]
+    now = datetime.now(display_timezone())
+    return {
+        "generated": now.isoformat(timespec="seconds"),
+        "events": events,
+    }
 
 
 def build_events_payload(resources: list[Resource]) -> dict[str, Any]:
@@ -47,16 +110,15 @@ def build_events_payload(resources: list[Resource]) -> dict[str, Any]:
     events: list[dict[str, Any]] = []
     for r in ordered:
         act, venue, location = split_title_parts(r.title or "")
-        venue_str = ", ".join(filter(None, [venue, location]))
-        thumb = (r.thumbnail_url or "").strip()
         events.append(
             {
                 "eventName": act or "—",
-                "venue": venue_str,
+                "venue": venue,
+                "location": location,
                 "date": format_event_weekday_date(r.date),
                 "url": (r.url or "").strip(),
                 "summary": (r.summary or "").strip(),
-                "thumbnailUrl": thumb if thumb else None,
+                "thumbnailUrl": thumb if (thumb := (r.thumbnail_url or "").strip()) else None,
                 # Stable key for clients; not shown in the Line-up table UI.
                 "id": r.id,
             }

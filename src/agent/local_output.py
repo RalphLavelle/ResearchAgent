@@ -32,8 +32,10 @@ from urllib.parse import urlparse
 from uuid import uuid4
 
 from agent import config
+from agent.event_store import IDX_VENUE_ID as _DB_IDX_VENUE_ID
 from agent.event_store import load_existing_rows as _db_load_rows
 from agent.event_store import save_existing_rows as _db_save_rows
+from agent import venue_store
 from agent.display_time import format_generated_timestamp
 from agent.enrich import poster_quality_score
 from agent.event_window import (
@@ -101,6 +103,7 @@ _IDX_POSTER   = 6
 _IDX_SUMMARY  = 7
 _IDX_ADDED    = 8
 _IDX_EVENT_ID = 9
+_IDX_VENUE_ID = _DB_IDX_VENUE_ID
 
 # Column widths (0 = hide the column)
 _COL_WIDTHS = [30, 22, 16, 18, 55, 45, 0, 40, 20, 0]
@@ -211,10 +214,44 @@ def _acts_partially_match(act1: str, act2: str) -> bool:
     return a in b or b in a
 
 
+def _row_venue_id(row: list) -> str:
+    """Venue document id when the row has been linked to the venues collection."""
+    if len(row) <= _IDX_VENUE_ID:
+        return ""
+    return str(row[_IDX_VENUE_ID] or "").strip()
+
+
+def _resolve_venue_for_row(db_name: str, row: list) -> None:
+    """Ensure the row carries canonical venue text and a venues-collection link."""
+    raw = str(row[_IDX_VENUE] or "").strip()
+    if not raw:
+        if len(row) <= _IDX_VENUE_ID:
+            row.append("")
+        else:
+            row[_IDX_VENUE_ID] = ""
+        return
+    venue_id, canonical = venue_store.resolve_or_create(db_name, raw)
+    row[_IDX_VENUE] = canonical
+    if len(row) <= _IDX_VENUE_ID:
+        row.append(venue_id)
+    else:
+        row[_IDX_VENUE_ID] = venue_id
+
+
+def _venues_match_for_dedup(row: list, venue_id: str, venue_name: str) -> bool:
+    """True when *row* and the incoming venue refer to the same place."""
+    row_id = _row_venue_id(row)
+    if row_id and venue_id:
+        return row_id == venue_id
+    row_name = str(row[_IDX_VENUE] or "").strip().lower()
+    return row_name == venue_name.strip().lower()
+
+
 def _find_partial_act_match(
     new_act: str,
     new_date: date,
-    new_venue: str,
+    venue_id: str,
+    venue_name: str,
     existing: dict[str, list],
 ) -> str | None:
     """Scan existing rows for a partial act-name match on the same venue + date.
@@ -225,11 +262,10 @@ def _find_partial_act_match(
 
     Returns the row's **Event ID** dict key, or None.
     """
-    new_venue_norm = new_venue.strip().lower()
     for row_key, row in existing.items():
         if _row_date(row) != new_date:
             continue
-        if str(row[_IDX_VENUE] or "").strip().lower() != new_venue_norm:
+        if not _venues_match_for_dedup(row, venue_id, venue_name):
             continue
         if _acts_partially_match(new_act, str(row[_IDX_EVENT] or "")):
             return row_key
@@ -253,14 +289,18 @@ def _already_have_url_and_show(
 # ── Row ↔ Resource conversion ─────────────────────────────────────────────────
 
 
-def _resource_to_row(r: Resource) -> list:
+def _resource_to_row(r: Resource, *, db_name: str | None = None) -> list:
     """Convert a Resource to a list matching ``_COLS`` order."""
     act, venue, location = split_title_parts(r.title or "")
     raw_date = parse_event_sort_date(r.date)
     rid = (r.id or "").strip() or str(uuid4())
+    venue_id = ""
+    canonical_venue = venue
+    if db_name and venue.strip():
+        venue_id, canonical_venue = venue_store.resolve_or_create(db_name, venue)
     return [
         act or "—",                           # Event
-        venue,                                # Venue
+        canonical_venue,                      # Venue (canonical)
         location,                             # Location
         raw_date,                             # Date (Excel date cell)
         (r.url or "").strip(),                # URL
@@ -269,6 +309,7 @@ def _resource_to_row(r: Resource) -> list:
         (r.summary or "").strip(),            # Summary
         format_generated_timestamp(),         # Added
         rid,                                  # Event ID (hidden)
+        venue_id,                             # Venue ID (hidden)
     ]
 
 
@@ -367,6 +408,11 @@ def _merge_cluster_rows(pairs: list[tuple[str, list]]) -> tuple[str, list]:
     merged[_IDX_EVENT] = max((str(r[_IDX_EVENT] or "") for r in rows), key=len)
     merged[_IDX_VENUE] = max((str(r[_IDX_VENUE] or "") for r in rows), key=len)
     merged[_IDX_LOCATION] = max((str(r[_IDX_LOCATION] or "") for r in rows), key=len)
+    venue_ids = [_row_venue_id(r) for r in rows if _row_venue_id(r)]
+    if venue_ids:
+        merged[_IDX_VENUE_ID] = venue_ids[0]
+    elif len(merged) > _IDX_VENUE_ID:
+        merged[_IDX_VENUE_ID] = ""
 
     summaries = [
         str(r[_IDX_SUMMARY] or "").strip()
@@ -481,6 +527,9 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
     today = local_today()
 
     existing = _load_existing_rows(db_name)
+    for row in existing.values():
+        if not _row_venue_id(row) and str(row[_IDX_VENUE] or "").strip():
+            _resolve_venue_for_row(db_name, row)
 
     # Remove past events
     before = len(existing)
@@ -505,6 +554,10 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
         # Decompose title once — used by several checks below.
         act, venue, _location = split_title_parts(r.title or "")
         r_date = parse_event_sort_date(r.date)
+        venue_id = ""
+        canonical_venue = venue
+        if venue.strip():
+            venue_id, canonical_venue = venue_store.resolve_or_create(db_name, venue)
 
         dk = _dedup_key_from_resource(r)
         new_poster = (r.thumbnail_url or "").strip() or None
@@ -547,7 +600,9 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
         #     venue + date are identical.  Keep the longer (more informative)
         #     act name as the canonical one.
         if act and r_date:
-            partial_key = _find_partial_act_match(act, r_date, venue, existing)
+            partial_key = _find_partial_act_match(
+                act, r_date, venue_id, canonical_venue, existing
+            )
             if partial_key:
                 existing_act = str(existing[partial_key][_IDX_EVENT] or "")
                 if len(act) > len(existing_act):
@@ -572,7 +627,7 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
                 continue
 
         # (d) Genuinely new event
-        new_row = _resource_to_row(r)
+        new_row = _resource_to_row(r, db_name=db_name)
         sid = str(new_row[_IDX_EVENT_ID] or "").strip()
         if not sid:
             sid = str(uuid4())

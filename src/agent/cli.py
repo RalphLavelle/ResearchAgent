@@ -41,6 +41,11 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not delete legacy files after migration.",
     )
 
+    sub.add_parser(
+        "migrate-venues",
+        help="Link existing event venue strings to the venues collection.",
+    )
+
     p_api = sub.add_parser("api", help="Run the HTTP API for the Angular app.")
     p_api.add_argument("--host", default="127.0.0.1")
     p_api.add_argument("--port", type=int, default=8765)
@@ -96,6 +101,28 @@ def main(argv: list[str] | None = None) -> int:
                 f"{topic_id}: {stats['events']} events, "
                 f"{stats['images']} images, "
                 f"{stats['files_removed']} legacy file(s) removed"
+            )
+        return 0
+
+    if args.command == "migrate-venues":
+        from agent.migrate_venues import migrate_all_topic_venues
+        from agent.mongodb import validate_mongodb_uri
+
+        try:
+            validate_mongodb_uri()
+        except ValueError as exc:
+            logger.error("%s", exc)
+            return 2
+        try:
+            results = migrate_all_topic_venues()
+        except Exception as exc:
+            logger.error("Venue migration failed: %s", exc)
+            return 1
+        for topic_id, stats in results.items():
+            print(
+                f"{topic_id}: {stats['events_linked']} event(s) linked, "
+                f"{stats['venues_total']} venue(s) total "
+                f"({stats['venues_created']} new)"
             )
         return 0
 

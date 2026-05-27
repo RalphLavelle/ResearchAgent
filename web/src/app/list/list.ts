@@ -1,9 +1,10 @@
-import { DatePipe, NgOptimizedImage } from '@angular/common';
+import { NgOptimizedImage } from '@angular/common';
 import { HttpClient } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
   DestroyRef,
+  computed,
   effect,
   inject,
   signal,
@@ -17,7 +18,12 @@ export interface ResearchEvent {
   /** Stable event id — not displayed; use for `track` / poster error tracking. */
   id: string;
   eventName: string;
+  /** Canonical venue name only — never the nested MongoDB `{ name, id }` object. */
   venue: string;
+  /** Suburb or city shown beside the venue name in the UI. */
+  location: string;
+  /** Venues-collection id — used for filtering; not shown in the UI. */
+  venueId: string | null;
   date: string;
   url: string;
   summary: string;
@@ -32,7 +38,7 @@ export interface EventsPayload {
 
 @Component({
   selector: 'app-list',
-  imports: [DatePipe, NgOptimizedImage],
+  imports: [NgOptimizedImage],
   templateUrl: './list.html',
   styleUrl: './list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -49,6 +55,21 @@ export class ListComponent {
    * the 🎸 placeholder instead of a broken-image icon.
    */
   protected readonly posterErrors = signal<ReadonlySet<string>>(new Set());
+  /** When set, only events for this venue filter key are shown. Click again to clear. */
+  protected readonly activeVenueFilterKey = signal<string | null>(null);
+
+  /** Events after optional venue filter is applied. */
+  protected readonly visibleEvents = computed(() => {
+    const data = this.payload();
+    if (!data) {
+      return [] as ResearchEvent[];
+    }
+    const filterKey = this.activeVenueFilterKey();
+    if (!filterKey) {
+      return data.events;
+    }
+    return data.events.filter((ev) => this.venueFilterKey(ev) === filterKey);
+  });
 
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
@@ -77,6 +98,36 @@ export class ListComponent {
     return url.startsWith('/') ? url : `/${url}`;
   }
 
+  /** Toggle the venue filter on or off for one event row. */
+  protected toggleVenueFilter(ev: ResearchEvent): void {
+    const key = this.venueFilterKey(ev);
+    if (!key) {
+      return;
+    }
+    this.activeVenueFilterKey.update((current) => (current === key ? null : key));
+  }
+
+  /** Stable filter key — prefers venues-collection id, falls back to canonical name. */
+  protected venueFilterKey(ev: ResearchEvent): string | null {
+    const id = (ev.venueId ?? '').trim();
+    if (id) {
+      return `id:${id}`;
+    }
+    const name = ev.venue.trim().toLowerCase();
+    return name ? `name:${name}` : null;
+  }
+
+  /** Extract a plain venue name even if the API ever sends a nested object. */
+  #venueName(venue: ResearchEvent['venue'] | { name?: string }): string {
+    if (typeof venue === 'string') {
+      return venue.trim();
+    }
+    if (venue && typeof venue === 'object' && 'name' in venue) {
+      return String(venue.name ?? '').trim();
+    }
+    return '';
+  }
+
   /** Hook for the poster `<img>`'s `(error)` event. */
   protected onPosterError(eventId: string): void {
     this.posterErrors.update((current) => {
@@ -100,7 +151,11 @@ export class ListComponent {
       .pipe(takeUntilDestroyed(this.#destroyRef))
       .subscribe({
         next: (data) => {
-          this.payload.set(data);
+          this.activeVenueFilterKey.set(null);
+          this.payload.set({
+            ...data,
+            events: data.events.map((ev) => this.#normalizeEvent(ev)),
+          });
           this.loading.set(false);
         },
         error: () => {
@@ -111,5 +166,33 @@ export class ListComponent {
           this.loading.set(false);
         },
       });
+  }
+
+  /** Coerce API rows so ``venue`` is always a plain name string in the UI. */
+  #normalizeEvent(
+    raw: ResearchEvent & {
+      venue?: unknown;
+      venueId?: unknown;
+      venue_id?: unknown;
+    },
+  ): ResearchEvent {
+    const venueName = this.#venueName(
+      raw.venue as ResearchEvent['venue'] | { name?: string; id?: string },
+    );
+    const nestedVenue =
+      raw.venue && typeof raw.venue === 'object' && !Array.isArray(raw.venue)
+        ? (raw.venue as { name?: string; id?: string })
+        : null;
+
+    const venueIdRaw = raw.venueId ?? raw.venue_id ?? nestedVenue?.id;
+    const venueId =
+      typeof venueIdRaw === 'string' && venueIdRaw.trim() ? venueIdRaw.trim() : null;
+
+    return {
+      ...raw,
+      venue: venueName || String(nestedVenue?.name ?? '').trim(),
+      location: String(raw.location ?? '').trim(),
+      venueId,
+    };
   }
 }

@@ -8,4 +8,4 @@ data/
 credentials.json
 *-service-account*.json
 service-account.json
-docs/archive
+_archive/

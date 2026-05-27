@@ -17,10 +17,15 @@
         </p>
       </div>
     } @else {
+      @if (activeVenueFilterKey()) {
+        <p class="venue-filter-hint" role="status">
+          Showing one venue — click its button again to see every gig.
+        </p>
+      }
       <div class="table-scroll">
         <div class="event-list" role="list" aria-label="Upcoming events">
-          @for (ev of data.events; track ev.id; let i = $index) {
-            @let showDate = i === 0 || data.events[i - 1].date !== ev.date;
+          @for (ev of visibleEvents(); track ev.id; let i = $index) {
+            @let showDate = i === 0 || visibleEvents()[i - 1].date !== ev.date;
             @if (showDate) {
               <div class="date-row" role="presentation">
                 <span class="date-row__label">{{ ev.date }}</span>
@@ -70,7 +75,23 @@
                     }
                   </div>
                   @if (ev.venue) {
-                    <p class="event-venue">{{ ev.venue }}</p>
+                    <div class="event-venue-row">
+                      @if (ev.venueId) {
+                        <input type="hidden" [value]="ev.venueId" />
+                      }
+                      <button
+                        type="button"
+                        class="venue-btn"
+                        [class.venue-btn--active]="activeVenueFilterKey() === venueFilterKey(ev)"
+                        [attr.aria-pressed]="activeVenueFilterKey() === venueFilterKey(ev)"
+                        (click)="toggleVenueFilter(ev)"
+                      >
+                        {{ ev.venue }}
+                      </button>
+                      @if (ev.location) {
+                        <span class="event-location">{{ ev.location }}</span>
+                      }
+                    </div>
                   }
                 </div>
               </div>

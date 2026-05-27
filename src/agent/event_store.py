@@ -26,6 +26,7 @@ IDX_POSTER = 6
 IDX_SUMMARY = 7
 IDX_ADDED = 8
 IDX_EVENT_ID = 9
+IDX_VENUE_ID = 10
 
 
 def _parse_date(value: Any) -> date | None:
@@ -56,12 +57,37 @@ def _sources_to_mongo(raw: str) -> list[str]:
     return [u.strip() for u in (raw or "").split("\n") if u.strip()]
 
 
+def venue_name_from_doc(doc: dict[str, Any]) -> str:
+    """Read canonical venue name from nested or legacy flat event documents."""
+    venue = doc.get("venue")
+    if isinstance(venue, dict):
+        return str(venue.get("name") or "").strip()
+    return str(venue or "").strip()
+
+
+def venue_id_from_doc(doc: dict[str, Any]) -> str:
+    """Read venues-collection id from nested or legacy flat event documents."""
+    venue = doc.get("venue")
+    if isinstance(venue, dict):
+        return str(venue.get("id") or "").strip()
+    return str(doc.get("venue_id") or "").strip()
+
+
+def venue_to_mongo(name: str, venue_id: str) -> dict[str, str] | None:
+    """Build the nested ``venue`` subdocument stored on event documents."""
+    canonical = (name or "").strip()
+    vid = (venue_id or "").strip()
+    if not canonical and not vid:
+        return None
+    return {"name": canonical, "id": vid}
+
+
 def doc_to_row(doc: dict[str, Any]) -> list:
     """Convert a MongoDB document to a spreadsheet-style row list."""
     eid = str(doc.get("_id") or doc.get("event_id") or "").strip() or str(uuid4())
-    return [
+    row = [
         doc.get("event") or "—",
-        doc.get("venue") or "",
+        venue_name_from_doc(doc),
         doc.get("location") or "",
         _parse_date(doc.get("date")),
         str(doc.get("url") or "").strip(),
@@ -71,16 +97,19 @@ def doc_to_row(doc: dict[str, Any]) -> list:
         str(doc.get("added") or "").strip(),
         eid,
     ]
+    row.append(venue_id_from_doc(doc))
+    return row
 
 
 def row_to_doc(row: list) -> dict[str, Any]:
     """Convert a spreadsheet-style row to a MongoDB document."""
     eid = str(row[IDX_EVENT_ID] or "").strip() or str(uuid4())
     d = _parse_date(row[IDX_DATE] if len(row) > IDX_DATE else None)
-    return {
+    venue_name = str(row[IDX_VENUE] or "").strip()
+    venue_id = str(row[IDX_VENUE_ID] or "").strip() if len(row) > IDX_VENUE_ID else ""
+    doc: dict[str, Any] = {
         "_id": eid,
         "event": str(row[IDX_EVENT] or "").strip() or "—",
-        "venue": str(row[IDX_VENUE] or "").strip(),
         "location": str(row[IDX_LOCATION] or "").strip(),
         "date": d.isoformat() if d else None,
         "url": str(row[IDX_URL] or "").strip(),
@@ -89,6 +118,10 @@ def row_to_doc(row: list) -> dict[str, Any]:
         "summary": str(row[IDX_SUMMARY] or "").strip(),
         "added": str(row[IDX_ADDED] or "").strip(),
     }
+    venue_doc = venue_to_mongo(venue_name, venue_id)
+    if venue_doc is not None:
+        doc["venue"] = venue_doc
+    return doc
 
 
 def load_existing_rows(db_name: str) -> dict[str, list]:

@@ -1,7 +1,8 @@
 """MongoDB connection helpers for topic-scoped databases.
 
 Each research topic uses the ``db`` property from ``topics.json`` as its
-database name. Collections: ``events``, ``images`` (poster blobs), and ``reports``.
+database name. Collections: ``events``, ``venues``, ``images`` (poster blobs),
+and ``reports``.
 """
 
 from __future__ import annotations
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
     from pymongo.mongo_client import MongoClient
 
 EVENTS_COLLECTION = "events"
+VENUES_COLLECTION = "venues"
 IMAGES_COLLECTION = "images"
 REPORTS_COLLECTION = "reports"
 

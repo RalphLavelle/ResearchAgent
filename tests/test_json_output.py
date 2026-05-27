@@ -40,8 +40,9 @@ def test_event_fields_match_frontend_contract() -> None:
     )
     ev = build_events_payload([r])["events"][0]
     assert ev["eventName"] == "Band A"
-    assert ev["venue"] == "Venue X, Gold Coast"
-    assert "Gold Coast" in ev["venue"]
+    assert ev["venue"] == "Venue X"
+    assert ev["location"] == "Gold Coast"
+    assert "Gold Coast" in ev["location"]
     assert ev["url"] == "https://example.com/a"
     assert ev["summary"] == "Great lineup."
     assert ev["thumbnailUrl"] == "https://example.com/p.jpg"

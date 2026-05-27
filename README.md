@@ -132,6 +132,14 @@ Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` comm
 
   `{db}` accepts either the topic id or the raw database name. Example for the default topic: `http://127.0.0.1:8765/api/bgc/events`.
 
+- **Venue migration** (link existing event venue strings to the `venues` collection):
+
+  ```powershell
+  .\venv\Scripts\python.exe -m agent migrate-venues
+  ```
+
+  Each topic database gets a `venues` collection (`name`, `aliases`). Events store a nested `venue` document `{ name, id }` linking to that collection so the UI does not need a join. New pipeline runs resolve venues automatically; add aliases manually in MongoDB when the same place appears under different labels (e.g. `The Tivoli Theatre` with alias `Tivoli`).
+
 ## Windows Task Scheduler (start at logon)
 
 - Program: `...\venv\Scripts\python.exe`
