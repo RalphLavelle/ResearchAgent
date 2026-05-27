@@ -1,64 +1,44 @@
 <article class="about">
-  <h1 class="about__title">How this site works</h1>
+  <h1 class="about__title">We use AI!</h1>
   <p class="about__intro">
-    This page is a friendly front-end for a small
-    <strong>research agent</strong> that hunts for upcoming live music listings. The heavy lifting is
-    done in Python; <strong>large language models (LLMs)</strong> help plan searches and turn messy
-    web pages into neat rows you can browse here.
+    In order to find the events it lists here this website uses a large language model (LLM) in a
+    couple of ways. LLMs are one type of AI, of which ChatGPT is probably the most famous. So how does
+    it work?
   </p>
 
-  <section class="about__section" aria-labelledby="about-pipeline">
-    <h2 id="about-pipeline" class="about__h2">🎛️ The pipeline in plain English</h2>
-    <ol class="about__list">
-      <li>
-        <strong>Plan.</strong> An LLM suggests search queries from your topic configuration (venues,
-        locations, date window — all driven by config, not hard-coded in the app).
-      </li>
-      <li>
-        <strong>Search &amp; crawl.</strong> The agent runs those queries, fetches candidate pages,
-        and extracts text (and clues like images) for the next step.
-      </li>
-      <li>
-        <strong>Curate.</strong> Another structured LLM pass reads the noisy text and fills in a
-        spreadsheet-style row: act, venue, date, link, short summary, poster URL, and more. The goal
-        is <em>structured data you can trust</em>, not a wall of prose.
-      </li>
-      <li>
-        <strong>Merge &amp; de-duplicate.</strong> Deterministic code merges new finds with the
-        on-disk spreadsheet, drops past gigs, and folds duplicate listings so you don’t see the same
-        show three times.
-      </li>
-      <li>
-        <strong>Enrich &amp; cache.</strong> Thumbnails are scored and cached locally when possible,
-        so your browser loads posters from this site instead of fragile hotlinks.
-      </li>
-      <li>
-        <strong>Publish.</strong> The same spreadsheet-backed snapshot powers this Angular list (via
-        <code>events.json</code>) and optional exports such as Notion.
-      </li>
-    </ol>
-  </section>
-
-  <section class="about__section" aria-labelledby="about-llms">
-    <h2 id="about-llms" class="about__h2">🤖 Where LLMs fit (and where they don’t)</h2>
+  <section class="about__section" aria-labelledby="about-how">
+    <h2 id="about-how" class="sr-only">How the agent uses AI</h2>
     <p>
-      LLMs are great at turning unstructured blurbs into fields and at brainstorming queries — they
-      are <em>not</em> a database of facts. This project keeps them on a short leash: outputs are
-      validated, dates are checked against a window, and persistence is always the spreadsheet/JSON,
-      not “whatever the model said last.”
+      Every hour or so, we use an LLM to come up with variations on the question &lsquo;What musical
+      events are on in the next 30 days in Brisbane and the Gold Coast?&rsquo; Being an incredibly
+      expensive piece of software the LLM actually knows about these locations and can come up with
+      variations of the locations and the words &lsquo;music events&rsquo;, like &lsquo;gigs&rsquo;,
+      &lsquo;What&rsquo;s on in Fortitude Valley?&rsquo;, &lsquo;concerts&rsquo;, etc. The queries it
+      generates never quite repeat themselves so over time the search results the app gets back finds
+      a very broad range of websites. Yes you could do this without an LLM but it would be like
+      playing Voodoo Chile on a ukulele.
     </p>
     <p>
-      You can run against cloud OpenAI or a local OpenAI-compatible stack; the UI you’re reading
-      doesn’t need API keys — it only reads the published snapshot.
+      Second, as anyone who has ever tried parsing, or &lsquo;scraping&rsquo;, a website can tell you,
+      that&rsquo;s fraught with fragility and frustration. Ordinary websites, such as the ones that
+      have gig listings, are not particularly set up to be easily read by machines. That&rsquo;s where
+      the LLM comes in again: it&rsquo;s good at turning messy data into data you can use. When the
+      search terms we generated find results that look promising we send the pages to the LLM which
+      picks out individual gigs (and venues, images, dates, etc.) when it finds them. If you
+      didn&rsquo;t have an LLM you&rsquo;d better have a large budget and a lot of patience.
     </p>
-  </section>
-
-  <section class="about__section" aria-labelledby="about-you">
-    <h2 id="about-you" class="about__h2">🎸 What you’re looking at</h2>
     <p>
-      The event list is a read-only view of the latest merged data. Refresh or re-run the pipeline
-      when organisers post new shows — the agent does the busywork so this page stays current without
-      manual copy-paste.
+      Lastly, a lot of gigs show up on more than one web page, especially for the big bands. The
+      problem of duplicates is a well-known one in this situation. &lsquo;Powderfinger live at the
+      Tivoli&rsquo; is obviously the same gig as &lsquo;The Tivoli Theatre, Fortitude Valley, proudly
+      presents&hellip;Powderfinger!&rsquo;. Once again, our trusty LLM comes to the rescue and decides
+      that there are not in fact two bands, both called Powderfinger, playing in the same theatre on
+      the same night. Which is a shame, of course, but that&rsquo;s just how it is.
+    </p>
+    <p>
+      So there you have it. AI in the verse, and AI in the chorus. At the end of the day, though, the
+      only thing that matters is that we find all the gigs on in Brisbane and the Gold Coast that are
+      out there on the web.
     </p>
   </section>
 

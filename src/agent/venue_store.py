@@ -17,8 +17,18 @@ logger = logging.getLogger(__name__)
 
 
 def normalize_venue_key(text: str) -> str:
-    """Lowercase key used for name/alias lookups."""
+    """Lowercase key used for case-insensitive name/alias comparisons."""
     return " ".join((text or "").strip().lower().split())
+
+
+def _matches_key(doc: dict[str, Any], key: str) -> bool:
+    """True when *key* matches the venue canonical name or any alias."""
+    if normalize_venue_key(str(doc.get("name") or "")) == key:
+        return True
+    for alias in doc.get("aliases") or []:
+        if normalize_venue_key(str(alias)) == key:
+            return True
+    return False
 
 
 def find_by_name_or_alias(db_name: str, raw_text: str) -> dict[str, Any] | None:
@@ -27,14 +37,10 @@ def find_by_name_or_alias(db_name: str, raw_text: str) -> dict[str, Any] | None:
     if not key:
         return None
     coll = get_database(db_name)[VENUES_COLLECTION]
-    return coll.find_one(
-        {
-            "$or": [
-                {"name_key": key},
-                {"alias_keys": key},
-            ]
-        }
-    )
+    for doc in coll.find():
+        if _matches_key(doc, key):
+            return doc
+    return None
 
 
 def create_venue(db_name: str, name: str) -> dict[str, Any]:
@@ -42,13 +48,10 @@ def create_venue(db_name: str, name: str) -> dict[str, Any]:
     canonical = (name or "").strip()
     if not canonical:
         raise ValueError("Venue name cannot be empty.")
-    key = normalize_venue_key(canonical)
     doc = {
         "_id": str(uuid4()),
         "name": canonical,
-        "name_key": key,
         "aliases": [],
-        "alias_keys": [],
     }
     get_database(db_name)[VENUES_COLLECTION].insert_one(doc)
     logger.debug("Created venue %r → id=%s", canonical, doc["_id"])
@@ -88,16 +91,19 @@ def add_alias(db_name: str, venue_id: str, alias: str) -> bool:
     doc = coll.find_one({"_id": venue_id})
     if not doc:
         return False
-    if alias_key == normalize_venue_key(str(doc.get("name") or "")):
-        return False
-    alias_keys = list(doc.get("alias_keys") or [])
-    if alias_key in alias_keys:
+    if _matches_key(doc, alias_key):
         return False
     aliases = list(doc.get("aliases") or [])
     aliases.append(alias_text)
-    alias_keys.append(alias_key)
-    coll.update_one(
-        {"_id": venue_id},
-        {"$set": {"aliases": aliases, "alias_keys": alias_keys}},
-    )
+    coll.update_one({"_id": venue_id}, {"$set": {"aliases": aliases}})
     return True
+
+
+def strip_lookup_keys(db_name: str) -> int:
+    """Remove legacy ``name_key`` / ``alias_keys`` fields from venue documents."""
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    result = coll.update_many(
+        {},
+        {"$unset": {"name_key": "", "alias_keys": ""}},
+    )
+    return int(result.modified_count)

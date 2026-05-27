@@ -122,7 +122,8 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 f"{topic_id}: {stats['events_linked']} event(s) linked, "
                 f"{stats['venues_total']} venue(s) total "
-                f"({stats['venues_created']} new)"
+                f"({stats['venues_created']} new, "
+                f"{stats['lookup_keys_removed']} legacy key field(s) removed)"
             )
         return 0
 

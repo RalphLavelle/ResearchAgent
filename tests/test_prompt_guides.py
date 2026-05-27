@@ -18,6 +18,7 @@ def test_load_prompt_guides_from_repo_topic() -> None:
     assert guides.resource_label_plural == "gigs and concerts"
     assert "Gold Coast first" in guides.planner_date_suffix
     assert "Gold Coast balance" in guides.curator_date_suffix
+    assert len(guides.planner_query_angles) >= 5
 
 
 def test_event_window_uses_topic_suffix() -> None:

@@ -102,3 +102,25 @@ def list_reports(db_name: str, *, limit: int = 100) -> list[dict[str, Any]]:
     coll = get_database(db_name)[REPORTS_COLLECTION]
     cursor = coll.find().sort("datetime", -1).limit(max(1, limit))
     return [_serialize_report(doc) for doc in cursor]
+
+
+def recent_search_queries(db_name: str, *, limit: int = 30) -> list[str]:
+    """Distinct search strings from recent run reports, preserving newest-first order."""
+    if limit <= 0:
+        return []
+    seen: set[str] = set()
+    out: list[str] = []
+    for report in list_reports(db_name, limit=200):
+        searches = list(report.get("searches") or [])
+        for query in reversed(searches):
+            text = str(query).strip()
+            if not text:
+                continue
+            key = text.lower()
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(text)
+            if len(out) >= limit:
+                return out
+    return out

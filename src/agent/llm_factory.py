@@ -47,6 +47,33 @@ def build_chat_llm() -> ChatOpenAI:
     )
 
 
+def build_planner_llm() -> ChatOpenAI:
+    """Chat client for query planning — higher temperature for search diversity."""
+    temperature = config.PLANNER_TEMPERATURE
+    if config.OPENAI_ENABLED:
+        return ChatOpenAI(
+            model=config.OPENAI_MODEL,
+            temperature=temperature,
+            api_key=config.OPENAI_API_KEY.strip() or None,
+        )
+
+    if config.OLLAMA_ENABLED:
+        kwargs: dict[str, Any] = {
+            "model": config.OLLAMA_MODEL,
+            "temperature": temperature,
+            "api_key": config.OLLAMA_API_KEY,
+            "base_url": config.OLLAMA_BASE_URL,
+        }
+        extra = _ollama_extra_body_from_config()
+        if extra:
+            kwargs["extra_body"] = extra
+        return ChatOpenAI(**kwargs)
+
+    raise RuntimeError(
+        "No LLM backend enabled. Set OPENAI_ENABLED=true or OLLAMA_ENABLED=true in .env."
+    )
+
+
 def _ollama_extra_body_from_config() -> dict[str, Any] | None:
     """Optional JSON merged into the request body.
 

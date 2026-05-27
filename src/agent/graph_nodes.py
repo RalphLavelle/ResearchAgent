@@ -24,7 +24,11 @@ from agent.event_window import (
     planner_date_instruction,
     sort_resources_by_event_date_asc,
 )
-from agent.llm_factory import build_chat_llm
+from agent.llm_factory import build_chat_llm, build_planner_llm
+from agent.query_planner import (
+    build_planner_variation_block,
+    load_recent_planner_queries,
+)
 from agent.site_crawl import deep_search_supplement
 from agent.models import (
     AgentState,
@@ -95,12 +99,19 @@ def node_plan(state: AgentState) -> AgentState:
             "run_log_message": "Planner skipped: no LLM backend configured (see .env).",
         }
 
-    llm = _llm()
+    llm = build_planner_llm()
+    recent = load_recent_planner_queries(
+        config.ACTIVE_TOPIC.db,
+        limit=config.PROMPT_GUIDES.planner_recent_queries_limit,
+    )
+    variation = build_planner_variation_block(config.PROMPT_GUIDES, recent_queries=recent)
     msg = HumanMessage(
         content=(
             config.SUBJECT.planner_user_message
             + planner_date_instruction(config.PROMPT_GUIDES)
             + f"\n\nProduce up to {config.MAX_SEARCH_QUERIES} distinct search queries."
+            + "\n\n"
+            + variation
         )
     )
 

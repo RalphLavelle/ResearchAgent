@@ -25,14 +25,6 @@
   -webkit-text-fill-color: transparent;
 }
 
-.reports-intro {
-  margin: 0;
-  font-size: var(--text-sm);
-  color: var(--color-generated);
-  max-width: 42rem;
-  line-height: 1.45;
-}
-
 .status-msg {
   margin: 0;
   padding: var(--space-4);

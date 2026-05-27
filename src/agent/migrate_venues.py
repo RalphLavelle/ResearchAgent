@@ -48,11 +48,13 @@ def migrate_topic_venues(topic: TopicEntry) -> dict[str, int]:
         linked += 1
 
     venues_after = len(venue_store.list_venues(db_name))
+    keys_removed = venue_store.strip_lookup_keys(db_name)
     stats = {
         "events_scanned": len(events),
         "events_linked": linked,
         "venues_created": max(0, venues_after - created_before),
         "venues_total": venues_after,
+        "lookup_keys_removed": keys_removed,
     }
     logger.info(
         "Venue migration for %s (%s): %s",

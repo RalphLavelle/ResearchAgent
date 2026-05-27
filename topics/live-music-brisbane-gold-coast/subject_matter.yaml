@@ -20,25 +20,33 @@ output_description: >
 # System prompt for the PLANNER step — tells the LLM what kinds of
 # search queries to produce.
 planner_system_prompt: |
-  You plan web search queries to find specific upcoming live music gigs
-  and concerts in the Gold Coast and Brisbane areas of Queensland, Australia.
-  Prefer queries that surface ticketing pages (Ticketek, Moshtix, Oztix, Eventbrite),
-  venue "what's on" **event-detail** pages (HOTA, Fortitude Music Hall, Triffid,
-  The Tivoli, HSW, Miami Marketta, Burleigh Bazaar, Coolangatta Hotel, Star Gold Coast),
-  Facebook event URLs, Bandsintown/Songkick city pages, and local gig guides
-  (Scene, The Music, street press). Rotate query angles: upcoming, "tickets",
-  festivals, open mic, jazz/blues rooms, pub residencies. Avoid queries that only return generic portal homepages with no dates. Output as many distinct queries as requested (up to the limit in the user message).
-  Each query should be short and specific.
+  You plan web search queries to discover upcoming live music gigs and concerts
+  across the Gold Coast and Brisbane regions of Queensland, Australia.
 
+  Your job is **coverage and variety**, not a checklist of famous venues. Each
+  run should feel different: new suburbs, genres, sources, phrasing, and query
+  shapes. Prefer pages that list **specific dated shows** — ticketing sites
+  (Ticketek, Moshtix, Oztix, Eventbrite), venue calendars, Facebook event URLs,
+  Bandsintown/Songkick, local gig guides, radio/street-press listings, pub and
+  club what's-on pages, community halls, markets, and independent promoters.
 
+  Rotate angles every run: genre niches, lesser-known suburbs, question-form
+  searches, short keyword clusters, and occasional `site:` queries. Avoid
+  generic portal homepages with no dates. Output as many distinct queries as
+  requested (up to the limit in the user message). Each query should be concise
+  but **not** share the same template wording.
 
 # The human-turn message sent alongside the planner system prompt.
-# (The engine appends today's UTC date and a strict 30-day window.)
+# (The engine appends today's date, a strict 30-day window, recent queries to
+# avoid, and rotated query angles from prompt_guides.yaml.)
 planner_user_message: |
   Plan search queries to find individual upcoming live music events on the
-  Gold Coast and Brisbane — rock, pop, classical, folk, and world music.
-  Include open mic nights and jam-style listings alongside regular gigs. Include all genres of music. Each query should help find pages for specific dated shows, not generic portal indexes.
-  Aim for maximum coverage: different venues, ticket vendors, and genres so the combined search results surface as many separate gigs as possible.
+  Gold Coast and Brisbane — all genres (rock, pop, folk, jazz, blues, classical,
+  world, electronic, open mic, jam sessions, tribute, covers).
+
+  Maximize **web coverage**: different sources, suburbs, and phrasing so the
+  combined results reach corners of the web that a repetitive venue list would
+  miss. Do not default to the same handful of venue names every run.
 
 # System prompt for the CURATOR/NORMALISER step — tells the LLM how to
 # filter and structure the raw search results into usable records.

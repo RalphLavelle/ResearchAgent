@@ -71,6 +71,11 @@ export class ListComponent {
     return data.events.filter((ev) => this.venueFilterKey(ev) === filterKey);
   });
 
+  /** Four random spotlight cards — reshuffled on every page load. */
+  protected readonly featuredEvents = signal<ResearchEvent[]>([]);
+  /** Carousel offset when fewer than four cards fit on screen. */
+  protected readonly featuredIndex = signal(0);
+
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
   readonly #topic = inject(TopicService);
@@ -117,6 +122,32 @@ export class ListComponent {
     return name ? `name:${name}` : null;
   }
 
+  /** Venue line for spotlight cards (name + location when present). */
+  protected featuredVenueLine(ev: ResearchEvent): string {
+    const parts = [ev.venue.trim(), ev.location.trim()].filter(Boolean);
+    return parts.join(' ');
+  }
+
+  protected showFeaturedCarouselNav(): boolean {
+    return this.featuredEvents().length > 1;
+  }
+
+  protected prevFeatured(): void {
+    const count = this.featuredEvents().length;
+    if (count <= 1) {
+      return;
+    }
+    this.featuredIndex.update((index) => (index - 1 + count) % count);
+  }
+
+  protected nextFeatured(): void {
+    const count = this.featuredEvents().length;
+    if (count <= 1) {
+      return;
+    }
+    this.featuredIndex.update((index) => (index + 1) % count);
+  }
+
   /** Extract a plain venue name even if the API ever sends a nested object. */
   #venueName(venue: ResearchEvent['venue'] | { name?: string }): string {
     if (typeof venue === 'string') {
@@ -152,9 +183,12 @@ export class ListComponent {
       .subscribe({
         next: (data) => {
           this.activeVenueFilterKey.set(null);
+          const events = data.events.map((ev) => this.#normalizeEvent(ev));
+          this.featuredIndex.set(0);
+          this.featuredEvents.set(this.#pickFeaturedEvents(events));
           this.payload.set({
             ...data,
-            events: data.events.map((ev) => this.#normalizeEvent(ev)),
+            events,
           });
           this.loading.set(false);
         },
@@ -194,5 +228,18 @@ export class ListComponent {
       location: String(raw.location ?? '').trim(),
       venueId,
     };
+  }
+
+  /** Shuffle and take up to four events for the spotlight carousel. */
+  #pickFeaturedEvents(events: ResearchEvent[]): ResearchEvent[] {
+    if (events.length === 0) {
+      return [];
+    }
+    const pool = [...events];
+    for (let i = pool.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, Math.min(4, pool.length));
   }
 }

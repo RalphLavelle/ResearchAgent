@@ -51,7 +51,10 @@ class PlanQueries(BaseModel):
 
     queries: list[str] = Field(
         default_factory=list,
-        description="Distinct web-search queries covering the active research topic.",
+        description=(
+            "Distinct web-search queries covering the active research topic. "
+            "Use varied formats and angles — not the same venue+month template."
+        ),
     )
 
 

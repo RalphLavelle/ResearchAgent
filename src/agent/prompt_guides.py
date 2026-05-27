@@ -35,6 +35,20 @@ class PromptGuides(BaseModel):
     # Topic-specific blocks appended after the generic date-window text.
     planner_date_suffix: str = ""
     curator_date_suffix: str = ""
+    planner_query_angles: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Rotating search angles the engine samples each run to diversify planner output."
+        ),
+    )
+    planner_angle_pick_count: int = Field(
+        default=5,
+        description="How many angles from planner_query_angles to inject per run.",
+    )
+    planner_recent_queries_limit: int = Field(
+        default=30,
+        description="How many prior search strings from reports to ask the planner to avoid.",
+    )
 
 
 def load_prompt_guides(path: Path) -> PromptGuides:
