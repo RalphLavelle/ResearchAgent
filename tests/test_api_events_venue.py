@@ -6,9 +6,18 @@ from starlette.testclient import TestClient
 
 from agent.api import create_app
 from agent.event_store import save_existing_rows
+from agent.mongodb import VENUES_COLLECTION, get_database
 
 
 def test_get_events_venue_is_plain_name_string() -> None:
+    get_database("test-db")[VENUES_COLLECTION].insert_one(
+        {
+            "_id": "venue-abc",
+            "name": "The Tivoli Theatre",
+            "aliases": [],
+            "location": "Brisbane",
+        }
+    )
     row = [
         "The Beths",
         "The Tivoli Theatre",
@@ -32,4 +41,5 @@ def test_get_events_venue_is_plain_name_string() -> None:
     assert ev["venue"] == "The Tivoli Theatre"
     assert ev["location"] == "Brisbane"
     assert ev["venueId"] == "venue-abc"
+    assert ev["tags"] == []
     assert isinstance(ev["venue"], str)

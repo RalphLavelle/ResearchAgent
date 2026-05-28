@@ -20,6 +20,7 @@ export interface VenueRecord {
   id: string;
   name: string;
   aliases: string[];
+  location: string;
 }
 
 /** Root JSON shape from the venues API. */

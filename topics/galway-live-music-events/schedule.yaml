@@ -1,7 +1,0 @@
-# Copy to schedule.yaml and edit. The serve process reloads this file without restart.
-#
-# Interval rules:
-#   - If interval_minutes is greater than 0, it takes priority (interval_hours ignored).
-#   - If interval_minutes is 0 (or absent), interval_hours is used instead.
-interval_hours: 2
-interval_minutes: 30

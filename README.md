@@ -2,7 +2,7 @@
 
 Python app using **LangGraph** that researches **configurable topics**, curates structured rows, and saves results to a **spreadsheet** plus **`events.json`** under **`data/<topic>/`**.
 
-**Topics registry:** `topics/topics.json` — the `active` id selects prompts, exclusions, schedule, UI chrome, and the data subfolder name.
+**Topics registry:** `topics/topics.json` — the `active` id selects prompts, exclusions, UI chrome, and the data subfolder name.
 
 **Default output folder:** `data/<data_dir>/` for the active topic (e.g. `data/live-music-brisbane-gold-coast/`). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
 
@@ -74,7 +74,7 @@ Cloud is auto-detected by the `:cloud` model-name suffix or a non-localhost base
 
 ### 3. Topics (optional)
 
-The bundled topic **Live music in Brisbane and the Gold Coast** lives under `topics/live-music-brisbane-gold-coast/` (`subject_matter.yaml`, `prompt_guides.yaml`, `exclusions.yaml`, `schedule.yaml`, `assets/`).
+The bundled topic **Live music in Brisbane and the Gold Coast** lives under `topics/live-music-brisbane-gold-coast/` (`subject_matter.yaml`, `prompt_guides.yaml`, `exclusions.yaml`, `assets/`).
 
 To add a topic, use the **topic-creator** skill (`.cursor/skills/topic-creator/SKILL.md`) or copy the live-music folder and register a new entry in `topics.json`.
 
@@ -92,9 +92,15 @@ To pin a custom folder, set in `.env`:
 OUTPUT_DIR=D:\MyData\AgentAI
 ```
 
-### 5. Schedule file (optional)
+### 5. Schedule interval (optional)
 
-Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` command reloads it without restarting.
+When using `serve`, set the run interval in `.env` (hours only; default `1`):
+
+```env
+SCHEDULE_INTERVAL_HOURS=1
+```
+
+Restart `serve` after changing this value.
 
 ## Commands
 
@@ -129,9 +135,9 @@ Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` comm
   | `GET /api/{db}/events` | Event list for a topic (JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc`) |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
   | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
-  | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `aliases`) — used by `/admin/venues` (50 per page max) |
+  | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `location`, `aliases`) — used by `/admin/venues` (50 per page max) |
   | `GET /api/{db}/venues?all=true` | All venue records (for admin delete reassignment dropdown) |
-  | `GET /api/{db}/venues/{venue_id}` | Raw venue JSON for admin editing (`_id`, `name`, `aliases`, `linkedEventCount`) |
+  | `GET /api/{db}/venues/{venue_id}` | Raw venue JSON for admin editing (`_id`, `name`, `location`, `aliases`, `linkedEventCount`) |
   | `PUT /api/{db}/venues/{venue_id}` | Save edited venue JSON back to MongoDB |
   | `DELETE /api/{db}/venues/{venue_id}` | Delete a venue; body `{ "replacementVenueId": "..." }` reassigns linked events first |
 
@@ -143,7 +149,11 @@ Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` comm
   .\venv\Scripts\python.exe -m agent migrate-venues
   ```
 
-  Each topic database gets a `venues` collection (`name`, `aliases`). Events store a nested `venue` document `{ name, id }` linking to that collection so the UI does not need a join. New pipeline runs resolve venues automatically; names with or without a leading `The` are treated as the same place (e.g. `The Imperial Hotel` matches `Imperial Hotel`). Add aliases manually in MongoDB for subtler label differences (e.g. `The Tivoli Theatre` with alias `Tivoli`).
+  Each topic database gets a `venues` collection (`name`, `location`, `aliases`). Events store a nested `venue` document `{ name, id }` linking to that collection; suburb/city lives on the venue record. Events also store a `tags` string array (up to three labels). After each merge, an LLM pass assigns tags to untagged rows, preferring tags already in the database. The Angular list page exposes tag filter pills alongside venue filters.
+
+- **Schema migrations** (one-shot database changes before each pipeline run):
+
+  Add numbered Python files under **`migrations/`** (e.g. `001_remove_poster_url.py`). Each file defines `MIGRATION_ID` and `run(db_name)`. Pending migrations run automatically at the start of every `serve` / `run-once` pass and are recorded in the topic database's `schema_migrations` collection. Delete migration files from the repo once they have been applied everywhere.
 
 ## Windows Task Scheduler (start at logon)
 
@@ -186,6 +196,6 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 
 ## Layout
 
-- `topics/` — registry (`topics.json`) plus per-topic YAML, schedule, and UI assets.
+- `topics/` — registry (`topics.json`) plus per-topic YAML and UI assets.
 - `src/agent/` — LangGraph workflow, DuckDuckGo search, spreadsheet + JSON outputs, scheduler.
 - `web/` — Angular shell driven by `topics.json` and the MongoDB-backed REST API (`src/agent/api.py`).

@@ -137,12 +137,6 @@
   color: var(--color-empty-title);
 }
 
-.venues-cell--id code {
-  font-size: var(--text-xs);
-  color: var(--color-muted);
-  word-break: break-all;
-}
-
 .venues-cell--actions {
   white-space: nowrap;
 }

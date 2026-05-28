@@ -85,6 +85,7 @@ def _venue_to_api(doc: dict[str, Any]) -> dict[str, Any]:
         "id": str(doc.get("_id") or ""),
         "name": str(doc.get("name") or ""),
         "aliases": [str(alias) for alias in (doc.get("aliases") or [])],
+        "location": str(doc.get("location") or ""),
     }
 
 

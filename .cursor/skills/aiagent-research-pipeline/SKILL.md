@@ -20,7 +20,7 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 - **Topic-specific text** lives in `topics/<id>/`:
   - `subject_matter.yaml` — planner/curator system prompts and labels (`config.SUBJECT`)
   - `prompt_guides.yaml` — date-window suffixes and resource labels injected by `event_window.py` (`config.PROMPT_GUIDES`)
-  - `exclusions.yaml`, `schedule.yaml`, `assets/`
+  - `exclusions.yaml`, `assets/`
 - Use the **topic-creator** skill to scaffold new topics.
 - **Engine code** in `src/agent/` must stay topic-agnostic (no hard-coded “Gold Coast” etc. in logic—only in YAML).
 
@@ -52,7 +52,7 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 
 ## Config/env (do not overwrite `.env` without asking)
 
-- Schedule: `topics/<active>/schedule.yaml` — `interval_minutes` wins over `interval_hours` when non-zero.
+- Schedule: `SCHEDULE_INTERVAL_HOURS` in `.env` (hours only; default 1). Used by `agent serve`.
 - Crawl toggles: `CRAWL_ENABLED`, limits in `config.py` / `.env`.
 
 ## Tests

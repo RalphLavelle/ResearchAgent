@@ -298,6 +298,8 @@ def _resource_to_row(r: Resource, *, db_name: str | None = None) -> list:
     canonical_venue = venue
     if db_name and venue.strip():
         venue_id, canonical_venue = venue_store.resolve_or_create(db_name, venue)
+        if venue_id and location.strip():
+            venue_store.set_location(db_name, venue_id, location)
     return [
         act or "—",                           # Event
         canonical_venue,                      # Venue (canonical)
@@ -310,6 +312,7 @@ def _resource_to_row(r: Resource, *, db_name: str | None = None) -> list:
         format_generated_timestamp(),         # Added
         rid,                                  # Event ID (hidden)
         venue_id,                             # Venue ID (hidden)
+        [],                                   # Tags (MongoDB string array)
     ]
 
 
@@ -681,6 +684,17 @@ def write_output(resources: list[Resource]) -> MergeStats:
     except Exception as exc:
         logger.warning("Event exclusions skipped: %s", exc)
         removed_exclusion = 0
+
+    tagged = 0
+    try:
+        from agent.event_tagging import apply_event_tags
+
+        tagged = apply_event_tags(db_name)
+        if tagged:
+            logger.info("Tagged %d event row(s) via LLM.", tagged)
+    except Exception as exc:
+        logger.warning("Event tagging skipped: %s", exc)
+        tagged = 0
 
     synced = load_spreadsheet_resources()
     synced = cache_thumbnails(synced, db_name=db_name)

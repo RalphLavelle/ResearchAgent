@@ -27,6 +27,37 @@ IDX_SUMMARY = 7
 IDX_ADDED = 8
 IDX_EVENT_ID = 9
 IDX_VENUE_ID = 10
+IDX_TAGS = 11
+
+
+def tags_from_doc(doc: dict[str, Any]) -> list[str]:
+    """Normalise ``tags`` from a MongoDB event document."""
+    raw = doc.get("tags")
+    if not isinstance(raw, list):
+        return []
+    return [str(tag).strip() for tag in raw if str(tag).strip()]
+
+
+def tags_from_row(row: list) -> list[str]:
+    """Read tags from an internal row (defaults to empty)."""
+    if len(row) <= IDX_TAGS:
+        return []
+    raw = row[IDX_TAGS]
+    if isinstance(raw, list):
+        return [str(tag).strip() for tag in raw if str(tag).strip()]
+    return []
+
+
+def list_distinct_tags(db_name: str) -> list[str]:
+    """Return sorted unique tags used across all events in a topic database."""
+    coll = get_database(db_name)[EVENTS_COLLECTION]
+    found: set[str] = set()
+    for doc in coll.find({}, {"tags": 1}):
+        for tag in tags_from_doc(doc):
+            normalised = " ".join(tag.strip().lower().split())
+            if normalised:
+                found.add(normalised)
+    return sorted(found)
 
 
 def _parse_date(value: Any) -> date | None:
@@ -88,20 +119,21 @@ def doc_to_row(doc: dict[str, Any]) -> list:
     row = [
         doc.get("event") or "—",
         venue_name_from_doc(doc),
-        doc.get("location") or "",
+        "",
         _parse_date(doc.get("date")),
         str(doc.get("url") or "").strip(),
         _sources_to_list(doc.get("sources")),
-        str(doc.get("poster_url") or "").strip(),
+        "",
         str(doc.get("summary") or "").strip(),
         str(doc.get("added") or "").strip(),
         eid,
     ]
     row.append(venue_id_from_doc(doc))
+    row.append(tags_from_doc(doc))
     return row
 
 
-def row_to_doc(row: list) -> dict[str, Any]:
+def row_to_doc(row: list, *, db_name: str = "") -> dict[str, Any]:
     """Convert a spreadsheet-style row to a MongoDB document."""
     eid = str(row[IDX_EVENT_ID] or "").strip() or str(uuid4())
     d = _parse_date(row[IDX_DATE] if len(row) > IDX_DATE else None)
@@ -110,14 +142,18 @@ def row_to_doc(row: list) -> dict[str, Any]:
     doc: dict[str, Any] = {
         "_id": eid,
         "event": str(row[IDX_EVENT] or "").strip() or "—",
-        "location": str(row[IDX_LOCATION] or "").strip(),
         "date": d.isoformat() if d else None,
         "url": str(row[IDX_URL] or "").strip(),
         "sources": _sources_to_mongo(str(row[IDX_SOURCES] or "")),
-        "poster_url": str(row[IDX_POSTER] or "").strip(),
         "summary": str(row[IDX_SUMMARY] or "").strip(),
         "added": str(row[IDX_ADDED] or "").strip(),
+        "tags": tags_from_row(row),
     }
+    poster = str(row[IDX_POSTER] or "").strip()
+    if db_name and poster.lower().startswith("http"):
+        from agent import image_store
+
+        doc["image_id"] = image_store.ensure_source_registered(db_name, poster)
     venue_doc = venue_to_mongo(venue_name, venue_id)
     if venue_doc is not None:
         doc["venue"] = venue_doc
@@ -126,11 +162,21 @@ def row_to_doc(row: list) -> dict[str, Any]:
 
 def load_existing_rows(db_name: str) -> dict[str, list]:
     """Load all events as ``{Event ID → row}``."""
+    from agent import venue_store
+    from agent import image_store
+
     rows: dict[str, list] = {}
     try:
         coll = get_database(db_name)[EVENTS_COLLECTION]
+        venue_locations = venue_store.locations_by_id(db_name)
+        poster_sources = image_store.source_urls_by_event_id(db_name)
         for doc in coll.find():
             row = doc_to_row(doc)
+            venue_id = venue_id_from_doc(doc)
+            legacy_location = str(doc.get("location") or "").strip()
+            row[IDX_LOCATION] = venue_locations.get(venue_id, legacy_location)
+            eid = str(row[IDX_EVENT_ID] or "").strip()
+            row[IDX_POSTER] = poster_sources.get(eid, "")
             url = str(row[IDX_URL] or "").strip().lower()
             if not url.startswith("http"):
                 continue
@@ -144,8 +190,20 @@ def load_existing_rows(db_name: str) -> dict[str, list]:
     return rows
 
 
+def sync_venue_locations_from_rows(db_name: str, rows: dict[str, list]) -> None:
+    """Persist row location values onto linked venue documents."""
+    from agent import venue_store
+
+    for row in rows.values():
+        venue_id = str(row[IDX_VENUE_ID] or "").strip() if len(row) > IDX_VENUE_ID else ""
+        location = str(row[IDX_LOCATION] or "").strip()
+        if venue_id and location:
+            venue_store.set_location(db_name, venue_id, location)
+
+
 def save_existing_rows(db_name: str, rows: dict[str, list]) -> None:
     """Replace the events collection with *rows* (sorted soonest-first on write)."""
+    sync_venue_locations_from_rows(db_name, rows)
     coll = get_database(db_name)[EVENTS_COLLECTION]
 
     def sort_key(row: list) -> date:
@@ -153,7 +211,7 @@ def save_existing_rows(db_name: str, rows: dict[str, list]) -> None:
         return d if d is not None else date.max
 
     sorted_rows = sorted(rows.values(), key=sort_key)
-    docs = [row_to_doc(r) for r in sorted_rows]
+    docs = [row_to_doc(r, db_name=db_name) for r in sorted_rows]
     coll.delete_many({})
     if docs:
         coll.insert_many(docs)

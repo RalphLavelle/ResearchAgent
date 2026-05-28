@@ -96,10 +96,31 @@
           </div>
         </section>
       }
-      @if (activeVenueFilterKey()) {
-        <p class="venue-filter-hint" role="status">
-          Showing one venue — click its button again to see every gig.
+      @if (activeVenueFilterKey() || activeTagFilter()) {
+        <p class="filter-hint" role="status">
+          @if (activeVenueFilterKey() && activeTagFilter()) {
+            Showing one venue and one tag — clear a filter to widen the list.
+          } @else if (activeVenueFilterKey()) {
+            Showing one venue — click its button again to see every gig.
+          } @else {
+            Showing one tag — click its button again to see every gig.
+          }
         </p>
+      }
+      @if (distinctTags().length > 0) {
+        <nav class="tag-filter-bar" aria-label="Filter by tag">
+          @for (tag of distinctTags(); track tag) {
+            <button
+              type="button"
+              class="tag-btn"
+              [class.tag-btn--active]="activeTagFilter() === tag"
+              [attr.aria-pressed]="activeTagFilter() === tag"
+              (click)="toggleTagFilter(tag)"
+            >
+              {{ tag }}
+            </button>
+          }
+        </nav>
       }
       <div class="table-scroll">
         <div class="event-list" role="list" aria-label="Upcoming events">
@@ -165,10 +186,22 @@
                         [attr.aria-pressed]="activeVenueFilterKey() === venueFilterKey(ev)"
                         (click)="toggleVenueFilter(ev)"
                       >
-                        {{ ev.venue }}
+                        {{ venueButtonLabel(ev) }}
                       </button>
-                      @if (ev.location) {
-                        <span class="event-location">{{ ev.location }}</span>
+                      @if (ev.tags.length > 0) {
+                        <div class="event-tag-row">
+                          @for (tag of ev.tags; track tag) {
+                            <button
+                              type="button"
+                              class="tag-btn tag-btn--inline"
+                              [class.tag-btn--active]="activeTagFilter() === tag"
+                              [attr.aria-pressed]="activeTagFilter() === tag"
+                              (click)="toggleTagFilter(tag)"
+                            >
+                              {{ tag }}
+                            </button>
+                          }
+                        </div>
                       }
                     </div>
                   }

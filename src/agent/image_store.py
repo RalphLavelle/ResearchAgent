@@ -89,6 +89,51 @@ def find_image_by_source(db_name: str, source_url: str) -> str | None:
     return None
 
 
+def ensure_source_registered(db_name: str, source_url: str) -> str:
+    """Register an upstream poster URL so rows can hydrate without ``poster_url`` on events."""
+    url = source_url.strip()
+    existing = find_image_by_source(db_name, url)
+    if existing:
+        return existing
+    ext = ext_for_content_type("image/jpeg") or ".jpg"
+    image_id = file_name_for_source(url, ext)
+    coll = get_database(db_name)[IMAGES_COLLECTION]
+    coll.update_one(
+        {"_id": image_id},
+        {
+            "$set": {"source_url": url},
+            "$setOnInsert": {"content_type": "image/jpeg"},
+        },
+        upsert=True,
+    )
+    return image_id
+
+
+def source_urls_by_event_id(db_name: str) -> dict[str, str]:
+    """Return ``event_id → upstream poster URL`` via linked image documents."""
+    from agent.mongodb import EVENTS_COLLECTION
+
+    out: dict[str, str] = {}
+    events = get_database(db_name)[EVENTS_COLLECTION]
+    images = get_database(db_name)[IMAGES_COLLECTION]
+    for doc in events.find({}, {"_id": 1, "image_id": 1, "poster_url": 1}):
+        eid = str(doc.get("_id") or "")
+        if not eid:
+            continue
+        legacy = str(doc.get("poster_url") or "").strip()
+        if legacy:
+            out[eid] = legacy
+            continue
+        image_id = str(doc.get("image_id") or "").strip()
+        if not image_id:
+            continue
+        img_doc = images.find_one({"_id": image_id}, {"source_url": 1})
+        source = str((img_doc or {}).get("source_url") or "").strip()
+        if source:
+            out[eid] = source
+    return out
+
+
 def list_image_ids(db_name: str) -> set[str]:
     coll = get_database(db_name)[IMAGES_COLLECTION]
     return {str(doc["_id"]) for doc in coll.find({}, {"_id": 1})}
@@ -112,13 +157,16 @@ def load_event_image_map(db_name: str) -> dict[str, dict[str, str]]:
 
     out: dict[str, dict[str, str]] = {}
     events = get_database(db_name)[EVENTS_COLLECTION]
-    for doc in events.find({}, {"_id": 1, "poster_url": 1, "image_id": 1}):
+    images = get_database(db_name)[IMAGES_COLLECTION]
+    for doc in events.find({}, {"_id": 1, "image_id": 1}):
         eid = str(doc.get("_id") or "")
-        poster = str(doc.get("poster_url") or "").strip()
         image_id = str(doc.get("image_id") or "").strip()
-        if eid and poster and image_id:
-            out[eid] = {"source": poster, "image_id": image_id}
-    # Silence unused import warning for coll
+        if not eid or not image_id:
+            continue
+        img_doc = images.find_one({"_id": image_id}, {"source_url": 1})
+        source = str((img_doc or {}).get("source_url") or "").strip()
+        if source:
+            out[eid] = {"source": source, "image_id": image_id}
     _ = coll
     return out
 

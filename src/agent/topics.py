@@ -1,7 +1,7 @@
 """Load the topics registry and resolve per-topic paths.
 
 ``topics/topics.json`` is read at startup. The active topic id selects which
-folder under ``topics/<id>/`` holds subject-matter YAML, exclusions, schedule,
+folder under ``topics/<id>/`` holds subject-matter YAML, exclusions,
 and UI assets. Curated events live in MongoDB under the topic's ``db`` name;
 run reports and snapshots still land in ``data/<topic_id>/``.
 """
@@ -67,7 +67,7 @@ def load_topics(path: Path) -> TopicsRegistry:
 
 
 def topic_config_dir(repo_root: Path, topic_id: str) -> Path:
-    """Directory holding subject_matter.yaml, exclusions.yaml, schedule.yaml."""
+    """Directory holding subject_matter.yaml, exclusions.yaml, and assets."""
     return repo_root / "topics" / topic_id
 
 

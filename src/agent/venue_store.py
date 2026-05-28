@@ -71,6 +71,7 @@ def create_venue(db_name: str, name: str) -> dict[str, Any]:
         "_id": str(uuid4()),
         "name": canonical,
         "aliases": [],
+        "location": "",
     }
     get_database(db_name)[VENUES_COLLECTION].insert_one(doc)
     logger.debug("Created venue %r → id=%s", canonical, doc["_id"])
@@ -100,6 +101,24 @@ def list_venues(db_name: str) -> list[dict[str, Any]]:
     return list(coll.find().sort("name", 1))
 
 
+def set_location(db_name: str, venue_id: str, location: str) -> None:
+    """Set canonical suburb/city on a venue (safe overwrite)."""
+    loc = (location or "").strip()
+    if not loc:
+        return
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    coll.update_one({"_id": venue_id}, {"$set": {"location": loc}})
+
+
+def locations_by_id(db_name: str) -> dict[str, str]:
+    """Return ``venue_id → location`` for API row hydration."""
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    return {
+        str(doc["_id"]): str(doc.get("location") or "").strip()
+        for doc in coll.find({}, {"_id": 1, "location": 1})
+    }
+
+
 def list_venues_page(
     db_name: str,
     *,
@@ -124,6 +143,7 @@ def venue_document_to_json(doc: dict[str, Any]) -> dict[str, Any]:
         "_id": str(doc.get("_id") or ""),
         "name": str(doc.get("name") or ""),
         "aliases": [str(alias) for alias in (doc.get("aliases") or [])],
+        "location": str(doc.get("location") or ""),
     }
 
 
@@ -141,7 +161,8 @@ def normalize_venue_document(raw: dict[str, Any], venue_id: str) -> dict[str, An
     if not isinstance(aliases_raw, list):
         raise ValueError("aliases must be a list of strings.")
     aliases = [str(alias).strip() for alias in aliases_raw if str(alias).strip()]
-    return {"_id": venue_id, "name": name, "aliases": aliases}
+    location = str(raw.get("location") or "").strip()
+    return {"_id": venue_id, "name": name, "aliases": aliases, "location": location}
 
 
 def update_venue(db_name: str, venue_id: str, raw: dict[str, Any]) -> dict[str, Any]:

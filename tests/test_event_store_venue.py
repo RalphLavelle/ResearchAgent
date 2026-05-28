@@ -3,6 +3,7 @@
 from datetime import date
 
 from agent.event_store import (
+    IDX_TAGS,
     IDX_VENUE,
     IDX_VENUE_ID,
     doc_to_row,
@@ -29,6 +30,9 @@ def test_row_to_doc_writes_nested_venue() -> None:
     doc = row_to_doc(row)
     assert doc["venue"] == {"name": "The Tivoli Theatre", "id": "venue-abc"}
     assert "venue_id" not in doc
+    assert "location" not in doc
+    assert "poster_url" not in doc
+    assert doc["tags"] == []
 
 
 def test_doc_to_row_reads_nested_venue() -> None:
@@ -36,17 +40,17 @@ def test_doc_to_row_reads_nested_venue() -> None:
         "_id": "evt-1",
         "event": "The Beths",
         "venue": {"name": "The Tivoli Theatre", "id": "venue-abc"},
-        "location": "Brisbane",
         "date": "2026-05-08",
         "url": "https://example.com/beths",
         "sources": [],
-        "poster_url": "",
         "summary": "",
         "added": "2026-05-01",
+        "tags": ["live", "indie"],
     }
     row = doc_to_row(doc)
     assert row[IDX_VENUE] == "The Tivoli Theatre"
     assert row[IDX_VENUE_ID] == "venue-abc"
+    assert row[IDX_TAGS] == ["live", "indie"]
 
 
 def test_doc_helpers_support_legacy_flat_venue() -> None:

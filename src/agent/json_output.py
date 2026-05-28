@@ -39,9 +39,11 @@ from agent.event_store import (
     IDX_LOCATION,
     IDX_POSTER,
     IDX_SUMMARY,
+    IDX_TAGS,
     IDX_URL,
     IDX_VENUE,
     IDX_VENUE_ID,
+    tags_from_row,
 )
 from agent.event_window import (
     format_event_weekday_date,
@@ -78,6 +80,7 @@ def _event_item_from_row(
         "summary": str(row[IDX_SUMMARY] or "").strip(),
         "thumbnailUrl": thumb if thumb else None,
         "venueId": venue_id or None,
+        "tags": tags_from_row(row),
         "id": eid,
     }
 

@@ -29,7 +29,10 @@ def main(argv: list[str] | None = None) -> int:
         help="Do not write Markdown files or snapshot.",
     )
 
-    sub.add_parser("serve", help="Run on reloadable interval (see topics/<id>/schedule.yaml).")
+    sub.add_parser(
+        "serve",
+        help="Run on a fixed interval (SCHEDULE_INTERVAL_HOURS in .env).",
+    )
 
     p_migrate = sub.add_parser(
         "migrate-mongodb",

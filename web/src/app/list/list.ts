@@ -28,6 +28,8 @@ export interface ResearchEvent {
   url: string;
   summary: string;
   thumbnailUrl: string | null;
+  /** Filter tags assigned by the pipeline (max 3). */
+  tags: string[];
 }
 
 /** Root JSON shape from ``GET /api/<db>/events``. */
@@ -57,18 +59,44 @@ export class ListComponent {
   protected readonly posterErrors = signal<ReadonlySet<string>>(new Set());
   /** When set, only events for this venue filter key are shown. Click again to clear. */
   protected readonly activeVenueFilterKey = signal<string | null>(null);
+  /** When set, only events containing this tag are shown. Click again to clear. */
+  protected readonly activeTagFilter = signal<string | null>(null);
 
-  /** Events after optional venue filter is applied. */
+  /** Sorted distinct tags across all loaded events (for the filter bar). */
+  protected readonly distinctTags = computed(() => {
+    const data = this.payload();
+    if (!data) {
+      return [] as string[];
+    }
+    const found = new Set<string>();
+    for (const ev of data.events) {
+      for (const tag of ev.tags ?? []) {
+        const label = tag.trim().toLowerCase();
+        if (label) {
+          found.add(label);
+        }
+      }
+    }
+    return [...found].sort();
+  });
+
+  /** Events after optional venue and tag filters are applied. */
   protected readonly visibleEvents = computed(() => {
     const data = this.payload();
     if (!data) {
       return [] as ResearchEvent[];
     }
-    const filterKey = this.activeVenueFilterKey();
-    if (!filterKey) {
-      return data.events;
-    }
-    return data.events.filter((ev) => this.venueFilterKey(ev) === filterKey);
+    const venueKey = this.activeVenueFilterKey();
+    const tag = this.activeTagFilter();
+    return data.events.filter((ev) => {
+      if (venueKey && this.venueFilterKey(ev) !== venueKey) {
+        return false;
+      }
+      if (tag && !(ev.tags ?? []).includes(tag)) {
+        return false;
+      }
+      return true;
+    });
   });
 
   /** Four random spotlight cards — reshuffled on every page load. */
@@ -112,6 +140,20 @@ export class ListComponent {
     this.activeVenueFilterKey.update((current) => (current === key ? null : key));
   }
 
+  /** Toggle the tag filter on or off. */
+  protected toggleTagFilter(tag: string): void {
+    const key = tag.trim().toLowerCase();
+    if (!key) {
+      return;
+    }
+    this.activeTagFilter.update((current) => (current === key ? null : key));
+  }
+
+  /** True when an event row carries a given tag. */
+  protected eventHasTag(ev: ResearchEvent, tag: string): boolean {
+    return (ev.tags ?? []).includes(tag);
+  }
+
   /** Stable filter key — prefers venues-collection id, falls back to canonical name. */
   protected venueFilterKey(ev: ResearchEvent): string | null {
     const id = (ev.venueId ?? '').trim();
@@ -124,8 +166,13 @@ export class ListComponent {
 
   /** Venue line for spotlight cards (name + location when present). */
   protected featuredVenueLine(ev: ResearchEvent): string {
+    return this.venueButtonLabel(ev);
+  }
+
+  /** Venue filter button label: ``Name, Location``. */
+  protected venueButtonLabel(ev: ResearchEvent): string {
     const parts = [ev.venue.trim(), ev.location.trim()].filter(Boolean);
-    return parts.join(' ');
+    return parts.join(', ');
   }
 
   protected showFeaturedCarouselNav(): boolean {
@@ -183,6 +230,7 @@ export class ListComponent {
       .subscribe({
         next: (data) => {
           this.activeVenueFilterKey.set(null);
+          this.activeTagFilter.set(null);
           const events = data.events.map((ev) => this.#normalizeEvent(ev));
           this.featuredIndex.set(0);
           this.featuredEvents.set(this.#pickFeaturedEvents(events));
@@ -227,6 +275,9 @@ export class ListComponent {
       venue: venueName || String(nestedVenue?.name ?? '').trim(),
       location: String(raw.location ?? '').trim(),
       venueId,
+      tags: Array.isArray(raw.tags)
+        ? raw.tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 3)
+        : [],
     };
   }
 

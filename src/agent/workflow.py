@@ -41,6 +41,9 @@ def build_graph():
 
 def run_once(*, dry_run: bool = False) -> AgentState:
     """Execute one full pass."""
+    from agent.migrations_runner import run_pending_migrations
+
+    run_pending_migrations()
     graph = build_graph()
     result = graph.invoke({"dry_run": dry_run})
     return result

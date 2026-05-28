@@ -43,8 +43,8 @@
           <thead>
             <tr>
               <th scope="col">Name</th>
+              <th scope="col">Location</th>
               <th scope="col">Aliases</th>
-              <th scope="col">ID</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -52,10 +52,8 @@
             @for (venue of venues(); track venue.id) {
               <tr>
                 <td class="venues-cell venues-cell--name">{{ venue.name }}</td>
+                <td class="venues-cell">{{ venue.location || '—' }}</td>
                 <td class="venues-cell">{{ aliasesLabel(venue.aliases) }}</td>
-                <td class="venues-cell venues-cell--id">
-                  <code>{{ venue.id }}</code>
-                </td>
                 <td class="venues-cell venues-cell--actions">
                   <button type="button" class="row-btn" (click)="openEdit(venue)">
                     Edit

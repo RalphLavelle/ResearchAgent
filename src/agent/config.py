@@ -46,9 +46,19 @@ TOPIC_DIR = topic_config_dir(_ROOT, ACTIVE_TOPIC_ID)
 DATA_BASE_DIR = _get_path("DATA_DIR", _ROOT / "data")
 DATA_DIR = topic_data_dir(DATA_BASE_DIR, ACTIVE_TOPIC_ID)
 
-SCHEDULE_CONFIG_PATH = _get_path(
-    "SCHEDULE_CONFIG_PATH",
-    TOPIC_DIR / "schedule.yaml",
+def parse_schedule_interval_hours(raw: str | None) -> float:
+    """Parse ``SCHEDULE_INTERVAL_HOURS`` from .env (hours only; default 1)."""
+    if raw is None or raw.strip() == "":
+        return 1.0
+    try:
+        hours = float(raw.strip())
+    except ValueError:
+        return 1.0
+    return max(0.05, hours)
+
+
+SCHEDULE_INTERVAL_HOURS = parse_schedule_interval_hours(
+    os.environ.get("SCHEDULE_INTERVAL_HOURS")
 )
 
 SUBJECT_MATTER_CONFIG_PATH = _get_path(
