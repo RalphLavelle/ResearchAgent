@@ -128,7 +128,12 @@ Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` comm
   |----------|---------|
   | `GET /api/{db}/events` | Event list for a topic (JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc`) |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
-  | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by the `/reports` page |
+  | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
+  | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `aliases`) — used by `/admin/venues` (50 per page max) |
+  | `GET /api/{db}/venues?all=true` | All venue records (for admin delete reassignment dropdown) |
+  | `GET /api/{db}/venues/{venue_id}` | Raw venue JSON for admin editing (`_id`, `name`, `aliases`, `linkedEventCount`) |
+  | `PUT /api/{db}/venues/{venue_id}` | Save edited venue JSON back to MongoDB |
+  | `DELETE /api/{db}/venues/{venue_id}` | Delete a venue; body `{ "replacementVenueId": "..." }` reassigns linked events first |
 
   `{db}` accepts either the topic id or the raw database name. Example for the default topic: `http://127.0.0.1:8765/api/bgc/events`.
 
@@ -138,7 +143,7 @@ Edit `topics/<active-topic>/schedule.yaml` (interval settings). The `serve` comm
   .\venv\Scripts\python.exe -m agent migrate-venues
   ```
 
-  Each topic database gets a `venues` collection (`name`, `aliases`). Events store a nested `venue` document `{ name, id }` linking to that collection so the UI does not need a join. New pipeline runs resolve venues automatically; add aliases manually in MongoDB when the same place appears under different labels (e.g. `The Tivoli Theatre` with alias `Tivoli`).
+  Each topic database gets a `venues` collection (`name`, `aliases`). Events store a nested `venue` document `{ name, id }` linking to that collection so the UI does not need a join. New pipeline runs resolve venues automatically; names with or without a leading `The` are treated as the same place (e.g. `The Imperial Hotel` matches `Imperial Hotel`). Add aliases manually in MongoDB for subtler label differences (e.g. `The Tivoli Theatre` with alias `Tivoli`).
 
 ## Windows Task Scheduler (start at logon)
 
@@ -164,7 +169,7 @@ npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Reports** in the nav (or `/reports`) to browse pipeline run history from MongoDB. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Admin** in the nav (or `/admin`) for pipeline reports and venue records. The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
 
 ## Behavior
 

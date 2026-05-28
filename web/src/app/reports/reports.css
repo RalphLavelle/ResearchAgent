@@ -11,6 +11,26 @@
   min-width: 0;
 }
 
+.admin-breadcrumb {
+  margin: 0 0 var(--space-4);
+}
+
+.admin-breadcrumb__link {
+  font-weight: 600;
+  color: var(--color-nav-accent);
+  text-decoration: none;
+}
+
+.admin-breadcrumb__link:hover {
+  text-decoration: underline;
+}
+
+.admin-breadcrumb__link:focus-visible {
+  outline: var(--border-medium) solid var(--color-nav-accent);
+  outline-offset: var(--outline-offset-sm);
+  border-radius: var(--radius-xs);
+}
+
 .reports-header {
   margin-bottom: var(--space-5);
 }

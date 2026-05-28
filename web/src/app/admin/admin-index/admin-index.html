@@ -1,0 +1,29 @@
+<section class="admin-index" aria-labelledby="admin-heading">
+  <header class="admin-index__header">
+    <h1 id="admin-heading" class="admin-index__title">
+      <span aria-hidden="true">🛠️</span>
+      Admin
+    </h1>
+    <p class="admin-index__intro">
+      Manage the research agent backend for the active topic.
+    </p>
+  </header>
+
+  <nav class="admin-index__grid" aria-label="Admin sections">
+    <a routerLink="/admin/reports" class="admin-card">
+      <span class="admin-card__emoji" aria-hidden="true">📋</span>
+      <span class="admin-card__title">Reports</span>
+      <span class="admin-card__hint">Pipeline run history, searches, and merge stats</span>
+    </a>
+
+    <a routerLink="/admin/venues" class="admin-card">
+      <span class="admin-card__emoji" aria-hidden="true">🏛️</span>
+      <span class="admin-card__title">Venues</span>
+      <span class="admin-card__hint">Canonical venue names and aliases in MongoDB</span>
+    </a>
+  </nav>
+
+  <p class="admin-index__footer">
+    <a routerLink="/" class="admin-index__back">← Back to events</a>
+  </p>
+</section>

@@ -1,0 +1,48 @@
+<div class="modal-backdrop" (click)="onBackdropClick($event)">
+  <div
+    class="modal-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="venue-edit-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <h2 id="venue-edit-title" class="modal-title">Edit venue</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">
+        ×
+      </button>
+    </header>
+
+    @if (loading()) {
+      <p class="modal-status" role="status">Loading venue JSON…</p>
+    } @else {
+      @if (error(); as errMsg) {
+        <p class="modal-status modal-status--error" role="alert">{{ errMsg }}</p>
+      }
+
+      <label class="modal-label" for="venue-json">Raw JSON document</label>
+      <textarea
+        id="venue-json"
+        class="modal-textarea"
+        [value]="jsonText()"
+        (input)="onJsonInput($event)"
+        rows="12"
+        spellcheck="false"
+      ></textarea>
+
+      <footer class="modal-actions">
+        <button type="button" class="modal-btn modal-btn--ghost" (click)="closed.emit()">
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="modal-btn modal-btn--primary"
+          (click)="save()"
+          [disabled]="saving()"
+        >
+          {{ saving() ? 'Saving…' : 'Save' }}
+        </button>
+      </footer>
+    }
+  </div>
+</div>

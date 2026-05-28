@@ -1,0 +1,108 @@
+:host {
+  display: block;
+  min-width: 0;
+}
+
+.admin-index {
+  margin-top: var(--space-4);
+}
+
+.admin-index__header {
+  margin-bottom: var(--space-6);
+}
+
+.admin-index__title {
+  margin: 0 0 var(--space-2);
+  font-size: var(--text-panel-title);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: var(--gradient-panel-title);
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.admin-index__intro {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: var(--text-md);
+  line-height: 1.55;
+}
+
+.admin-index__grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+}
+
+@media (min-width: 48rem) {
+  .admin-index__grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.admin-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  border-radius: var(--radius-xl);
+  border: var(--border-thin) solid var(--panel-border);
+  background: var(--panel-surface);
+  box-shadow: var(--shadow-panel);
+  text-decoration: none;
+  color: inherit;
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+.admin-card:hover {
+  transform: translateY(-0.125rem);
+  box-shadow: var(--shadow-nav-hover);
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+.admin-card:focus-visible {
+  outline: var(--border-medium) solid var(--color-nav-accent);
+  outline-offset: var(--outline-offset-sm);
+}
+
+.admin-card__emoji {
+  font-size: var(--text-3xl);
+  line-height: 1;
+}
+
+.admin-card__title {
+  font-size: var(--text-xl);
+  font-weight: 700;
+  color: var(--color-empty-title);
+}
+
+.admin-card__hint {
+  font-size: var(--text-sm);
+  line-height: 1.5;
+  color: var(--color-empty-hint);
+}
+
+.admin-index__footer {
+  margin: var(--space-7) 0 0;
+  padding-top: var(--space-5);
+  border-top: var(--border-thin) solid rgba(30, 42, 58, 0.12);
+}
+
+.admin-index__back {
+  font-weight: 600;
+  color: var(--color-nav-accent);
+  text-decoration: none;
+}
+
+.admin-index__back:hover {
+  text-decoration: underline;
+}
+
+.admin-index__back:focus-visible {
+  outline: var(--border-medium) solid var(--color-nav-accent);
+  outline-offset: var(--outline-offset-sm);
+  border-radius: var(--radius-xs);
+}

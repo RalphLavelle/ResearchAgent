@@ -1,0 +1,120 @@
+<section class="venues-panel" aria-labelledby="venues-heading">
+  <p class="admin-breadcrumb">
+    <a routerLink="/admin" class="admin-breadcrumb__link">← Admin</a>
+  </p>
+
+  <header class="venues-header">
+    <h1 id="venues-heading" class="venues-title">
+      <span aria-hidden="true">🏛️</span>
+      Venues
+    </h1>
+    <p class="venues-intro">
+      Canonical venue records for the active topic (50 per page). Edit raw JSON or delete with
+      event reassignment.
+    </p>
+  </header>
+
+  @if (actionMessage(); as message) {
+    <p class="status-msg status-msg--success" role="status">{{ message }}</p>
+  }
+
+  @if (loading()) {
+    <p class="status-msg" role="status">Loading venues…</p>
+  }
+
+  @if (error(); as errMsg) {
+    <p class="status-msg error" role="alert">{{ errMsg }}</p>
+  }
+
+  @if (!loading() && !error()) {
+    @if (venues().length === 0) {
+      <div class="empty-state">
+        <p class="empty-title">No venues yet</p>
+        <p class="empty-hint">
+          Run the research pipeline — venues are created when events are merged.
+        </p>
+      </div>
+    } @else {
+      <div class="table-scroll">
+        <table class="venues-table">
+          <caption class="sr-only">
+            Venue records for the active topic
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Aliases</th>
+              <th scope="col">ID</th>
+              <th scope="col">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (venue of venues(); track venue.id) {
+              <tr>
+                <td class="venues-cell venues-cell--name">{{ venue.name }}</td>
+                <td class="venues-cell">{{ aliasesLabel(venue.aliases) }}</td>
+                <td class="venues-cell venues-cell--id">
+                  <code>{{ venue.id }}</code>
+                </td>
+                <td class="venues-cell venues-cell--actions">
+                  <button type="button" class="row-btn" (click)="openEdit(venue)">
+                    Edit
+                  </button>
+                  <button type="button" class="row-btn row-btn--danger" (click)="openDelete(venue)">
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (total() > pageSize) {
+        <nav class="venues-pagination" aria-label="Venues pagination">
+          <p class="venues-pagination__summary">
+            Showing {{ rangeStart() }}–{{ rangeEnd() }} of {{ total() }}
+            (page {{ pageNumber() }} of {{ totalPages() }})
+          </p>
+          <div class="venues-pagination__actions">
+            <button
+              type="button"
+              class="page-btn"
+              (click)="goToPreviousPage()"
+              [disabled]="!hasPrevious()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="page-btn"
+              (click)="goToNextPage()"
+              [disabled]="!hasNext()"
+            >
+              Next
+            </button>
+          </div>
+        </nav>
+      }
+    }
+  }
+</section>
+
+@if (editVenue(); as venue) {
+  <app-venue-edit-modal
+    [db]="topic.active().db"
+    [venueId]="venue.id"
+    (closed)="closeEdit()"
+    (saved)="onVenueSaved()"
+  />
+}
+
+@if (deleteVenue(); as venue) {
+  <app-venue-delete-modal
+    [db]="topic.active().db"
+    [venueId]="venue.id"
+    [venueName]="venue.name"
+    (closed)="closeDelete()"
+    (deleted)="onVenueDeleted()"
+  />
+}

@@ -1,0 +1,64 @@
+<div class="modal-backdrop" (click)="onBackdropClick($event)">
+  <div
+    class="modal-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="venue-delete-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <h2 id="venue-delete-title" class="modal-title">Delete venue</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">
+        ×
+      </button>
+    </header>
+
+    @if (loading()) {
+      <p class="modal-status" role="status">Loading delete options…</p>
+    } @else {
+      <p class="modal-copy">
+        Delete <strong>{{ venueName() }}</strong>?
+        @if (linkedEventCount() > 0) {
+          <span>
+            {{ linkedEventCount() }} linked event(s) will be moved to the venue you choose below.
+          </span>
+        } @else {
+          <span>No events currently reference this venue.</span>
+        }
+      </p>
+
+      @if (replacementOptions().length > 0) {
+        <label class="modal-label" for="replacement-venue">Move linked events to</label>
+        <select
+          id="replacement-venue"
+          class="modal-select"
+          [value]="selectedReplacementId()"
+          (change)="onReplacementChange($event)"
+        >
+          <option value="" disabled>Select a venue…</option>
+          @for (option of replacementOptions(); track option.id) {
+            <option [value]="option.id">{{ option.name }}</option>
+          }
+        </select>
+      }
+
+      @if (error(); as errMsg) {
+        <p class="modal-status modal-status--error" role="alert">{{ errMsg }}</p>
+      }
+
+      <footer class="modal-actions">
+        <button type="button" class="modal-btn modal-btn--ghost" (click)="closed.emit()">
+          Cancel
+        </button>
+        <button
+          type="button"
+          class="modal-btn modal-btn--danger"
+          (click)="confirmDelete()"
+          [disabled]="!canConfirm()"
+        >
+          {{ deleting() ? 'Deleting…' : 'Delete venue' }}
+        </button>
+      </footer>
+    }
+  </div>
+</div>

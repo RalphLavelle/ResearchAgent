@@ -9,6 +9,7 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { RouterLink } from '@angular/router';
 
 import { TopicService } from '../topic/topic.service';
 
@@ -28,7 +29,7 @@ export interface ReportsPayload {
 
 @Component({
   selector: 'app-reports',
-  imports: [DatePipe],
+  imports: [DatePipe, RouterLink],
   templateUrl: './reports.html',
   styleUrl: './reports.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
