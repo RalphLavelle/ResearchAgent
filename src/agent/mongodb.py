@@ -96,6 +96,18 @@ def get_client() -> MongoClient:
     return MongoClient(uri)
 
 
+@lru_cache
+def ensure_collection_indexes(db_name: str) -> None:
+    """Create indexes that help venue admin queries and poster lookups (idempotent)."""
+    name = (db_name or "").strip()
+    if not name:
+        return
+    db = get_client()[name]
+    db[EVENTS_COLLECTION].create_index("venue.id", background=True)
+    db[EVENTS_COLLECTION].create_index("date", background=True)
+    db[IMAGES_COLLECTION].create_index("source_url", background=True)
+
+
 def get_database(db_name: str) -> Database:
     """Return the database for one topic (``topics.json`` ``db`` field)."""
     name = (db_name or "").strip()

@@ -114,3 +114,38 @@ def test_garbage_collect_deletes_unreferenced_images() -> None:
     assert removed == 1
     assert image_store.fetch_image(DB, "keep.webp") is not None
     assert image_store.fetch_image(DB, "drop.webp") is None
+
+
+def test_source_urls_by_event_id_batches_image_lookups() -> None:
+    """Poster URLs resolve with one images query, not one find per event."""
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = DB
+    image_store.store_image(
+        db,
+        image_id="poster-a.jpg",
+        source_url="https://cdn.example/a.jpg",
+        data=b"a",
+        content_type="image/jpeg",
+    )
+    image_store.store_image(
+        db,
+        image_id="poster-b.jpg",
+        source_url="https://cdn.example/b.jpg",
+        data=b"b",
+        content_type="image/jpeg",
+    )
+    coll = get_database(db)[EVENTS_COLLECTION]
+    coll.insert_many(
+        [
+            {"_id": "evt-a", "image_id": "poster-a.jpg"},
+            {"_id": "evt-b", "image_id": "poster-b.jpg"},
+            {"_id": "evt-legacy", "poster_url": "https://legacy.example/p.jpg"},
+        ]
+    )
+
+    mapping = image_store.source_urls_by_event_id(db)
+
+    assert mapping["evt-a"] == "https://cdn.example/a.jpg"
+    assert mapping["evt-b"] == "https://cdn.example/b.jpg"
+    assert mapping["evt-legacy"] == "https://legacy.example/p.jpg"

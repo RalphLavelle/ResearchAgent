@@ -11,10 +11,9 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from agent import config
-from agent.event_store import load_existing_rows
-from agent.json_output import build_events_payload_from_rows
+from agent.event_store import load_events_api_payload
 from agent.image_store import fetch_image
-from agent.mongodb import EVENTS_COLLECTION, get_database
+from agent.mongodb import get_database
 from agent.report_store import list_reports
 from agent.topics import load_topics
 from agent import venue_store
@@ -44,20 +43,7 @@ async def get_events(request: Request) -> JSONResponse:
     if not db_name:
         return JSONResponse({"error": "Unknown topic"}, status_code=404)
     try:
-        rows = load_existing_rows(db_name)
-        coll = get_database(db_name)[EVENTS_COLLECTION]
-        from agent.image_cache import api_image_url
-
-        thumbnail_urls: dict[str, str | None] = {}
-        for doc in coll.find({}, {"_id": 1, "image_id": 1}):
-            eid = str(doc["_id"])
-            iid = str(doc.get("image_id") or "").strip()
-            thumbnail_urls[eid] = api_image_url(db_name, iid) if iid else None
-
-        payload: dict[str, Any] = build_events_payload_from_rows(
-            rows,
-            thumbnail_urls=thumbnail_urls,
-        )
+        payload: dict[str, Any] = load_events_api_payload(db_name)
         return JSONResponse(payload)
     except Exception as exc:
         logger.exception("API events error for db=%s", db_name)

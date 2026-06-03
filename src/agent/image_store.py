@@ -109,13 +109,25 @@ def ensure_source_registered(db_name: str, source_url: str) -> str:
     return image_id
 
 
+def source_urls_by_image_ids(db_name: str, image_ids: set[str]) -> dict[str, str]:
+    """Return ``image_id → upstream poster URL`` in one query."""
+    if not image_ids:
+        return {}
+    coll = get_database(db_name)[IMAGES_COLLECTION]
+    return {
+        str(doc["_id"]): str(doc.get("source_url") or "").strip()
+        for doc in coll.find({"_id": {"$in": list(image_ids)}}, {"_id": 1, "source_url": 1})
+        if str(doc.get("source_url") or "").strip()
+    }
+
+
 def source_urls_by_event_id(db_name: str) -> dict[str, str]:
     """Return ``event_id → upstream poster URL`` via linked image documents."""
     from agent.mongodb import EVENTS_COLLECTION
 
     out: dict[str, str] = {}
+    pending: dict[str, str] = {}
     events = get_database(db_name)[EVENTS_COLLECTION]
-    images = get_database(db_name)[IMAGES_COLLECTION]
     for doc in events.find({}, {"_id": 1, "image_id": 1, "poster_url": 1}):
         eid = str(doc.get("_id") or "")
         if not eid:
@@ -125,12 +137,15 @@ def source_urls_by_event_id(db_name: str) -> dict[str, str]:
             out[eid] = legacy
             continue
         image_id = str(doc.get("image_id") or "").strip()
-        if not image_id:
-            continue
-        img_doc = images.find_one({"_id": image_id}, {"source_url": 1})
-        source = str((img_doc or {}).get("source_url") or "").strip()
-        if source:
-            out[eid] = source
+        if image_id:
+            pending[eid] = image_id
+
+    if pending:
+        sources = source_urls_by_image_ids(db_name, set(pending.values()))
+        for eid, image_id in pending.items():
+            source = sources.get(image_id, "")
+            if source:
+                out[eid] = source
     return out
 
 
@@ -151,23 +166,24 @@ def delete_images_not_in(db_name: str, keep_ids: set[str]) -> int:
 
 def load_event_image_map(db_name: str) -> dict[str, dict[str, str]]:
     """Return ``event_id → {source, image_id}`` from event documents."""
-    coll = get_database(db_name)[IMAGES_COLLECTION]
-    # Event → image link lives on event docs; rebuild from events collection.
     from agent.mongodb import EVENTS_COLLECTION
 
     out: dict[str, dict[str, str]] = {}
+    pending: dict[str, str] = {}
     events = get_database(db_name)[EVENTS_COLLECTION]
-    images = get_database(db_name)[IMAGES_COLLECTION]
     for doc in events.find({}, {"_id": 1, "image_id": 1}):
         eid = str(doc.get("_id") or "")
         image_id = str(doc.get("image_id") or "").strip()
         if not eid or not image_id:
             continue
-        img_doc = images.find_one({"_id": image_id}, {"source_url": 1})
-        source = str((img_doc or {}).get("source_url") or "").strip()
-        if source:
-            out[eid] = {"source": source, "image_id": image_id}
-    _ = coll
+        pending[eid] = image_id
+
+    if pending:
+        sources = source_urls_by_image_ids(db_name, set(pending.values()))
+        for eid, image_id in pending.items():
+            source = sources.get(image_id, "")
+            if source:
+                out[eid] = {"source": source, "image_id": image_id}
     return out
 
 

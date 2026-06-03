@@ -160,6 +160,46 @@ def row_to_doc(row: list, *, db_name: str = "") -> dict[str, Any]:
     return doc
 
 
+def load_events_api_payload(db_name: str) -> dict[str, Any]:
+    """Build ``GET /api/<db>/events`` JSON with one events scan (+ venue lookup).
+
+    Unlike ``load_existing_rows``, this skips poster N+1 lookups — thumbnail URLs
+    are derived from each event's ``image_id`` without hitting the images collection.
+    """
+    from agent import venue_store
+    from agent.image_cache import api_image_url
+    from agent.json_output import build_events_payload_from_rows
+    from agent.mongodb import ensure_collection_indexes
+
+    ensure_collection_indexes(db_name)
+
+    venue_locations = venue_store.locations_by_id(db_name)
+    rows: dict[str, list] = {}
+    thumbnail_urls: dict[str, str | None] = {}
+    coll = get_database(db_name)[EVENTS_COLLECTION]
+
+    for doc in coll.find():
+        row = doc_to_row(doc)
+        url = str(row[IDX_URL] or "").strip().lower()
+        if not url.startswith("http"):
+            continue
+        venue_id = venue_id_from_doc(doc)
+        legacy_location = str(doc.get("location") or "").strip()
+        row[IDX_LOCATION] = venue_locations.get(venue_id, legacy_location)
+        legacy_poster = str(doc.get("poster_url") or "").strip()
+        row[IDX_POSTER] = legacy_poster
+        eid = str(row[IDX_EVENT_ID] or "").strip()
+        image_id = str(doc.get("image_id") or "").strip()
+        thumbnail_urls[eid] = api_image_url(db_name, image_id) if image_id else None
+        sid = eid or str(uuid4())
+        while sid in rows:
+            sid = str(uuid4())
+        row[IDX_EVENT_ID] = sid
+        rows[sid] = row
+
+    return build_events_payload_from_rows(rows, thumbnail_urls=thumbnail_urls)
+
+
 def load_existing_rows(db_name: str) -> dict[str, list]:
     """Load all events as ``{Event ID → row}``."""
     from agent import venue_store
