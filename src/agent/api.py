@@ -6,6 +6,7 @@ import logging
 from typing import Any
 
 from starlette.applications import Starlette
+from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
@@ -37,7 +38,12 @@ def _resolve_db(topic_or_db: str) -> str | None:
     return topic_or_db or None
 
 
-async def get_events(request: Request) -> JSONResponse:
+# NOTE: Read-only handlers are plain ``def`` (not ``async def``) on purpose.
+# They call blocking PyMongo. Starlette runs sync endpoints in a worker
+# threadpool, so a slow DB call never freezes the single event loop and
+# concurrent requests (e.g. the events JSON racing ~100 poster-image loads)
+# no longer serialise behind each other.
+def get_events(request: Request) -> JSONResponse:
     db_key = request.path_params["db"]
     db_name = _resolve_db(db_key)
     if not db_name:
@@ -50,7 +56,7 @@ async def get_events(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-async def get_reports(request: Request) -> JSONResponse:
+def get_reports(request: Request) -> JSONResponse:
     db_key = request.path_params["db"]
     db_name = _resolve_db(db_key)
     if not db_name:
@@ -75,7 +81,7 @@ def _venue_to_api(doc: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-async def get_venues(request: Request) -> JSONResponse:
+def get_venues(request: Request) -> JSONResponse:
     db_key = request.path_params["db"]
     db_name = _resolve_db(db_key)
     if not db_name:
@@ -111,7 +117,7 @@ async def get_venues(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-async def get_venue(request: Request) -> JSONResponse:
+def get_venue(request: Request) -> JSONResponse:
     db_key = request.path_params["db"]
     venue_id = request.path_params["venue_id"]
     db_name = _resolve_db(db_key)
@@ -139,7 +145,9 @@ async def put_venue(request: Request) -> JSONResponse:
         body = await request.json()
         if not isinstance(body, dict):
             return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
-        saved = venue_store.update_venue(db_name, venue_id, body)
+        # Reading the body needs ``await`` (async handler), but the blocking
+        # MongoDB write is offloaded so it never stalls the event loop.
+        saved = await run_in_threadpool(venue_store.update_venue, db_name, venue_id, body)
         return JSONResponse(venue_store.venue_document_to_json(saved))
     except KeyError as exc:
         return JSONResponse({"error": str(exc)}, status_code=404)
@@ -163,7 +171,9 @@ async def delete_venue(request: Request) -> JSONResponse:
         replacement_id = str(body.get("replacementVenueId") or "").strip()
         if not replacement_id:
             return JSONResponse({"error": "replacementVenueId is required"}, status_code=400)
-        stats = venue_store.delete_venue(
+        # Offload the blocking re-link + delete so the event loop stays free.
+        stats = await run_in_threadpool(
+            venue_store.delete_venue,
             db_name,
             venue_id,
             replacement_venue_id=replacement_id,
@@ -178,7 +188,7 @@ async def delete_venue(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-async def get_image(request: Request) -> Response:
+def get_image(request: Request) -> Response:
     db_key = request.path_params["db"]
     image_id = request.path_params["image_id"]
     db_name = _resolve_db(db_key)
