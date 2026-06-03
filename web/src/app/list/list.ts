@@ -12,6 +12,7 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 
 import { TopicService } from '../topic/topic.service';
+import { EmailSignupModalComponent } from './email-signup-modal/email-signup-modal';
 
 /** One row from the topic's MongoDB-backed events API. */
 export interface ResearchEvent {
@@ -40,7 +41,7 @@ export interface EventsPayload {
 
 @Component({
   selector: 'app-list',
-  imports: [NgOptimizedImage],
+  imports: [NgOptimizedImage, EmailSignupModalComponent],
   templateUrl: './list.html',
   styleUrl: './list.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -103,6 +104,11 @@ export class ListComponent {
   protected readonly featuredEvents = signal<ResearchEvent[]>([]);
   /** Carousel offset when fewer than four cards fit on screen. */
   protected readonly featuredIndex = signal(0);
+  /** When true, the weekly email signup modal is open. */
+  protected readonly emailSignupOpen = signal(false);
+
+  /** Active topic MongoDB name — passed to the signup modal API call. */
+  protected readonly activeDb = computed(() => this.#topic.active().db);
 
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
@@ -177,6 +183,14 @@ export class ListComponent {
 
   protected showFeaturedCarouselNav(): boolean {
     return this.featuredEvents().length > 1;
+  }
+
+  protected openEmailSignup(): void {
+    this.emailSignupOpen.set(true);
+  }
+
+  protected closeEmailSignup(): void {
+    this.emailSignupOpen.set(false);
   }
 
   protected prevFeatured(): void {

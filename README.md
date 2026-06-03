@@ -140,6 +140,9 @@ Restart `serve` after changing this value.
   | `GET /api/{db}/venues/{venue_id}` | Raw venue JSON for admin editing (`_id`, `name`, `location`, `aliases`, `linkedEventCount`) |
   | `PUT /api/{db}/venues/{venue_id}` | Save edited venue JSON back to MongoDB |
   | `DELETE /api/{db}/venues/{venue_id}` | Delete a venue; body `{ "replacementVenueId": "..." }` reassigns linked events first |
+  | `POST /api/admin/verify-password` | Admin gate — body `{ "password": "..." }`; checks `ADMIN_PASSWORD` in `.env` |
+  | `GET /api/{db}/users[?limit=50&skip=0]` | Weekly email subscribers (`id`, `email`, `subscribed_at`) — used by `/admin/users` |
+  | `POST /api/{db}/users/subscribe` | Weekly email signup — body `{ "email": "..." }`; saves to the topic's `users` collection |
 
   `{db}` accepts either the topic id or the raw database name. Example for the default topic: `http://127.0.0.1:8765/api/bgc/events`.
 
@@ -179,7 +182,7 @@ npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Admin** in the nav (or `/admin`) for pipeline reports and venue records. The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Admin** in the nav (or `/admin`) for pipeline reports, venue records, and email subscribers — you'll be prompted for the password set as **`ADMIN_PASSWORD`** in `.env` (stored in the browser's `sessionStorage` for the tab session). The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
 
 ## Behavior
 

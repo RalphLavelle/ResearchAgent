@@ -1,0 +1,73 @@
+<div class="modal-backdrop" (click)="onBackdropClick($event)">
+  <div
+    class="modal-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="email-signup-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <h2 id="email-signup-title" class="modal-title">Weekly email 📬</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">
+        ×
+      </button>
+    </header>
+
+    @if (submitted()) {
+      <div class="thank-you" role="status">
+        <p class="thank-you__emoji" aria-hidden="true">🎉</p>
+        <p class="thank-you__title">You're on the list!</p>
+        <p class="thank-you__body">
+          Thanks for signing up — we'll send you a weekly roundup of the best gigs.
+        </p>
+        <button type="button" class="modal-btn modal-btn--primary" (click)="closed.emit()">
+          Close
+        </button>
+      </div>
+    } @else {
+      <p class="modal-lead">
+        Get a curated weekly digest of upcoming events — no spam, just music.
+      </p>
+
+      @if (error(); as errMsg) {
+        <p class="modal-status modal-status--error" role="alert">{{ errMsg }}</p>
+      }
+
+      <form class="signup-form" [formGroup]="form" (ngSubmit)="submit()">
+        <label class="modal-label" for="signup-email">Email address</label>
+        <input
+          id="signup-email"
+          class="modal-input"
+          type="email"
+          formControlName="email"
+          autocomplete="email"
+          inputmode="email"
+          placeholder="you@example.com"
+          (input)="onEmailInput()"
+        />
+        @if (form.controls.email.touched && form.controls.email.invalid) {
+          <p class="field-error" role="alert">
+            @if (form.controls.email.hasError('required')) {
+              Please enter your email address.
+            } @else {
+              Please enter a valid email address.
+            }
+          </p>
+        }
+
+        <footer class="modal-actions">
+          <button type="button" class="modal-btn modal-btn--ghost" (click)="closed.emit()">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="modal-btn modal-btn--primary"
+            [disabled]="submitting()"
+          >
+            {{ submitting() ? 'Signing up…' : 'Sign up' }}
+          </button>
+        </footer>
+      </form>
+    }
+  </div>
+</div>

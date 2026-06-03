@@ -1,0 +1,42 @@
+<section class="admin-login" aria-labelledby="admin-login-heading">
+  <div class="admin-login__card">
+    <header class="admin-login__header">
+      <p class="admin-login__emoji" aria-hidden="true">🔐</p>
+      <h1 id="admin-login-heading" class="admin-login__title">Admin access</h1>
+      <p class="admin-login__intro">
+        Enter the admin password to manage reports, venues, and subscribers.
+      </p>
+    </header>
+
+    @if (error(); as errMsg) {
+      <p class="admin-login__error" role="alert">{{ errMsg }}</p>
+    }
+
+    <form class="admin-login__form" [formGroup]="form" (ngSubmit)="submit()">
+      <label class="admin-login__label" for="admin-password">Password</label>
+      <input
+        id="admin-password"
+        class="admin-login__input"
+        type="password"
+        formControlName="password"
+        autocomplete="current-password"
+        [attr.aria-invalid]="form.controls.password.touched && form.controls.password.invalid"
+      />
+      @if (form.controls.password.touched && form.controls.password.hasError('required')) {
+        <p class="admin-login__field-error" role="alert">Password is required.</p>
+      }
+
+      <button
+        type="submit"
+        class="admin-login__submit"
+        [disabled]="submitting()"
+      >
+        {{ submitting() ? 'Checking…' : 'Enter admin' }}
+      </button>
+    </form>
+
+    <p class="admin-login__footer">
+      <a routerLink="/" class="admin-login__back">← Back to events</a>
+    </p>
+  </div>
+</section>

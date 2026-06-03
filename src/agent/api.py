@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import secrets
 from typing import Any
 
 from starlette.applications import Starlette
@@ -17,7 +18,7 @@ from agent.image_store import fetch_image
 from agent.mongodb import get_database
 from agent.report_store import list_reports
 from agent.topics import load_topics
-from agent import venue_store
+from agent import user_store, venue_store
 
 logger = logging.getLogger(__name__)
 
@@ -188,6 +189,88 @@ async def delete_venue(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+def _user_to_api(doc: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(doc.get("_id") or ""),
+        "email": str(doc.get("email") or ""),
+        "subscribed_at": str(doc.get("subscribed_at") or ""),
+    }
+
+
+def get_users(request: Request) -> JSONResponse:
+    db_key = request.path_params["db"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        limit_raw = request.query_params.get("limit", "50")
+        skip_raw = request.query_params.get("skip", "0")
+        limit = max(1, min(50, int(limit_raw)))
+        skip = max(0, int(skip_raw))
+        docs, total = user_store.list_users_page(db_name, limit=limit, skip=skip)
+        return JSONResponse(
+            {
+                "users": [_user_to_api(doc) for doc in docs],
+                "total": total,
+                "limit": limit,
+                "skip": skip,
+            }
+        )
+    except ValueError:
+        return JSONResponse({"error": "Invalid limit or skip query parameter"}, status_code=400)
+    except Exception as exc:
+        logger.exception("API users error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+async def post_user_subscribe(request: Request) -> JSONResponse:
+    """Save an email address for the weekly digest (``users`` collection)."""
+    db_key = request.path_params["db"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
+        email = str(body.get("email") or "").strip()
+        if not email:
+            return JSONResponse({"error": "email is required"}, status_code=400)
+        saved = await run_in_threadpool(user_store.subscribe, db_name, email)
+        return JSONResponse(
+            {
+                "email": str(saved.get("email") or ""),
+                "subscribed_at": str(saved.get("subscribed_at") or ""),
+            }
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        logger.exception("API user subscribe error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+async def post_admin_verify_password(request: Request) -> JSONResponse:
+    """Check the admin password from ``ADMIN_PASSWORD`` in ``.env``."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
+        password = str(body.get("password") or "")
+        expected = config.ADMIN_PASSWORD
+        if not expected:
+            return JSONResponse(
+                {"error": "Admin password is not configured on the server"},
+                status_code=503,
+            )
+        if not secrets.compare_digest(password, expected):
+            return JSONResponse({"error": "Incorrect password"}, status_code=401)
+        return JSONResponse({"ok": True})
+    except Exception as exc:
+        logger.exception("API admin verify-password error")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 def get_image(request: Request) -> Response:
     db_key = request.path_params["db"]
     image_id = request.path_params["image_id"]
@@ -214,7 +297,10 @@ def create_app() -> Starlette:
             Route("/api/{db}/venues/{venue_id}", get_venue, methods=["GET"]),
             Route("/api/{db}/venues/{venue_id}", put_venue, methods=["PUT"]),
             Route("/api/{db}/venues/{venue_id}", delete_venue, methods=["DELETE"]),
+            Route("/api/{db}/users", get_users, methods=["GET"]),
+            Route("/api/{db}/users/subscribe", post_user_subscribe, methods=["POST"]),
             Route("/api/{db}/images/{image_id}", get_image, methods=["GET"]),
+            Route("/api/admin/verify-password", post_admin_verify_password, methods=["POST"]),
             Route("/health", lambda r: JSONResponse({"ok": True}), methods=["GET"]),
         ],
     )

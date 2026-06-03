@@ -62,6 +62,9 @@ export class TopicService {
   /** API URL for venue records (admin). */
   readonly venuesApiUrl = computed(() => `/api/${this.active().db}/venues`);
 
+  /** API URL for weekly email subscribers (admin). */
+  readonly usersApiUrl = computed(() => `/api/${this.active().db}/users`);
+
   constructor() {
     this.#http
       .get<TopicsRegistry>('topics/topics.json?t=' + Date.now())

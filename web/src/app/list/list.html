@@ -19,7 +19,16 @@
     } @else {
       @if (featuredEvents().length > 0) {
         <section class="featured-events" aria-labelledby="featured-heading">
-          <h2 id="featured-heading" class="featured-events__title">Spotlight picks</h2>
+          <div class="featured-events__header">
+            <h2 id="featured-heading" class="featured-events__title">Spotlight picks</h2>
+            <button
+              type="button"
+              class="email-signup-btn"
+              (click)="openEmailSignup()"
+            >
+              Sign up to receive weekly email
+            </button>
+          </div>
           <div class="featured-carousel">
             @if (showFeaturedCarouselNav()) {
               <button
@@ -214,3 +223,10 @@
     }
   }
 </section>
+
+@if (emailSignupOpen()) {
+  <app-email-signup-modal
+    [db]="activeDb()"
+    (closed)="closeEmailSignup()"
+  />
+}

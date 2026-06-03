@@ -11,7 +11,7 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 
 ## Source of truth
 
-- **MongoDB** (database name = topic's ``db`` property in ``topics.json``) is the database. Collections: ``events``, ``venues``, ``images``, ``reports``. The Angular app reads via ``GET /api/<db>/events``, ``GET /api/<db>/reports``, and ``GET /api/<db>/images/<id>``.
+- **MongoDB** (database name = topic's ``db`` property in ``topics.json``) is the database. Collections: ``events``, ``venues``, ``images``, ``reports``, ``users``. The Angular app reads via ``GET /api/<db>/events``, ``GET /api/<db>/reports``, and ``GET /api/<db>/images/<id>``; weekly email signup uses ``POST /api/<db>/users/subscribe``.
 - **Run reports** are stored in MongoDB (``reports`` collection) at the end of each pipeline run: ``datetime`` (UTC), ``searches``, ``urls`` (crawled pages grouped by host), and ``changes`` (merge stats).
 - **`data/snapshot.json`** fingerprints the **current run’s** resources for log messaging; Notion sync uses a fingerprint of the **full event store** (`canonical_fingerprint(all_resources)`).
 
@@ -76,6 +76,7 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Spreadsheet + dedup | `src/agent/local_output.py` |
 | MongoDB persistence | `src/agent/event_store.py`, `src/agent/venue_store.py`, `src/agent/image_store.py`, `src/agent/report_store.py`, `src/agent/mongodb.py` |
 | REST API for Angular | `src/agent/api.py` |
+| Weekly email subscribers | `src/agent/user_store.py` |
 | Legacy file migration | `src/agent/migrate_mongodb.py`, `src/agent/migrate_venues.py` |
 | Per-run reports (MongoDB) | `src/agent/report_store.py` |
 | Events JSON for Angular | `src/agent/json_output.py` |

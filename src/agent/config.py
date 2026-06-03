@@ -158,6 +158,9 @@ OUTPUT_DIR = resolve_output_dir(
 
 MONGODB_URI = (os.environ.get("MONGODB_URI") or "").strip()
 
+# Password required to access the Angular admin section (checked via ``POST /api/admin/verify-password``).
+ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or "").strip()
+
 MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
 PLANNER_TEMPERATURE = float(os.environ.get("PLANNER_TEMPERATURE", "0.85"))
 SEARCH_DELAY_SEC = float(os.environ.get("SEARCH_DELAY_SEC", "1.5"))

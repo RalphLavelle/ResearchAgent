@@ -1,0 +1,89 @@
+<section class="users-panel" aria-labelledby="users-heading">
+  <p class="admin-breadcrumb">
+    <a routerLink="/admin" class="admin-breadcrumb__link">← Admin</a>
+  </p>
+
+  <header class="users-header">
+    <h1 id="users-heading" class="users-title">
+      <span aria-hidden="true">📬</span>
+      Users
+    </h1>
+    <p class="users-intro">
+      Weekly email subscribers for the active topic (50 per page, newest first).
+    </p>
+  </header>
+
+  @if (loading()) {
+    <p class="status-msg" role="status">Loading subscribers…</p>
+  }
+
+  @if (error(); as errMsg) {
+    <p class="status-msg error" role="alert">{{ errMsg }}</p>
+  }
+
+  @if (!loading() && !error()) {
+    @if (users().length === 0) {
+      <div class="empty-state">
+        <p class="empty-title">No subscribers yet</p>
+        <p class="empty-hint">
+          Sign-ups from the events page are saved here automatically.
+        </p>
+      </div>
+    } @else {
+      <div class="table-scroll">
+        <table class="users-table">
+          <caption class="sr-only">
+            Weekly email subscribers for the active topic
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Email</th>
+              <th scope="col">Subscribed</th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (user of users(); track user.id) {
+              <tr>
+                <td class="users-cell users-cell--email">{{ user.email }}</td>
+                <td class="users-cell">
+                  @if (user.subscribed_at) {
+                    {{ user.subscribed_at | date: 'medium' }}
+                  } @else {
+                    —
+                  }
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (total() > pageSize) {
+        <nav class="users-pagination" aria-label="Users pagination">
+          <p class="users-pagination__summary">
+            Showing {{ rangeStart() }}–{{ rangeEnd() }} of {{ total() }}
+            (page {{ pageNumber() }} of {{ totalPages() }})
+          </p>
+          <div class="users-pagination__actions">
+            <button
+              type="button"
+              class="page-btn"
+              (click)="goToPreviousPage()"
+              [disabled]="!hasPrevious()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="page-btn"
+              (click)="goToNextPage()"
+              [disabled]="!hasNext()"
+            >
+              Next
+            </button>
+          </div>
+        </nav>
+      }
+    }
+  }
+</section>

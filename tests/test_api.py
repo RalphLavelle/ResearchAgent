@@ -1,5 +1,7 @@
 """Tests for the HTTP API."""
 
+import pytest
+
 from agent import venue_store
 from agent.local_output import MergeStats
 from agent.report_store import save_run_report
@@ -105,6 +107,106 @@ def test_put_venue_updates_document() -> None:
     body = response.json()
     assert body["name"] == "New Name"
     assert body["aliases"] == ["Alias One"]
+
+
+def test_post_admin_verify_password_accepts_correct_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    client = TestClient(create_app())
+    response = client.post("/api/admin/verify-password", json={"password": "secret-admin"})
+
+    assert response.status_code == 200
+    assert response.json()["ok"] is True
+
+
+def test_post_admin_verify_password_rejects_wrong_value(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    client = TestClient(create_app())
+    response = client.post("/api/admin/verify-password", json={"password": "wrong"})
+
+    assert response.status_code == 401
+    assert "Incorrect" in response.json()["error"]
+
+
+def test_post_admin_verify_password_requires_configuration(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "")
+
+    client = TestClient(create_app())
+    response = client.post("/api/admin/verify-password", json={"password": "anything"})
+
+    assert response.status_code == 503
+
+
+def test_get_users_returns_paged_records() -> None:
+    from agent import user_store
+
+    user_store.subscribe("test-db", "alpha@example.com")
+    user_store.subscribe("test-db", "beta@example.com")
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/users?limit=50")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    assert body["limit"] == 50
+    assert len(body["users"]) == 2
+    emails = {row["email"] for row in body["users"]}
+    assert emails == {"alpha@example.com", "beta@example.com"}
+
+
+def test_get_users_caps_limit_at_fifty() -> None:
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/users?limit=999")
+    assert response.status_code == 200
+    assert response.json()["limit"] == 50
+
+
+def test_get_users_unknown_db_still_resolves() -> None:
+    client = TestClient(create_app())
+    response = client.get("/api/unknown-db-xyz/users")
+    assert response.status_code == 200
+    body = response.json()
+    assert body["users"] == []
+    assert body["total"] == 0
+
+
+def test_post_user_subscribe_saves_email() -> None:
+    from agent.mongodb import USERS_COLLECTION, get_database
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/test-db/users/subscribe",
+        json={"email": "fan@example.com"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["email"] == "fan@example.com"
+    assert body["subscribed_at"]
+
+    stored = get_database("test-db")[USERS_COLLECTION].find_one({"email": "fan@example.com"})
+    assert stored is not None
+
+
+def test_post_user_subscribe_rejects_invalid_email() -> None:
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/test-db/users/subscribe",
+        json={"email": "not-valid"},
+    )
+
+    assert response.status_code == 400
+    assert "Invalid" in response.json()["error"]
+
+
+def test_post_user_subscribe_requires_email() -> None:
+    client = TestClient(create_app())
+    response = client.post("/api/test-db/users/subscribe", json={})
+
+    assert response.status_code == 400
+    assert response.json()["error"] == "email is required"
 
 
 def test_delete_venue_reassigns_events() -> None:
