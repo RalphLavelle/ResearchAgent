@@ -7,6 +7,7 @@ unchanged. Documents are keyed by Event ID in the ``events`` collection.
 from __future__ import annotations
 
 import logging
+import random
 from datetime import date, datetime
 from typing import Any
 from uuid import uuid4
@@ -198,6 +199,73 @@ def load_events_api_payload(db_name: str) -> dict[str, Any]:
         rows[sid] = row
 
     return build_events_payload_from_rows(rows, thumbnail_urls=thumbnail_urls)
+
+
+def load_spotlight_api_payload(
+    db_name: str,
+    *,
+    limit: int = 4,
+    exclude_ids: set[str] | None = None,
+) -> dict[str, Any]:
+    """Build ``GET /api/<db>/events/spotlight`` — only events with cached posters.
+
+    Candidates must have ``image_id`` (poster successfully cached in MongoDB),
+    a valid ``http(s)`` listing URL, and a date on or after ``local_today()``.
+    Up to *limit* rows are chosen at random from that pool.
+    """
+    from agent import venue_store
+    from agent.event_window import local_today
+    from agent.image_cache import api_image_url
+    from agent.json_output import build_events_payload_from_rows
+    from agent.mongodb import ensure_collection_indexes
+
+    ensure_collection_indexes(db_name)
+    cap = max(1, min(4, int(limit)))
+    today_iso = local_today().isoformat()
+    skip = exclude_ids or set()
+
+    query: dict[str, Any] = {
+        "image_id": {"$exists": True, "$type": "string", "$ne": ""},
+        "url": {"$regex": r"^https?://", "$options": "i"},
+        "date": {"$gte": today_iso},
+    }
+    if skip:
+        query["_id"] = {"$nin": list(skip)}
+
+    venue_locations = venue_store.locations_by_id(db_name)
+    coll = get_database(db_name)[EVENTS_COLLECTION]
+    candidates: list[tuple[dict[str, Any], list]] = []
+
+    for doc in coll.find(query):
+        row = doc_to_row(doc)
+        url = str(row[IDX_URL] or "").strip().lower()
+        if not url.startswith("http"):
+            continue
+        venue_id = venue_id_from_doc(doc)
+        legacy_location = str(doc.get("location") or "").strip()
+        row[IDX_LOCATION] = venue_locations.get(venue_id, legacy_location)
+        row[IDX_POSTER] = str(doc.get("poster_url") or "").strip()
+        candidates.append((doc, row))
+
+    if not candidates:
+        return {"events": []}
+
+    chosen = random.sample(candidates, k=min(cap, len(candidates)))
+    rows: dict[str, list] = {}
+    thumbnail_urls: dict[str, str | None] = {}
+
+    for doc, row in chosen:
+        eid = str(row[IDX_EVENT_ID] or "").strip() or str(uuid4())
+        image_id = str(doc.get("image_id") or "").strip()
+        thumbnail_urls[eid] = api_image_url(db_name, image_id) if image_id else None
+        sid = eid
+        while sid in rows:
+            sid = str(uuid4())
+        row[IDX_EVENT_ID] = sid
+        rows[sid] = row
+
+    payload = build_events_payload_from_rows(rows, thumbnail_urls=thumbnail_urls)
+    return {"events": payload.get("events") or []}
 
 
 def load_existing_rows(db_name: str) -> dict[str, list]:

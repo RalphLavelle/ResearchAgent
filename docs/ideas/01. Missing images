@@ -1,2 +1,7 @@
 Tokenise the missing image jpg and flag events in the db as having a missing image, rather than (as current) ignorantly referring to the one image that really means there's no image at all.
 On schedule, send out a scout to get images for that event, using mainly the band name.
+
+
+Make sure there's a loader in the main carousel as we wait for the images to load
+
+Drop the admin password control if on localhost

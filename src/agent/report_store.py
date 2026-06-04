@@ -47,6 +47,7 @@ def build_report_document(
     queries: list[str],
     crawled_urls: list[str],
     merge_stats: MergeStats | None = None,
+    diagnostics: dict[str, str] | None = None,
     when: datetime | None = None,
 ) -> dict[str, Any]:
     """Shape one report row before insert."""
@@ -55,12 +56,20 @@ def build_report_document(
         moment = moment.replace(tzinfo=timezone.utc)
     else:
         moment = moment.astimezone(timezone.utc)
-    return {
+    doc: dict[str, Any] = {
         "datetime": moment.isoformat(),
         "searches": list(queries),
         "urls": group_urls_by_host(crawled_urls),
         "changes": merge_stats_to_changes(merge_stats),
     }
+    cleaned = {
+        str(key): str(value).strip()
+        for key, value in (diagnostics or {}).items()
+        if str(value).strip()
+    }
+    if cleaned:
+        doc["diagnostics"] = cleaned
+    return doc
 
 
 def save_run_report(
@@ -69,6 +78,7 @@ def save_run_report(
     queries: list[str],
     crawled_urls: list[str],
     merge_stats: MergeStats | None = None,
+    diagnostics: dict[str, str] | None = None,
     when: datetime | None = None,
 ) -> str:
     """Insert a report into the topic's ``reports`` collection."""
@@ -76,6 +86,7 @@ def save_run_report(
         queries=queries,
         crawled_urls=crawled_urls,
         merge_stats=merge_stats,
+        diagnostics=diagnostics,
         when=when,
     )
     coll = get_database(db_name)[REPORTS_COLLECTION]

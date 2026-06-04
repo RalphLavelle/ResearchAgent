@@ -57,8 +57,8 @@
                     {{ report.datetime | date: 'medium' }}
                   </time>
                 </td>
-                <td class="report-cell">{{ searchesSummary(report.searches) }}</td>
-                <td class="report-cell">{{ urlsSummary(report.urls) }}</td>
+                <td class="report-cell">{{ searchesSummary(report) }}</td>
+                <td class="report-cell">{{ urlsSummary(report) }}</td>
                 <td class="report-cell">{{ changesSummary(report.changes) }}</td>
               </tr>
               @if (isExpanded(report.id)) {
@@ -73,6 +73,10 @@
                               <li>{{ query }}</li>
                             }
                           </ul>
+                        } @else if (stepDiagnostic(report, 'planner'); as plannerNote) {
+                          <p class="detail-note">{{ plannerNote }}</p>
+                        } @else if (stepDiagnostic(report, 'search'); as searchNote) {
+                          <p class="detail-note">{{ searchNote }}</p>
                         } @else {
                           <p class="detail-empty">No planner queries recorded.</p>
                         }
@@ -100,10 +104,26 @@
                               </ul>
                             </div>
                           }
+                        } @else if (stepDiagnostic(report, 'crawl'); as crawlNote) {
+                          <p class="detail-note">{{ crawlNote }}</p>
                         } @else {
                           <p class="detail-empty">No pages were crawled this run.</p>
                         }
                       </section>
+
+                      @if (hasDiagnostics(report)) {
+                        <section class="detail-block" aria-label="Pipeline diagnostics">
+                          <h3 class="detail-block__title">diagnostics</h3>
+                          <dl class="diagnostics-dl">
+                            @for (entry of diagnosticEntries(report); track entry[0]) {
+                              <div class="diagnostics-dl__row">
+                                <dt>{{ entry[0] }}</dt>
+                                <dd>{{ entry[1] }}</dd>
+                              </div>
+                            }
+                          </dl>
+                        </section>
+                      }
 
                       <section class="detail-block" aria-label="Event store changes detail">
                         <h3 class="detail-block__title">changes</h3>

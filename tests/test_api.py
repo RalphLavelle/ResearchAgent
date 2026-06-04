@@ -109,6 +109,81 @@ def test_put_venue_updates_document() -> None:
     assert body["aliases"] == ["Alias One"]
 
 
+def test_get_events_spotlight_only_returns_cached_posters() -> None:
+    from agent.event_store import save_existing_rows
+    from agent.mongodb import EVENTS_COLLECTION, IMAGES_COLLECTION, get_database
+
+    get_database("test-db")[IMAGES_COLLECTION].insert_one(
+        {
+            "_id": "poster.jpg",
+            "source_url": "https://cdn.example.com/poster.jpg",
+            "content_type": "image/jpeg",
+            "data": b"fake",
+        }
+    )
+    with_poster = [
+        "Band With Poster",
+        "The Venue",
+        "",
+        __import__("datetime").date(2099, 6, 1),
+        "https://example.com/with-poster",
+        "",
+        "https://cdn.example.com/poster.jpg",
+        "",
+        "2026-06-01",
+        "evt-poster",
+        "",
+    ]
+    without_poster = [
+        "Band No Poster",
+        "The Venue",
+        "",
+        __import__("datetime").date(2099, 6, 2),
+        "https://example.com/no-poster",
+        "",
+        "",
+        "",
+        "2026-06-01",
+        "evt-plain",
+        "",
+    ]
+    save_existing_rows("test-db", {"evt-poster": with_poster, "evt-plain": without_poster})
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/events/spotlight?limit=4")
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["id"] == "evt-poster"
+    assert events[0]["thumbnailUrl"] == "/api/test-db/images/poster.jpg"
+
+
+def test_get_events_spotlight_respects_exclude() -> None:
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    coll = get_database("test-db")[EVENTS_COLLECTION]
+    for idx in range(3):
+        coll.insert_one(
+            {
+                "_id": f"evt-{idx}",
+                "event": f"Band {idx}",
+                "url": f"https://example.com/{idx}",
+                "date": "2099-06-10",
+                "image_id": f"img-{idx}.jpg",
+                "venue": {"name": "Venue", "id": ""},
+            }
+        )
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/events/spotlight?limit=4&exclude=evt-0,evt-1")
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["id"] == "evt-2"
+
+
 def test_post_admin_verify_password_accepts_correct_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
 
@@ -242,3 +317,36 @@ def test_delete_venue_reassigns_events() -> None:
     assert event is not None
     assert event["venue"]["id"] == new_id
     assert event["venue"]["name"] == "New Venue"
+
+
+def test_delete_venue_deletes_linked_events() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    bad_venue = venue_store.create_venue(db, "Wrong Venue")
+    bad_id = str(bad_venue["_id"])
+
+    get_database(db)[EVENTS_COLLECTION].insert_one(
+        {
+            "_id": "evt-venue-delete-linked",
+            "event": "Bad Gig",
+            "venue": venue_to_mongo("Wrong Venue", bad_id),
+            "url": "https://example.com/bad",
+        }
+    )
+
+    client = TestClient(create_app())
+    response = client.request(
+        "DELETE",
+        f"/api/test-db/venues/{bad_id}",
+        json={"deleteLinkedEvents": True},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["events_deleted"] == 1
+    assert venue_store.get_venue(db, bad_id) is None
+    assert (
+        get_database(db)[EVENTS_COLLECTION].find_one({"_id": "evt-venue-delete-linked"})
+        is None
+    )

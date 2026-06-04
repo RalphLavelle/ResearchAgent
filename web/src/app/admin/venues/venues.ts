@@ -12,7 +12,10 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 
 import { TopicService } from '../../topic/topic.service';
-import { VenueDeleteModalComponent } from './venue-delete-modal/venue-delete-modal';
+import {
+  VenueDeleteModalComponent,
+  VenueDeleteOutcome,
+} from './venue-delete-modal/venue-delete-modal';
 import { VenueEditModalComponent } from './venue-edit-modal/venue-edit-modal';
 
 /** One venue from ``GET /api/<db>/venues``. */
@@ -112,9 +115,14 @@ export class AdminVenuesComponent {
     this.deleteVenue.set(null);
   }
 
-  protected onVenueDeleted(): void {
+  protected onVenueDeleted(outcome: VenueDeleteOutcome): void {
     this.deleteVenue.set(null);
-    this.actionMessage.set('Venue deleted and linked events reassigned.');
+    const messages: Record<VenueDeleteOutcome, string> = {
+      none: 'Venue deleted.',
+      reassign: 'Venue deleted and linked events reassigned.',
+      delete: 'Venue deleted and linked events removed.',
+    };
+    this.actionMessage.set(messages[outcome]);
     this.#refreshList();
   }
 

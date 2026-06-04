@@ -219,19 +219,31 @@ def _extract_internal_links(page_url: str, html: str, host: str) -> list[str]:
     return found[:96]
 
 
-def deep_search_supplement(ddg_blob: str) -> tuple[str, list[str]]:
-    """Crawl seeds and return ``(curator_text, fetched_urls)``.
+def deep_search_supplement(ddg_blob: str) -> tuple[str, list[str], str | None]:
+    """Crawl seeds and return ``(curator_text, fetched_urls, crawl_note)``.
 
     The first element is the markdown-ish text appended for the curator LLM
     (empty string when nothing useful is harvested). The second element is the
     ordered list of URLs that were *successfully* fetched and turned into a
     text excerpt — used by the per-run report (Task 11) so we can see exactly
-    which pages contributed to the curator input.
+    which pages contributed to the curator input. The third element explains
+    why no pages were crawled when ``fetched_urls`` is empty.
     """
+    if not (ddg_blob or "").strip():
+        return (
+            "",
+            [],
+            "Same-site crawl skipped — search step produced no text to extract seed URLs from.",
+        )
+
     seeds = extract_seed_urls_from_ddg_blob(ddg_blob, config.MAX_CRAWL_SEEDS)
     if not seeds:
         logger.info("Same-site crawl: no seed URLs extracted from DuckDuckGo blob.")
-        return "", []
+        return (
+            "",
+            [],
+            "Same-site crawl skipped — no http(s) links found in DuckDuckGo results to use as crawl seeds.",
+        )
 
     max_total = max(1, config.MAX_CRAWL_PAGES_TOTAL)
     max_depth = max(0, config.MAX_CRAWL_DEPTH)
@@ -300,7 +312,11 @@ def deep_search_supplement(ddg_blob: str) -> tuple[str, list[str]]:
 
     if not chunks:
         logger.info("Same-site crawl finished: zero HTML pages harvested (timeouts or skips).")
-        return "", fetched_urls
+        note = (
+            f"Same-site crawl ran on {len(seeds)} seed URL(s) but every fetch failed "
+            "or returned non-HTML (timeouts, blocks, or empty pages)."
+        )
+        return "", fetched_urls, note
     block = (
         "## Same-site crawl (bounded)\n\n"
         "The following text was fetched by following links on the same host as a "
@@ -312,4 +328,4 @@ def deep_search_supplement(ddg_blob: str) -> tuple[str, list[str]]:
         len(chunks),
         f"{len(block):,}",
     )
-    return block, fetched_urls
+    return block, fetched_urls, None

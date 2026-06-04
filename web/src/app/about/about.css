@@ -1,5 +1,8 @@
 .about {
+  width: 100%;
   max-width: var(--about-max-width);
+  margin-inline: auto;
+  text-align: center;
 }
 
 .about__title {
@@ -13,6 +16,12 @@
   font-size: var(--text-lg);
   line-height: 1.55;
   color: var(--text, var(--color-text));
+}
+
+.about app-spotlight-carousel {
+  display: block;
+  margin-bottom: var(--space-6);
+  text-align: start;
 }
 
 .about__section {

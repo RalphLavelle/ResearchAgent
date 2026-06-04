@@ -146,3 +146,29 @@ def test_delete_venue_requires_different_replacement() -> None:
         assert False, "expected ValueError"
     except ValueError:
         pass
+
+
+def test_delete_venue_with_linked_event_deletion() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    created = venue_store.create_venue(db, "Stale Hall")
+    venue_id = str(created["_id"])
+    get_database(db)[EVENTS_COLLECTION].insert_one(
+        {
+            "_id": "evt-stale",
+            "event": "Stale Act",
+            "venue": venue_to_mongo("Stale Hall", venue_id),
+            "url": "https://example.com/stale",
+        }
+    )
+
+    stats = venue_store.delete_venue(
+        db, venue_id, delete_linked_events=True
+    )
+
+    assert stats["events_deleted"] == 1
+    assert stats["venues_deleted"] == 1
+    assert venue_store.get_venue(db, venue_id) is None
+    assert get_database(db)[EVENTS_COLLECTION].find_one({"_id": "evt-stale"}) is None

@@ -133,13 +133,14 @@ Restart `serve` after changing this value.
   | Endpoint | Purpose |
   |----------|---------|
   | `GET /api/{db}/events` | Event list for a topic (JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc`) |
+  | `GET /api/{db}/events/spotlight[?limit=4&exclude=id1,id2]` | Up to four random **upcoming** events that have a cached poster (`image_id` in MongoDB) — used by the spotlight carousel |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
   | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
   | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `location`, `aliases`) — used by `/admin/venues` (50 per page max) |
   | `GET /api/{db}/venues?all=true` | All venue records (for admin delete reassignment dropdown) |
   | `GET /api/{db}/venues/{venue_id}` | Raw venue JSON for admin editing (`_id`, `name`, `location`, `aliases`, `linkedEventCount`) |
   | `PUT /api/{db}/venues/{venue_id}` | Save edited venue JSON back to MongoDB |
-  | `DELETE /api/{db}/venues/{venue_id}` | Delete a venue; body `{ "replacementVenueId": "..." }` reassigns linked events first |
+  | `DELETE /api/{db}/venues/{venue_id}` | Delete a venue; body `{ "replacementVenueId": "..." }` reassigns linked events, or `{ "deleteLinkedEvents": true }` deletes them first |
   | `POST /api/admin/verify-password` | Admin gate — body `{ "password": "..." }`; checks `ADMIN_PASSWORD` in `.env` |
   | `GET /api/{db}/users[?limit=50&skip=0]` | Weekly email subscribers (`id`, `email`, `subscribed_at`) — used by `/admin/users` |
   | `POST /api/{db}/users/subscribe` | Weekly email signup — body `{ "email": "..." }`; saves to the topic's `users` collection |

@@ -70,6 +70,7 @@ class AgentState(TypedDict, total=False):
     run_log_message: str
     dry_run: bool
     skip_doc_rewrite: bool
+    pipeline_diagnostics: dict[str, str]
 
 
 def resource_from_dict(data: dict) -> Resource:

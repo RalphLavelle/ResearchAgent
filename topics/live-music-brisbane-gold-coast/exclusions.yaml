@@ -15,6 +15,7 @@ drop_terms:
   - psychics
   - medium
   - mediums
+  - puppets
 
 exclusions:
   - Drag shows or drag-themed events. Anything drag related.
@@ -25,3 +26,4 @@ exclusions:
   - Children's events
   - Any event whose date is before "today" or after the allowed window
     described in the user message above the search results.
+  - Puppet shows or puppet-themed events. Anything puppet related.

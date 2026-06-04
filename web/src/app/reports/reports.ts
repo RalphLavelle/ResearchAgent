@@ -20,6 +20,8 @@ export interface RunReport {
   searches: string[];
   urls: Record<string, string[]>;
   changes: Record<string, number>;
+  /** Why planner/search/crawl/normalize produced no output, when applicable. */
+  diagnostics?: Record<string, string>;
 }
 
 /** Root JSON shape from the reports API. */
@@ -72,23 +74,23 @@ export class ReportsComponent {
   }
 
   /** Compact cell text for the searches column. */
-  protected searchesSummary(searches: string[]): string {
-    if (!searches.length) {
-      return 'No searches';
+  protected searchesSummary(report: RunReport): string {
+    if (report.searches.length) {
+      if (report.searches.length === 1) {
+        return report.searches[0];
+      }
+      return `${report.searches.length} searches`;
     }
-    if (searches.length === 1) {
-      return searches[0];
-    }
-    return `${searches.length} searches`;
+    return this.#stepDiagnostic(report, 'planner') ?? this.#stepDiagnostic(report, 'search') ?? 'No searches';
   }
 
   /** Compact cell text for the urls column. */
-  protected urlsSummary(urls: Record<string, string[]>): string {
-    const hosts = Object.keys(urls);
+  protected urlsSummary(report: RunReport): string {
+    const hosts = Object.keys(report.urls);
     if (!hosts.length) {
-      return 'No URLs crawled';
+      return this.#stepDiagnostic(report, 'crawl') ?? 'No URLs crawled';
     }
-    const pages = hosts.reduce((sum, host) => sum + (urls[host]?.length ?? 0), 0);
+    const pages = hosts.reduce((sum, host) => sum + (report.urls[host]?.length ?? 0), 0);
     const hostLabel = hosts.length === 1 ? '1 host' : `${hosts.length} hosts`;
     const pageLabel = pages === 1 ? '1 page' : `${pages} pages`;
     return `${hostLabel}, ${pageLabel}`;
@@ -115,6 +117,34 @@ export class ReportsComponent {
   /** Change entries in display order. */
   protected changeEntries(changes: Record<string, number>): [string, number][] {
     return Object.entries(changes);
+  }
+
+  /** Diagnostic note for one pipeline step, if the API saved one. */
+  protected stepDiagnostic(report: RunReport, step: string): string | null {
+    return this.#stepDiagnostic(report, step);
+  }
+
+  /** True when the expanded report should show the diagnostics block. */
+  protected hasDiagnostics(report: RunReport): boolean {
+    return Object.keys(report.diagnostics ?? {}).length > 0;
+  }
+
+  protected diagnosticEntries(report: RunReport): [string, string][] {
+    const labels: Record<string, string> = {
+      planner: 'Planner',
+      search: 'Search',
+      crawl: 'Crawl',
+      normalize: 'Curator',
+    };
+    return Object.entries(report.diagnostics ?? {}).map(([key, value]) => [
+      labels[key] ?? key,
+      value,
+    ]);
+  }
+
+  #stepDiagnostic(report: RunReport, step: string): string | null {
+    const value = report.diagnostics?.[step]?.trim();
+    return value ? value : null;
   }
 
   #loadReports(db: string): void {

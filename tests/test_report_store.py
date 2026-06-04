@@ -48,6 +48,7 @@ def test_build_report_document_shape() -> None:
         queries=["Brisbane jazz May 2026"],
         crawled_urls=["https://www.miamimarketta.com/ticketed-events"],
         merge_stats=_SAMPLE_STATS,
+        diagnostics={"planner": "Planner: API rate limit exceeded — 429"},
         when=_FIXED_UTC,
     )
     assert doc["datetime"] == "2026-05-25T11:42:24+00:00"
@@ -56,6 +57,16 @@ def test_build_report_document_shape() -> None:
         "www.miamimarketta.com": ["https://www.miamimarketta.com/ticketed-events"]
     }
     assert doc["changes"]["added (new rows)"] == 19
+    assert doc["diagnostics"]["planner"].startswith("Planner:")
+
+
+def test_build_report_document_omits_empty_diagnostics() -> None:
+    doc = build_report_document(
+        queries=[],
+        crawled_urls=[],
+        diagnostics={},
+    )
+    assert "diagnostics" not in doc
 
 
 def test_save_and_list_reports_roundtrip() -> None:

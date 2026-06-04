@@ -176,17 +176,29 @@ def update_venue(db_name: str, venue_id: str, raw: dict[str, Any]) -> dict[str, 
     return doc
 
 
+def _events_for_venue_filter(venue_id: str) -> dict[str, Any]:
+    """MongoDB filter for events linked to a venue id."""
+    return {
+        "$or": [
+            {"venue.id": venue_id},
+            {"venue_id": venue_id},
+        ]
+    }
+
+
 def count_events_for_venue(db_name: str, venue_id: str) -> int:
     """Count events linked to a venues-collection id."""
     coll = get_database(db_name)[EVENTS_COLLECTION]
-    return coll.count_documents(
-        {
-            "$or": [
-                {"venue.id": venue_id},
-                {"venue_id": venue_id},
-            ]
-        }
-    )
+    return coll.count_documents(_events_for_venue_filter(venue_id))
+
+
+def linked_event_ids(db_name: str, venue_id: str) -> list[str]:
+    """Return event ids linked to *venue_id*."""
+    coll = get_database(db_name)[EVENTS_COLLECTION]
+    return [
+        str(doc["_id"])
+        for doc in coll.find(_events_for_venue_filter(venue_id), {"_id": 1})
+    ]
 
 
 def reassign_events_venue(
@@ -203,14 +215,7 @@ def reassign_events_venue(
     if venue_doc is None:
         raise ValueError("Replacement venue name and id are required.")
     updated = 0
-    for doc in coll.find(
-        {
-            "$or": [
-                {"venue.id": from_venue_id},
-                {"venue_id": from_venue_id},
-            ]
-        }
-    ):
+    for doc in coll.find(_events_for_venue_filter(from_venue_id)):
         coll.update_one(
             {"_id": doc["_id"]},
             {"$set": {"venue": venue_doc}, "$unset": {"venue_id": ""}},
@@ -223,32 +228,68 @@ def delete_venue(
     db_name: str,
     venue_id: str,
     *,
-    replacement_venue_id: str,
+    replacement_venue_id: str | None = None,
+    delete_linked_events: bool = False,
 ) -> dict[str, int]:
-    """Reassign linked events, then delete *venue_id*."""
-    if venue_id == replacement_venue_id:
-        raise ValueError("Replacement venue must differ from the venue being deleted.")
+    """Delete *venue_id* after reassigning or removing its linked events."""
     current = get_venue(db_name, venue_id)
     if not current:
         raise KeyError(f"Venue not found: {venue_id}")
-    replacement = get_venue(db_name, replacement_venue_id)
-    if not replacement:
-        raise KeyError(f"Replacement venue not found: {replacement_venue_id}")
-    events_updated = reassign_events_venue(
-        db_name,
-        venue_id,
-        replacement_venue_id,
-        str(replacement.get("name") or ""),
-    )
+    if replacement_venue_id and venue_id == replacement_venue_id:
+        raise ValueError("Replacement venue must differ from the venue being deleted.")
+
+    linked_count = count_events_for_venue(db_name, venue_id)
+    events_updated = 0
+    events_deleted = 0
+
+    if linked_count:
+        if delete_linked_events:
+            from agent.event_store import delete_events_by_ids
+            from agent.image_cache import garbage_collect
+
+            to_remove = set(linked_event_ids(db_name, venue_id))
+            events_deleted = delete_events_by_ids(db_name, to_remove)
+            coll = get_database(db_name)[EVENTS_COLLECTION]
+            remaining = [str(doc["_id"]) for doc in coll.find({}, {"_id": 1})]
+            garbage_collect(remaining, db_name=db_name)
+        else:
+            if not replacement_venue_id:
+                raise ValueError(
+                    "replacementVenueId is required when reassigning linked events."
+                )
+            replacement = get_venue(db_name, replacement_venue_id)
+            if not replacement:
+                raise KeyError(
+                    f"Replacement venue not found: {replacement_venue_id}"
+                )
+            events_updated = reassign_events_venue(
+                db_name,
+                venue_id,
+                replacement_venue_id,
+                str(replacement.get("name") or ""),
+            )
+
     get_database(db_name)[VENUES_COLLECTION].delete_one({"_id": venue_id})
-    logger.info(
-        "Deleted venue %s in db=%s (%d event(s) reassigned to %s)",
-        venue_id,
-        db_name,
-        events_updated,
-        replacement_venue_id,
-    )
-    return {"events_updated": events_updated, "venues_deleted": 1}
+    if delete_linked_events:
+        logger.info(
+            "Deleted venue %s in db=%s (%d linked event(s) removed)",
+            venue_id,
+            db_name,
+            events_deleted,
+        )
+    else:
+        logger.info(
+            "Deleted venue %s in db=%s (%d event(s) reassigned to %s)",
+            venue_id,
+            db_name,
+            events_updated,
+            replacement_venue_id or "(none)",
+        )
+    return {
+        "events_updated": events_updated,
+        "events_deleted": events_deleted,
+        "venues_deleted": 1,
+    }
 
 
 def add_alias(db_name: str, venue_id: str, alias: str) -> bool:

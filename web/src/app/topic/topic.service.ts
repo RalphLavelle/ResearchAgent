@@ -56,6 +56,9 @@ export class TopicService {
   /** API URL for the active topic's events list. */
   readonly eventsApiUrl = computed(() => `/api/${this.active().db}/events`);
 
+  /** API URL for spotlight carousel (events with cached posters only). */
+  readonly spotlightApiUrl = computed(() => `/api/${this.active().db}/events/spotlight`);
+
   /** API URL for pipeline run reports. */
   readonly reportsApiUrl = computed(() => `/api/${this.active().db}/reports`);
 

@@ -22,7 +22,20 @@ interface VenueDetail {
   linkedEventCount: number;
 }
 
-/** Delete a venue after reassigning linked events to another venue. */
+/** Radio choice for linked events before venue delete. */
+type LinkedEventAction = 'reassign' | 'delete';
+
+/** Outcome reported after a successful venue delete. */
+export type VenueDeleteOutcome = 'none' | 'reassign' | 'delete';
+
+/** API response after deleting a venue. */
+interface VenueDeleteResponse {
+  events_updated: number;
+  events_deleted: number;
+  venues_deleted: number;
+}
+
+/** Delete a venue; reassign or delete its linked events first. */
 @Component({
   selector: 'app-venue-delete-modal',
   templateUrl: './venue-delete-modal.html',
@@ -38,7 +51,7 @@ export class VenueDeleteModalComponent {
   readonly venueName = input.required<string>();
 
   readonly closed = output<void>();
-  readonly deleted = output<void>();
+  readonly deleted = output<VenueDeleteOutcome>();
 
   protected readonly loading = signal(true);
   protected readonly deleting = signal(false);
@@ -46,10 +59,27 @@ export class VenueDeleteModalComponent {
   protected readonly linkedEventCount = signal(0);
   protected readonly replacementOptions = signal<VenueRecord[]>([]);
   protected readonly selectedReplacementId = signal('');
+  protected readonly linkedEventAction = signal<LinkedEventAction>('reassign');
 
-  protected readonly canConfirm = computed(
-    () => !!this.selectedReplacementId() && !this.deleting()
+  protected readonly hasLinkedEvents = computed(() => this.linkedEventCount() > 0);
+  protected readonly isReassignMode = computed(
+    () => this.linkedEventAction() === 'reassign'
   );
+
+  protected readonly canConfirm = computed(() => {
+    if (this.deleting() || this.loading()) {
+      return false;
+    }
+    if (!this.hasLinkedEvents()) {
+      return true;
+    }
+    if (this.linkedEventAction() === 'delete') {
+      return true;
+    }
+    return (
+      this.replacementOptions().length > 0 && !!this.selectedReplacementId()
+    );
+  });
 
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
@@ -71,29 +101,58 @@ export class VenueDeleteModalComponent {
     this.closed.emit();
   }
 
+  protected onLinkedEventActionChange(event: Event): void {
+    const value = (event.target as HTMLInputElement).value;
+    if (value === 'reassign' || value === 'delete') {
+      this.linkedEventAction.set(value);
+      this.error.set(null);
+    }
+  }
+
   protected onReplacementChange(event: Event): void {
     this.selectedReplacementId.set((event.target as HTMLSelectElement).value);
   }
 
   protected confirmDelete(): void {
-    const replacementVenueId = this.selectedReplacementId();
-    if (!replacementVenueId) {
+    if (!this.canConfirm()) {
+      return;
+    }
+
+    const deleteLinkedEvents = this.hasLinkedEvents() && this.linkedEventAction() === 'delete';
+    const replacementVenueId = deleteLinkedEvents
+      ? undefined
+      : this.selectedReplacementId() || undefined;
+
+    if (
+      this.hasLinkedEvents() &&
+      !deleteLinkedEvents &&
+      !replacementVenueId
+    ) {
       return;
     }
 
     this.deleting.set(true);
     this.error.set(null);
     const url = `/api/${this.db()}/venues/${this.venueId()}`;
+    const body: { deleteLinkedEvents?: boolean; replacementVenueId?: string } =
+      {};
+    if (deleteLinkedEvents) {
+      body.deleteLinkedEvents = true;
+    } else if (replacementVenueId) {
+      body.replacementVenueId = replacementVenueId;
+    }
 
     this.#http
-      .delete<{ events_updated: number; venues_deleted: number }>(url, {
-        body: { replacementVenueId },
-      })
+      .delete<VenueDeleteResponse>(url, { body })
       .pipe(takeUntilDestroyed(this.#destroyRef))
       .subscribe({
         next: () => {
           this.deleting.set(false);
-          this.deleted.emit();
+          let outcome: VenueDeleteOutcome = 'none';
+          if (this.hasLinkedEvents()) {
+            outcome = deleteLinkedEvents ? 'delete' : 'reassign';
+          }
+          this.deleted.emit(outcome);
         },
         error: (err) => {
           const message =
@@ -108,6 +167,7 @@ export class VenueDeleteModalComponent {
     this.loading.set(true);
     this.error.set(null);
     this.selectedReplacementId.set('');
+    this.linkedEventAction.set('reassign');
 
     const detailUrl = `/api/${db}/venues/${venueId}?t=${Date.now()}`;
     const listUrl = `/api/${db}/venues?all=true&t=${Date.now()}`;
@@ -118,7 +178,12 @@ export class VenueDeleteModalComponent {
       .subscribe({
         next: (detail) => {
           this.linkedEventCount.set(detail.linkedEventCount ?? 0);
-          this.#loadReplacementOptions(listUrl, venueId);
+          if ((detail.linkedEventCount ?? 0) > 0) {
+            this.#loadReplacementOptions(listUrl, venueId);
+          } else {
+            this.replacementOptions.set([]);
+            this.loading.set(false);
+          }
         },
         error: () => {
           this.error.set('Could not load venue details.');
@@ -139,7 +204,7 @@ export class VenueDeleteModalComponent {
             this.selectedReplacementId.set(options[0].id);
           }
           if (!options.length) {
-            this.error.set('No other venues exist to reassign linked events to.');
+            this.linkedEventAction.set('delete');
           }
           this.loading.set(false);
         },

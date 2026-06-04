@@ -25,6 +25,7 @@ from agent.event_window import (
     sort_resources_by_event_date_asc,
 )
 from agent.llm_factory import build_chat_llm, build_planner_llm
+from agent.pipeline_diagnostics import format_step_error
 from agent.query_planner import (
     build_planner_variation_block,
     load_recent_planner_queries,
@@ -44,6 +45,16 @@ from agent.snapshot import fingerprint_changed, save_snapshot
 logger = logging.getLogger(__name__)
 
 CRAWL_SECTION_MARKER = "## Same-site crawl (bounded)"
+
+
+def _merge_diagnostic(state: AgentState, step: str, message: str | None) -> dict[str, dict[str, str]]:
+    """Update one pipeline diagnostic entry, clearing it when *message* is None."""
+    current = dict(state.get("pipeline_diagnostics") or {})
+    if message:
+        current[step] = message
+    else:
+        current.pop(step, None)
+    return {"pipeline_diagnostics": current}
 
 
 def _truncate_preserving_same_site_crawl(blob: str, max_chars: int) -> str:
@@ -90,13 +101,15 @@ def node_plan(state: AgentState) -> AgentState:
     and a log line). There are no fallback defaults (Task 8).
     """
     if not config.llm_inference_enabled():
-        logger.error(
-            "LLM unavailable for planner — check .env: "
-            "OPENAI_ENABLED + OPENAI_API_KEY, or OLLAMA_ENABLED + Ollama config."
+        reason = (
+            "Planner skipped — no LLM backend configured. "
+            "Enable OPENAI_ENABLED with OPENAI_API_KEY, or OLLAMA_ENABLED with a reachable Ollama endpoint in .env."
         )
+        logger.error("LLM unavailable for planner — check .env.")
         return {
             "queries": [],
             "run_log_message": "Planner skipped: no LLM backend configured (see .env).",
+            **_merge_diagnostic(state, "planner", reason),
         }
 
     llm = build_planner_llm()
@@ -123,13 +136,23 @@ def node_plan(state: AgentState) -> AgentState:
         )
         qs = (plan.queries or [])[: config.MAX_SEARCH_QUERIES]
         if not qs:
+            reason = (
+                "Planner returned zero search queries — the LLM response was empty or "
+                "did not include usable query strings."
+            )
             logger.error("Planner returned no queries — check the LLM response.")
-        return {"queries": qs}
+            return {
+                "queries": [],
+                **_merge_diagnostic(state, "planner", reason),
+            }
+        return {"queries": qs, **_merge_diagnostic(state, "planner", None)}
     except Exception as exc:
+        reason = format_step_error("Planner", exc)
         logger.exception("Plan step failed: %s", exc)
         return {
             "queries": [],
             "run_log_message": f"Plan step failed: {exc}",
+            **_merge_diagnostic(state, "planner", reason),
         }
 
 
@@ -138,19 +161,25 @@ def node_search(state: AgentState) -> AgentState:
     queries = state.get("queries") or []
     if not queries:
         logger.warning("No queries available — search step skipped.")
-        return {"raw_search_text": ""}
+        return {
+            "raw_search_text": "",
+            **_merge_diagnostic(state, "search", None),
+        }
     logger.info(
         "Search step: querying DuckDuckGo with %s planned queries.", len(queries)
     )
     t0 = monotonic()
-    text = run_searches(queries)
+    text, search_note = run_searches(queries)
     elapsed = monotonic() - t0
     logger.info(
         "Search step finished in %.1f s (~%s chars combined snippets).",
         elapsed,
         f"{len(text):,}",
     )
-    return {"raw_search_text": text}
+    return {
+        "raw_search_text": text,
+        **_merge_diagnostic(state, "search", search_note),
+    }
 
 
 def node_crawl(state: AgentState) -> AgentState:
@@ -162,27 +191,35 @@ def node_crawl(state: AgentState) -> AgentState:
     """
     raw = state.get("raw_search_text") or ""
     if not config.CRAWL_ENABLED:
+        reason = "Same-site crawl disabled — set CRAWL_ENABLED=true in .env to fetch listing pages after search."
         logger.info("Crawl step skipped (CRAWL_ENABLED=false).")
-        return {"crawled_urls": []}
+        return {"crawled_urls": [], **_merge_diagnostic(state, "crawl", reason)}
     try:
         logger.info(
             "Crawl step starting (runs after DuckDuckGo text is collected; downloads can take several minutes)."
         )
         t0 = monotonic()
-        extra, fetched_urls = deep_search_supplement(raw)
+        extra, fetched_urls, crawl_note = deep_search_supplement(raw)
         elapsed = monotonic() - t0
         logger.info(
             "Crawl step finished in %.1f s (~%s extra chars for curator).",
             elapsed,
             f"{len(extra):,}",
         )
-        out: AgentState = {"crawled_urls": list(fetched_urls)}
+        out: AgentState = {
+            "crawled_urls": list(fetched_urls),
+            **_merge_diagnostic(state, "crawl", crawl_note if not fetched_urls else None),
+        }
         if extra.strip():
             out["raw_search_text"] = raw + "\n\n" + extra
         return out
     except Exception as exc:
+        reason = format_step_error("Crawl", exc)
         logger.warning("Site crawl step failed (continuing with search only): %s", exc)
-        return {"crawled_urls": []}
+        return {
+            "crawled_urls": [],
+            **_merge_diagnostic(state, "crawl", reason),
+        }
 
 
 def node_normalize(state: AgentState) -> AgentState:
@@ -190,13 +227,15 @@ def node_normalize(state: AgentState) -> AgentState:
     raw = state.get("raw_search_text") or ""
 
     if not config.llm_inference_enabled():
-        logger.error(
-            "LLM unavailable for curator — check .env: "
-            "OPENAI_ENABLED + OPENAI_API_KEY, or OLLAMA_ENABLED + Ollama config."
+        reason = (
+            "Curator skipped — no LLM backend configured. "
+            "Enable OPENAI_ENABLED with OPENAI_API_KEY, or OLLAMA_ENABLED with a reachable Ollama endpoint in .env."
         )
+        logger.error("LLM unavailable for curator — check .env.")
         return {
             "resources": [],
             "run_log_message": "Normalize skipped: no LLM backend configured (see .env).",
+            **_merge_diagnostic(state, "normalize", reason),
         }
 
     llm = _llm()
@@ -235,12 +274,15 @@ def node_normalize(state: AgentState) -> AgentState:
         return {
             "resources": [r.model_dump() for r in ordered],
             "run_log_message": "",
+            **_merge_diagnostic(state, "normalize", None),
         }
     except Exception as exc:
+        reason = format_step_error("Curator", exc)
         logger.exception("Normalise step failed: %s", exc)
         return {
             "resources": [],
             "run_log_message": f"Normalise error: {exc}",
+            **_merge_diagnostic(state, "normalize", reason),
         }
 
 
@@ -331,6 +373,7 @@ def node_local_output(state: AgentState) -> AgentState:
                 queries=queries,
                 crawled_urls=crawled_urls,
                 merge_stats=merge_stats,
+                diagnostics=dict(state.get("pipeline_diagnostics") or {}),
             )
             logger.info("Run report saved (id=%s)", report_id)
         except Exception as report_exc:

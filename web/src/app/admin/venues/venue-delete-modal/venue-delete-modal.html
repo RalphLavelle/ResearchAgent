@@ -18,28 +18,67 @@
     } @else {
       <p class="modal-copy">
         Delete <strong>{{ venueName() }}</strong>?
-        @if (linkedEventCount() > 0) {
+        @if (hasLinkedEvents()) {
           <span>
-            {{ linkedEventCount() }} linked event(s) will be moved to the venue you choose below.
+            {{ linkedEventCount() }} linked event(s). Choose what happens to them before the
+            venue is removed.
           </span>
         } @else {
           <span>No events currently reference this venue.</span>
         }
       </p>
 
-      @if (replacementOptions().length > 0) {
-        <label class="modal-label" for="replacement-venue">Move linked events to</label>
-        <select
-          id="replacement-venue"
-          class="modal-select"
-          [value]="selectedReplacementId()"
-          (change)="onReplacementChange($event)"
-        >
-          <option value="" disabled>Select a venue…</option>
-          @for (option of replacementOptions(); track option.id) {
-            <option [value]="option.id">{{ option.name }}</option>
+      @if (hasLinkedEvents()) {
+        <fieldset class="modal-fieldset">
+          <legend class="modal-label">Linked events</legend>
+
+          <label class="modal-radio">
+            <input
+              type="radio"
+              name="linked-event-action"
+              value="reassign"
+              [checked]="linkedEventAction() === 'reassign'"
+              (change)="onLinkedEventActionChange($event)"
+            />
+            <span>Move to another venue</span>
+          </label>
+
+          <label class="modal-radio">
+            <input
+              type="radio"
+              name="linked-event-action"
+              value="delete"
+              [checked]="linkedEventAction() === 'delete'"
+              (change)="onLinkedEventActionChange($event)"
+            />
+            <span>Delete these events too</span>
+          </label>
+        </fieldset>
+
+        @if (isReassignMode()) {
+          @if (replacementOptions().length > 0) {
+            <label class="modal-label" for="replacement-venue">Move linked events to</label>
+            <select
+              id="replacement-venue"
+              class="modal-select"
+              [value]="selectedReplacementId()"
+              (change)="onReplacementChange($event)"
+            >
+              <option value="" disabled>Select a venue…</option>
+              @for (option of replacementOptions(); track option.id) {
+                <option [value]="option.id">{{ option.name }}</option>
+              }
+            </select>
+          } @else {
+            <p class="modal-status" role="status">
+              No other venues exist — choose “Delete these events too” to continue.
+            </p>
           }
-        </select>
+        } @else {
+          <p class="modal-hint" role="note">
+            The linked event(s) will be permanently removed from this topic.
+          </p>
+        }
       }
 
       @if (error(); as errMsg) {

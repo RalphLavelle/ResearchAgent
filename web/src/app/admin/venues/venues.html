@@ -9,8 +9,8 @@
       Venues
     </h1>
     <p class="venues-intro">
-      Canonical venue records for the active topic (50 per page). Edit raw JSON or delete with
-      event reassignment.
+      Canonical venue records for the active topic (50 per page). Edit raw JSON or delete —
+      reassign linked events to another venue or remove them with the venue.
     </p>
   </header>
 
@@ -113,6 +113,6 @@
     [venueId]="venue.id"
     [venueName]="venue.name"
     (closed)="closeDelete()"
-    (deleted)="onVenueDeleted()"
+    (deleted)="onVenueDeleted($event)"
   />
 }

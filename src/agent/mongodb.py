@@ -106,6 +106,7 @@ def ensure_collection_indexes(db_name: str) -> None:
     db = get_client()[name]
     db[EVENTS_COLLECTION].create_index("venue.id", background=True)
     db[EVENTS_COLLECTION].create_index("date", background=True)
+    db[EVENTS_COLLECTION].create_index("image_id", background=True, sparse=True)
     db[IMAGES_COLLECTION].create_index("source_url", background=True)
     db[USERS_COLLECTION].create_index("email", unique=True, background=True)
 

@@ -13,7 +13,7 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from agent import config
-from agent.event_store import load_events_api_payload
+from agent.event_store import load_events_api_payload, load_spotlight_api_payload
 from agent.image_store import fetch_image
 from agent.mongodb import get_database
 from agent.report_store import list_reports
@@ -54,6 +54,26 @@ def get_events(request: Request) -> JSONResponse:
         return JSONResponse(payload)
     except Exception as exc:
         logger.exception("API events error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+def get_events_spotlight(request: Request) -> JSONResponse:
+    """Return up to four random upcoming events that have cached poster images."""
+    db_key = request.path_params["db"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        limit_raw = request.query_params.get("limit", "4")
+        limit = max(1, min(4, int(limit_raw)))
+        exclude_raw = request.query_params.get("exclude", "")
+        exclude_ids = {part.strip() for part in exclude_raw.split(",") if part.strip()}
+        payload = load_spotlight_api_payload(db_name, limit=limit, exclude_ids=exclude_ids)
+        return JSONResponse(payload)
+    except ValueError:
+        return JSONResponse({"error": "Invalid limit query parameter"}, status_code=400)
+    except Exception as exc:
+        logger.exception("API events spotlight error for db=%s", db_name)
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
@@ -169,15 +189,29 @@ async def delete_venue(request: Request) -> JSONResponse:
         body = await request.json()
         if not isinstance(body, dict):
             return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
-        replacement_id = str(body.get("replacementVenueId") or "").strip()
-        if not replacement_id:
-            return JSONResponse({"error": "replacementVenueId is required"}, status_code=400)
-        # Offload the blocking re-link + delete so the event loop stays free.
+        delete_linked = bool(body.get("deleteLinkedEvents"))
+        replacement_id = str(body.get("replacementVenueId") or "").strip() or None
+        if not delete_linked and not replacement_id:
+            linked = await run_in_threadpool(
+                venue_store.count_events_for_venue, db_name, venue_id
+            )
+            if linked:
+                return JSONResponse(
+                    {
+                        "error": (
+                            "replacementVenueId is required when not "
+                            "deleting linked events"
+                        )
+                    },
+                    status_code=400,
+                )
+        # Offload the blocking re-link / event delete + venue delete.
         stats = await run_in_threadpool(
             venue_store.delete_venue,
             db_name,
             venue_id,
             replacement_venue_id=replacement_id,
+            delete_linked_events=delete_linked,
         )
         return JSONResponse(stats)
     except KeyError as exc:
@@ -291,6 +325,7 @@ def get_image(request: Request) -> Response:
 def create_app() -> Starlette:
     return Starlette(
         routes=[
+            Route("/api/{db}/events/spotlight", get_events_spotlight, methods=["GET"]),
             Route("/api/{db}/events", get_events, methods=["GET"]),
             Route("/api/{db}/reports", get_reports, methods=["GET"]),
             Route("/api/{db}/venues", get_venues, methods=["GET"]),

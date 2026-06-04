@@ -1,0 +1,91 @@
+@if (featuredEvents().length > 0) {
+  <section class="featured-events" aria-labelledby="featured-heading">
+    <div class="featured-events__header">
+      <h2 id="featured-heading" class="featured-events__title">Spotlight picks</h2>
+      @if (showEmailSignup()) {
+        <button
+          type="button"
+          class="email-signup-btn"
+          (click)="emailSignupClick.emit()"
+        >
+          <span class="email-signup-btn__emoji" aria-hidden="true">📧</span>
+          Sign up to receive weekly email
+        </button>
+      }
+    </div>
+    <div class="featured-carousel">
+      @if (showCarouselNav()) {
+        <button
+          type="button"
+          class="featured-carousel__nav featured-carousel__nav--prev"
+          (click)="prevFeatured()"
+          aria-label="Previous spotlight event"
+        >
+          ‹
+        </button>
+      }
+      <div class="featured-carousel__viewport">
+        <div
+          class="featured-carousel__track"
+          [style.--featured-count]="featuredEvents().length"
+          [style.--featured-index]="featuredIndex()"
+        >
+          @for (ev of featuredEvents(); track ev.id) {
+            <article class="featured-card">
+              <a
+                class="featured-card__media"
+                [href]="ev.url"
+                target="_blank"
+                rel="noopener noreferrer"
+                [attr.aria-label]="'View listing for ' + ev.eventName + ' (opens in new tab)'"
+              >
+                @if (posterUrl(ev.thumbnailUrl); as src) {
+                  @if (!posterErrors().has(ev.id)) {
+                    <img
+                      class="featured-card__image"
+                      [ngSrc]="src"
+                      alt=""
+                      width="320"
+                      height="320"
+                      (error)="onPosterError(ev.id)"
+                    />
+                  } @else {
+                    <span class="featured-card__placeholder" aria-hidden="true">🎸</span>
+                  }
+                } @else {
+                  <span class="featured-card__placeholder" aria-hidden="true">🎸</span>
+                }
+              </a>
+              <div class="featured-card__body">
+                <h3 class="featured-card__title">
+                  <a
+                    [href]="ev.url"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {{ ev.eventName }}
+                    <span class="sr-only"> (opens in new tab)</span>
+                  </a>
+                </h3>
+                @if (venueLine(ev)) {
+                  <p class="featured-card__venue">{{ venueLine(ev) }}</p>
+                }
+                <p class="featured-card__date">{{ ev.date }}</p>
+              </div>
+            </article>
+          }
+        </div>
+      </div>
+      @if (showCarouselNav()) {
+        <button
+          type="button"
+          class="featured-carousel__nav featured-carousel__nav--next"
+          (click)="nextFeatured()"
+          aria-label="Next spotlight event"
+        >
+          ›
+        </button>
+      }
+    </div>
+  </section>
+}
