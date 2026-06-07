@@ -1,20 +1,31 @@
 # Research Agent
 
-Python app using **LangGraph** that researches **configurable topics**, curates structured rows, and saves results to a **spreadsheet** plus **`events.json`** under **`data/<topic>/`**.
+Python app using **LangGraph** that researches **configurable topics**, curates structured event rows, and stores them in **MongoDB**. An **Angular** front end reads events and poster images through a **REST API**.
 
-**Topics registry:** `topics/topics.json` — the `active` id selects prompts, exclusions, UI chrome, and the data subfolder name.
-
-**Default output folder:** `data/<data_dir>/` for the active topic (e.g. `data/live-music-brisbane-gold-coast/`). Override with **`OUTPUT_DIR`** or **`AGENT_AI_DIR`** in `.env`.
-
-Files written (per active topic):
-
-| File | Purpose |
-|------|--------|
-| `agent_research.xlsx` | Spreadsheet source of truth (merge + dedupe each run) |
-| `events.json` | JSON feed consumed by the Angular UI (spreadsheet-derived) |
-| `Run_<AEST>.md` | One per run: planner queries, crawled URLs (grouped by host), and curated `Resource` records |
+**Topics registry:** `topics/topics.json` — the `active` id selects prompts, exclusions, UI chrome, and the topic's MongoDB database name (`db`).
 
 Search uses LangChain's **`DuckDuckGoSearchRun`** (via its `api_wrapper`) — no search API key.
+
+## Architecture
+
+Each topic has its own **MongoDB database** (the `db` field in `topics.json`, e.g. `bgc` for Brisbane/Gold Coast). Collections include:
+
+| Collection | Purpose |
+|------------|---------|
+| `events` | Source of truth — curated gigs (name, venue, date, URLs, tags, poster link, etc.) |
+| `images` | Cached poster image bytes (one blob per upstream URL; many events can share one) |
+| `venues` | Normalised venue records linked from events |
+| `reports` | Pipeline run reports (searches, crawled URLs, merge stats) |
+| `users` | Weekly email subscribers |
+| `schema_migrations` | Applied one-shot schema migration ids |
+
+**On disk** (under `data/<topic_id>/`, gitignored):
+
+| File | Purpose |
+|------|---------|
+| `snapshot.json` | Fingerprint of the last run's curated resources (for change detection) |
+
+Legacy **`agent_research.xlsx`**, **`events.json`**, and **`images/`** folders are no longer used. If you still have them from an older version, run **`migrate-mongodb`** once (see below).
 
 ## Setup
 
@@ -50,7 +61,31 @@ pip install -e ".[dev]"
 > Type `deactivate` to leave the venv. The rest of this README uses the
 > direct `.\venv\Scripts\python.exe` form so it works without activation.
 
-### 2. LLM backend
+### 2. MongoDB
+
+Set **`MONGODB_URI`** in `.env` (copy from `env.example`).
+
+**Local dev** (MongoDB Community or Docker on the default port):
+
+```env
+MONGODB_URI=mongodb://localhost:27017/
+```
+
+**MongoDB Atlas** (cloud) — Database → Connect → Drivers → copy the connection string. The host must look like `cluster0.xxxxx.mongodb.net` (not `mongodb.com`):
+
+```env
+MONGODB_URI=mongodb+srv://myuser:myPass@cluster0.ab12cd.mongodb.net/?retryWrites=true&w=majority
+```
+
+**Migrate legacy file-based data** (spreadsheet, `events.json`, `images/` under `data/<topic_id>/`):
+
+```powershell
+.\venv\Scripts\python.exe -m agent migrate-mongodb
+```
+
+Add `--keep-files` to copy into MongoDB without deleting the old files. After migration, inspect databases in Compass (e.g. `bgc.events`, `bgc.images`).
+
+### 3. LLM backend
 
 Copy `env.example` to `.env` and enable exactly one backend:
 
@@ -72,27 +107,27 @@ Cloud is auto-detected by the `:cloud` model-name suffix or a non-localhost base
 
 **Startup check:** the agent probes the configured backend once at CLI startup (`run-once`, `serve`). If neither backend is enabled, or the enabled backend is misconfigured, you'll see an **`ERROR`** in the logs and exit code **`3`**.
 
-### 3. Topics (optional)
+### 4. Topics (optional)
 
 The bundled topic **Live music in Brisbane and the Gold Coast** lives under `topics/live-music-brisbane-gold-coast/` (`subject_matter.yaml`, `prompt_guides.yaml`, `exclusions.yaml`, `assets/`).
 
-To add a topic, use the **topic-creator** skill (`.cursor/skills/topic-creator/SKILL.md`) or copy the live-music folder and register a new entry in `topics.json`.
+To add a topic, use the **topic-creator** skill (`.cursor/skills/topic-creator/SKILL.md`) or copy the live-music folder and register a new entry in `topics.json` with a unique `db` name.
 
-If you previously wrote to a flat `data/` folder, the agent **auto-migrates** those files into `data/<data_dir>/` on startup (when the topic subfolder has no `events.json` yet). You can keep `OUTPUT_DIR=data` in `.env` — it now resolves to the active topic subfolder.
+Override the active topic without editing JSON:
 
-### 4. Output folder (optional)
+```env
+ACTIVE_TOPIC=live-music-brisbane-gold-coast
+```
 
-By default the app writes under:
+### 5. Snapshots folder (optional)
 
-`.\data\<active-topic-data_dir>\`
-
-To pin a custom folder, set in `.env`:
+Run fingerprints still land under `data/<topic_id>/` (default `data/live-music-brisbane-gold-coast/`). Override with:
 
 ```env
 OUTPUT_DIR=D:\MyData\AgentAI
 ```
 
-### 5. Schedule interval (optional)
+### 6. Schedule interval (optional)
 
 When using `serve`, set the run interval in `.env` (hours only; default `1`):
 
@@ -110,7 +145,7 @@ Restart `serve` after changing this value.
   .\venv\Scripts\python.exe -m agent run-once
   ```
 
-- **Dry run** (no spreadsheet / JSON / log writes):
+- **Dry run** (no MongoDB writes / snapshot):
 
   ```powershell
   .\venv\Scripts\python.exe -m agent run-once --dry-run
@@ -120,6 +155,12 @@ Restart `serve` after changing this value.
 
   ```powershell
   .\venv\Scripts\python.exe -m agent serve
+  ```
+
+- **Migrate legacy spreadsheet / JSON / images to MongoDB:**
+
+  ```powershell
+  .\venv\Scripts\python.exe -m agent migrate-mongodb
   ```
 
 - **REST API** (required for the Angular UI — serves events and poster images from MongoDB):
@@ -169,7 +210,7 @@ Or use `scripts\start_serve.ps1` after adjusting paths.
 
 ### Web UI (Angular)
 
-The UI under **`web/`** reads `topics/topics.json` for the active topic (title, background, MongoDB `db` name) and loads events from the **REST API** above — not from `events.json` on disk.
+The UI under **`web/`** is the public site **Gigsorooni**. It reads `topics/topics.json` for the active topic (MongoDB `db` name, etc.) and loads events from the **REST API** above — not from files on disk.
 
 Run **two processes** in separate terminals:
 
@@ -187,10 +228,10 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 
 ## Behavior
 
-- Each successful run produces a fresh **`Run_<AEST timestamp>.md`** report under the output folder. The report has three sections — *Searches* (planner queries), *Search and crawl* (URLs grouped by host), *Normalize* (curated `Resource` JSON with source URLs) — so you can audit exactly what each LLM-driven step did.
-- If curated content **changed** since last run, the spreadsheet, `events.json`, and (when configured) Notion are also refreshed.
-- If nothing **meaningfully** changed, the spreadsheet and `events.json` are still rewritten so they always reflect the latest source-of-truth, but downstream Notion sync is skipped.
-- `data/<topic>/snapshot.json` stores a fingerprint (gitignored).
+- Each successful run merges new curated resources into the topic's **`events`** collection (with deduplication, exclusion rules, poster caching into **`images`**, and optional LLM semantic dedupe).
+- A run report is stored in MongoDB **`reports`** and includes planner queries, crawled URLs (grouped by host), and merge statistics.
+- If curated content **changed** since last run, Notion sync (when configured) is refreshed; otherwise downstream Notion sync may be skipped.
+- `data/<topic_id>/snapshot.json` stores a fingerprint of the current run for change detection (gitignored).
 
 ## Tests
 
@@ -201,5 +242,7 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 ## Layout
 
 - `topics/` — registry (`topics.json`) plus per-topic YAML and UI assets.
-- `src/agent/` — LangGraph workflow, DuckDuckGo search, spreadsheet + JSON outputs, scheduler.
-- `web/` — Angular shell driven by `topics.json` and the MongoDB-backed REST API (`src/agent/api.py`).
+- `src/agent/` — LangGraph workflow, DuckDuckGo search, MongoDB stores, REST API, scheduler.
+- `migrations/` — numbered one-shot schema migrations applied at pipeline startup.
+- `web/` — Angular app driven by `topics.json` and the MongoDB-backed REST API (`src/agent/api.py`).
+- `data/` — per-topic snapshot files only (gitignored); events and images live in MongoDB.

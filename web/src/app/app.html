@@ -11,8 +11,14 @@
             routerLinkActive="site-brand--active"
             [routerLinkActiveOptions]="{ exact: true }"
           >
-            <span class="site-brand__emoji" aria-hidden="true">{{ topic.active().site_emoji }}</span>
-            <h1 class="site-brand__title">{{ topic.active().name }}</h1>
+            <img
+              class="site-brand__logotype"
+              ngSrc="/logotype.webp"
+              alt="Gigsorooni"
+              width="316"
+              height="143"
+              priority
+            />
           </a>
         </div>
 

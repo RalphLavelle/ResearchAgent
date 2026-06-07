@@ -10,7 +10,7 @@ import { HomeComponent } from './home/home';
 import { ReportsComponent } from './reports/reports';
 
 export const routes: Routes = [
-  { path: '', component: HomeComponent, title: 'Upcoming Live Music Events' },
+  { path: '', component: HomeComponent, title: 'Gigsorooni — Upcoming gigs' },
   { path: 'admin/login', component: AdminLoginComponent, title: 'Admin login' },
   {
     path: 'admin',
@@ -37,6 +37,6 @@ export const routes: Routes = [
     canActivate: [adminAuthGuard],
   },
   { path: 'reports', redirectTo: 'admin/reports', pathMatch: 'full' },
-  { path: 'about', component: AboutComponent, title: 'About this site' },
+  { path: 'about', component: AboutComponent, title: 'About Gigsorooni' },
   { path: '**', redirectTo: '' },
 ];

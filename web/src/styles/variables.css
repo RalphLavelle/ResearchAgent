@@ -31,6 +31,7 @@
   /* Layout */
   --shell-max-width: 65rem;
   --masthead-brand-min: 12.5rem;
+  --logotype-max-width: 18rem;
   --poster-size: 3.5rem;
   --poster-size-sm: 3rem;
   --poster-cell-padding-inline: var(--space-2);
@@ -70,59 +71,64 @@
   --outline-offset-sm: 0.125rem;
   --outline-offset-md: 0.1875rem;
 
-  /* Shadows (blur/spread only — no layout px elsewhere) */
-  --shadow-panel: 0 0.5rem 2rem rgba(217, 119, 87, 0.12), 0 0.125rem 0.5rem rgba(59, 130, 180, 0.08);
-  --shadow-btn: 0 0.125rem 0.75rem rgba(236, 72, 153, 0.35);
-  --shadow-btn-hover: 0 0.25rem 1rem rgba(236, 72, 153, 0.42);
-  --shadow-poster: 0 0.125rem 0.5rem rgba(0, 0, 0, 0.08);
-  --shadow-brand-active: 0 0.125rem 0.625rem rgba(30, 42, 58, 0.08);
-  --shadow-nav: 0 0.125rem 0.5rem rgba(30, 42, 58, 0.06);
-  --shadow-nav-hover: 0 0.25rem 0.875rem rgba(37, 99, 235, 0.15);
-  --shadow-menu: 0 0.125rem 0.625rem rgba(30, 42, 58, 0.12);
-  --shadow-menu-hover: 0 0.25rem 1rem rgba(37, 99, 235, 0.18);
-  --shadow-footer: 0 -0.5rem 1.75rem rgba(15, 23, 42, 0.18);
-  --shadow-drawer: -0.75rem 0 2.5rem rgba(30, 42, 58, 0.2);
+  /* Gigsorooni brand palette */
+  --color-cream: #f5f0e6;
+  --color-charcoal: #1f1b18;
+  --color-burnt-orange: #d96c2d;
+  --color-mustard: #dba928;
+  --color-teal: #2d7f7a;
 
-  /* Page background overlay (higher alpha = less transparent) */
-  --page-overlay-start: rgba(255, 245, 240, 0.9);
-  --page-overlay-mid: rgba(232, 244, 252, 0.88);
-  --page-overlay-end: rgba(253, 238, 248, 0.9);
+  /* Shadows (blur/spread only — no layout px elsewhere) */
+  --shadow-panel: 0 0.5rem 2rem rgba(217, 108, 45, 0.12), 0 0.125rem 0.5rem rgba(45, 127, 122, 0.1);
+  --shadow-btn: 0 0.125rem 0.75rem rgba(217, 108, 45, 0.35);
+  --shadow-btn-hover: 0 0.25rem 1rem rgba(217, 108, 45, 0.42);
+  --shadow-poster: 0 0.125rem 0.5rem rgba(31, 27, 24, 0.1);
+  --shadow-brand-active: 0 0.125rem 0.625rem rgba(31, 27, 24, 0.08);
+  --shadow-nav: 0 0.125rem 0.5rem rgba(31, 27, 24, 0.06);
+  --shadow-nav-hover: 0 0.25rem 0.875rem rgba(45, 127, 122, 0.18);
+  --shadow-menu: 0 0.125rem 0.625rem rgba(31, 27, 24, 0.12);
+  --shadow-menu-hover: 0 0.25rem 1rem rgba(217, 108, 45, 0.2);
+  --shadow-footer: 0 -0.5rem 1.75rem rgba(31, 27, 24, 0.22);
+  --shadow-drawer: -0.75rem 0 2.5rem rgba(31, 27, 24, 0.2);
+
+  /* Page background */
+  --page-bg: var(--color-cream);
 
   /* Panel/table surfaces */
-  --panel-surface: rgba(255, 255, 255, 0.98);
-  --panel-border: rgba(249, 115, 22, 0.15);
-  --table-head-bg: rgba(255, 255, 255, 0.45);
-  --table-head-border: rgba(148, 163, 184, 0.55);
-  --table-row-border: #f3e8ff;
-  --table-row-hover-start: rgba(255, 237, 213, 0.35);
-  --table-row-hover-end: rgba(219, 234, 254, 0.35);
+  --panel-surface: rgba(255, 255, 255, 0.82);
+  --panel-border: rgba(217, 108, 45, 0.22);
+  --table-head-bg: rgba(245, 253, 230, 0.65);
+  --table-head-border: rgba(31, 27, 24, 0.18);
+  --table-row-border: rgba(219, 169, 40, 0.28);
+  --table-row-hover-start: rgba(219, 169, 40, 0.18);
+  --table-row-hover-end: rgba(45, 127, 122, 0.14);
 
   /* Colors */
-  --color-text: #1f2937;
-  --color-muted: #5b6477;
-  --color-summary: #4b4659;
-  --color-venue: #475569;
-  --color-date: #475569;
-  --color-table-head: #334155;
-  --color-link: #1d4ed8;
-  --color-link-hover: #1e40af;
+  --color-text: var(--color-charcoal);
+  --color-muted: #4a443f;
+  --color-summary: #3d3834;
+  --color-venue: #3d3834;
+  --color-date: var(--color-teal);
+  --color-table-head: var(--color-charcoal);
+  --color-link: var(--color-teal);
+  --color-link-hover: #236b67;
   --color-error-border: #fecaca;
   --color-error-text: #991b1b;
-  --color-focus: #38bdf8;
-  --color-nav-accent: #2563eb;
-  --color-empty-title: #433f52;
-  --color-empty-hint: #6b6578;
-  --color-generated: #6b5563;
-  --color-footer-bg: #1e2a3a;
-  --color-footer-text: #f1f5f9;
-  --color-footer-muted: #cbd5e1;
+  --color-focus: var(--color-mustard);
+  --color-nav-accent: var(--color-burnt-orange);
+  --color-empty-title: var(--color-charcoal);
+  --color-empty-hint: var(--color-muted);
+  --color-generated: #5c554f;
+  --color-footer-bg: var(--color-charcoal);
+  --color-footer-text: var(--color-cream);
+  --color-footer-muted: rgba(245, 253, 230, 0.78);
 
   /* Gradients */
-  --gradient-panel-title: linear-gradient(100deg, #ea580c, #c026d3, #2563eb);
-  --gradient-refresh-btn: linear-gradient(135deg, #f97316 0%, #ec4899 55%, #6366f1 100%);
-  --gradient-poster-placeholder: linear-gradient(145deg, #ffedd5, #fce7f3, #dbeafe);
-  --gradient-footer: linear-gradient(180deg, #243447 0%, var(--color-footer-bg) 45%, #15212f 100%);
-  --gradient-drawer: linear-gradient(165deg, #fffefb 0%, #f0f7ff 50%, #fff5f8 100%);
+  --gradient-panel-title: linear-gradient(100deg, var(--color-burnt-orange), var(--color-mustard), var(--color-teal));
+  --gradient-refresh-btn: linear-gradient(135deg, var(--color-burnt-orange) 0%, var(--color-mustard) 55%, var(--color-teal) 100%);
+  --gradient-poster-placeholder: linear-gradient(145deg, var(--color-cream), rgba(219, 169, 40, 0.25), rgba(45, 127, 122, 0.18));
+  --gradient-footer: linear-gradient(180deg, #2a2522 0%, var(--color-footer-bg) 45%, #151210 100%);
+  --gradient-drawer: linear-gradient(165deg, var(--color-cream) 0%, rgba(45, 127, 122, 0.1) 50%, rgba(219, 169, 40, 0.12) 100%);
 
   /* Misc sizes */
   --size-menu-toggle: 2.75rem;

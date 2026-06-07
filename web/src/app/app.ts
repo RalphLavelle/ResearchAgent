@@ -8,31 +8,23 @@ import {
   signal,
   viewChild,
 } from '@angular/core';
+import { NgOptimizedImage } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
-
-import { TopicService } from './topic/topic.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
   host: {
     '(window:resize)': 'onViewportResize()',
     '(document:keydown.escape)': 'onEscapeCloseNav()',
-    '[style.--topic-bg-image]': 'backgroundImage()',
   },
 })
 export class App {
   /** When true, the mobile slide-out nav is visible (only styled on small viewports). */
   protected readonly navOpen = signal(false);
-
-  protected readonly topic = inject(TopicService);
-
-  /** CSS url() value for the active topic background (see app.css). */
-  protected readonly backgroundImage = () =>
-    `url("${this.topic.active().background_image}")`;
 
   private readonly document = inject(DOCUMENT);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
