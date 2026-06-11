@@ -10,6 +10,56 @@ from starlette.testclient import TestClient
 from agent.api import create_app
 
 
+def test_get_events_only_returns_one_month_window() -> None:
+    """The store keeps far-future events, but the API list is capped to a month."""
+    from datetime import timedelta
+
+    from agent.event_window import local_today
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    today = local_today()
+    in_window = (today + timedelta(days=10)).isoformat()
+    far_future = (today + timedelta(days=120)).isoformat()
+    past = (today - timedelta(days=5)).isoformat()
+
+    coll = get_database("test-db")[EVENTS_COLLECTION]
+    coll.insert_many(
+        [
+            {
+                "_id": "evt-soon",
+                "event": "Soon Band",
+                "url": "https://example.com/soon",
+                "date": in_window,
+            },
+            {
+                "_id": "evt-far",
+                "event": "Far Band",
+                "url": "https://example.com/far",
+                "date": far_future,
+            },
+            {
+                "_id": "evt-past",
+                "event": "Past Band",
+                "url": "https://example.com/past",
+                "date": past,
+            },
+        ]
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/events")
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    returned_urls = {e["url"] for e in events}
+    assert "https://example.com/soon" in returned_urls
+    assert "https://example.com/far" not in returned_urls
+    assert "https://example.com/past" not in returned_urls
+
+    # All three remain stored — only the read-time window hides the others.
+    assert coll.count_documents({}) == 3
+
+
 def test_get_reports_returns_saved_rows() -> None:
     save_run_report(
         "test-db",

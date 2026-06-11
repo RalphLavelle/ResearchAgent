@@ -15,11 +15,11 @@ from time import monotonic
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
-from agent import config, notion_output
+from agent import config
 from agent.enrich import enrich_thumbnails
 from agent.event_window import (
     curator_date_instruction,
-    filter_events_in_upcoming_window,
+    filter_future_events,
     parse_event_sort_date,
     planner_date_instruction,
     sort_resources_by_event_date_asc,
@@ -263,11 +263,11 @@ def node_normalize(state: AgentState) -> AgentState:
         )
         curator_s = monotonic() - t0
         unique = _dedupe_curator_resources(list(out.resources or []))
-        # Keep only dated events in the configured horizon; sort soonest first.
-        windowed = filter_events_in_upcoming_window(unique)
-        ordered = sort_resources_by_event_date_asc(windowed)
+        # Keep every dated future event (no upper bound); sort soonest first.
+        future = filter_future_events(unique)
+        ordered = sort_resources_by_event_date_asc(future)
         logger.info(
-            "Curator finished in %.1f s producing %s resources after date window.",
+            "Curator finished in %.1f s producing %s future-dated resources.",
             curator_s,
             len(ordered),
         )
@@ -344,9 +344,8 @@ def node_local_output(state: AgentState) -> AgentState:
     3. Merge new resources into MongoDB (events + images collections).
     4. Save the snapshot fingerprint.
     5. Save a structured run report to MongoDB (``reports`` collection).
-    6. Optionally push the full event list to Notion.
     """
-    from agent.local_output import active_db_name, load_spreadsheet_resources, write_output
+    from agent.local_output import active_db_name, write_output
     from agent.report_store import save_run_report
 
     msg = build_run_log_message(state)
@@ -378,29 +377,6 @@ def node_local_output(state: AgentState) -> AgentState:
             logger.info("Run report saved (id=%s)", report_id)
         except Exception as report_exc:
             logger.warning("Run report save failed (continuing): %s", report_exc)
-
-        all_resources = load_spreadsheet_resources()
-
-        from agent.snapshot import canonical_fingerprint
-        spreadsheet_fp = canonical_fingerprint(all_resources)
-
-        if (
-            config.notion_sync_configured()
-            and notion_output.notion_sync_needed(spreadsheet_fp, config.NOTION_SYNC_STATE_PATH)
-        ):
-            try:
-                notion_output.sync_research_page(
-                    token=config.NOTION_INTEGRATION_TOKEN,
-                    page_id_raw=config.NOTION_RESEARCH_PAGE_ID,
-                    resources=all_resources,
-                    api_version=config.NOTION_API_VERSION,
-                )
-                notion_output.mark_notion_synced(spreadsheet_fp, config.NOTION_SYNC_STATE_PATH)
-            except Exception as notion_exc:
-                logger.exception("Notion sync failed: %s", notion_exc)
-                ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-                fail_line = f"{ts} - Notion sync failed: {notion_exc}"
-                return {"run_log_message": f"{msg} | {fail_line}"}
 
     except Exception as exc:
         logger.exception("Local output failed: %s", exc)

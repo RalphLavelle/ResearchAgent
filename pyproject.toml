@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "agent"
 version = "0.1.0"
-description = "LangGraph agent that researches subjects and saves information to a nminated Notion page"
+description = "LangGraph agent that researches subjects and saves curated events to MongoDB"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [

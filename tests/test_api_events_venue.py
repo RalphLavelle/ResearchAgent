@@ -1,11 +1,12 @@
 """API tests for venue display fields."""
 
-from datetime import date
+from datetime import timedelta
 
 from starlette.testclient import TestClient
 
 from agent.api import create_app
 from agent.event_store import save_existing_rows
+from agent.event_window import local_today
 from agent.mongodb import VENUES_COLLECTION, get_database
 
 
@@ -18,11 +19,13 @@ def test_get_events_venue_is_plain_name_string() -> None:
             "location": "Brisbane",
         }
     )
+    # Use a date inside the API's one-month read window so the row is returned.
+    event_day = local_today() + timedelta(days=7)
     row = [
         "The Beths",
         "The Tivoli Theatre",
         "Brisbane",
-        date(2026, 5, 8),
+        event_day,
         "https://example.com/beths",
         "",
         "",

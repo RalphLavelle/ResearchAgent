@@ -164,10 +164,15 @@ def row_to_doc(row: list, *, db_name: str = "") -> dict[str, Any]:
 def load_events_api_payload(db_name: str) -> dict[str, Any]:
     """Build ``GET /api/<db>/events`` JSON with one events scan (+ venue lookup).
 
+    Only events whose date falls within the next month (``API_EVENT_WINDOW_DAYS``)
+    are returned — the store keeps all future events, but this read-time query
+    applies the display window (Task 7).
+
     Unlike ``load_existing_rows``, this skips poster N+1 lookups — thumbnail URLs
     are derived from each event's ``image_id`` without hitting the images collection.
     """
     from agent import venue_store
+    from agent.event_window import api_window_iso_bounds
     from agent.image_cache import api_image_url
     from agent.json_output import build_events_payload_from_rows
     from agent.mongodb import ensure_collection_indexes
@@ -179,7 +184,13 @@ def load_events_api_payload(db_name: str) -> dict[str, Any]:
     thumbnail_urls: dict[str, str | None] = {}
     coll = get_database(db_name)[EVENTS_COLLECTION]
 
-    for doc in coll.find():
+    # Read-time window (Task 7): the store holds all future events, but the
+    # public list only shows the next month. ISO date strings sort lexically,
+    # so a simple string range filters the window and excludes undated rows.
+    start_iso, end_iso = api_window_iso_bounds()
+    window_query = {"date": {"$gte": start_iso, "$lte": end_iso}}
+
+    for doc in coll.find(window_query):
         row = doc_to_row(doc)
         url = str(row[IDX_URL] or "").strip().lower()
         if not url.startswith("http"):

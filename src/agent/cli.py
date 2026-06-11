@@ -18,15 +18,15 @@ logger = logging.getLogger(__name__)
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Research subjects and save to a nominated Notion page.",
+        description="Research subjects and save curated events to MongoDB.",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 
-    p_once = sub.add_parser("run-once", help="Run a single research + sync pass.")
+    p_once = sub.add_parser("run-once", help="Run a single research + save pass.")
     p_once.add_argument(
         "--dry-run",
         action="store_true",
-        help="Do not write Markdown files or snapshot.",
+        help="Curate results only; do not write to MongoDB or snapshot.",
     )
 
     sub.add_parser(

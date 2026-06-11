@@ -63,19 +63,10 @@ services:
       - key: OLLAMA_MODEL
         value: gpt-oss:120b-cloud
         scope: RUN_TIME
-      - key: NOTION_ENABLED
-        value: "false"
-        scope: RUN_TIME
       - key: OLLAMA_API_KEY
         scope: RUN_TIME
         type: SECRET
       - key: OPENAI_API_KEY
-        scope: RUN_TIME
-        type: SECRET
-      - key: NOTION_INTEGRATION_TOKEN
-        scope: RUN_TIME
-        type: SECRET
-      - key: NOTION_RESEARCH_PAGE_ID
         scope: RUN_TIME
         type: SECRET
       - key: MONGODB_URI

@@ -1,8 +1,12 @@
-"""Date window and sorting for event-style research (Task 4).
+"""Date parsing, sorting, and the API display window for event research.
 
 The curator is asked to emit ISO dates (YYYY-MM-DD). These helpers parse
-that field, keep only events in the next N days from "today" (user's
-local timezone), and sort rows for display (soonest upcoming first).
+that field and sort rows for display (soonest upcoming first).
+
+Storage policy (Task 7): the pipeline keeps **all future events** it finds,
+no matter how far ahead. The only date *window* left is applied at read time
+by the API (``API_EVENT_WINDOW_DAYS``) so the public list shows just the next
+month. Past events are still pruned at merge time; there is no future pruning.
 """
 
 from __future__ import annotations
@@ -13,8 +17,9 @@ from agent.display_time import display_timezone
 from agent.models import Resource
 from agent.prompt_guides import PromptGuides
 
-# How far ahead to include events (matches subject-matter instructions).
-DEFAULT_EVENT_HORIZON_DAYS = 30
+# How far ahead the **API** includes events in the public list (one month).
+# This is purely a read-time filter — every future event is still stored.
+API_EVENT_WINDOW_DAYS = 30
 
 
 def local_today() -> date:
@@ -50,31 +55,23 @@ def parse_event_sort_date(date_str: str) -> date | None:
         return None
 
 
-def planner_date_instruction(
-    guides: PromptGuides | None = None,
-    *,
-    days: int = DEFAULT_EVENT_HORIZON_DAYS,
-) -> str:
-    """Appended to the planner user message so queries target the right window."""
-    g = guides or PromptGuides()
+def api_window_iso_bounds(days: int = API_EVENT_WINDOW_DAYS) -> tuple[str, str]:
+    """ISO ``(start, end)`` dates for the API read-time window: today..today+days."""
     today = local_today()
     end = today + timedelta(days=days)
-    # When the window spans two months, remind the model to search both.
-    month_hint = ""
-    if today.month != end.month:
-        from calendar import month_name
-        month_hint = (
-            f"\nIMPORTANT: the window spans **{month_name[today.month]}** and "
-            f"**{month_name[end.month]}** — make sure some queries explicitly "
-            f"mention {month_name[end.month]} {end.year} so you catch events in "
-            "both months.\n"
-        )
+    return today.isoformat(), end.isoformat()
+
+
+def planner_date_instruction(guides: PromptGuides | None = None) -> str:
+    """Appended to the planner user message so queries target **all** future events."""
+    g = guides or PromptGuides()
+    today = local_today()
     body = (
-        f"\n\nToday is {today.isoformat()}. Only plan queries for individual "
-        f"{g.resource_label_plural} happening from {today.isoformat()} through "
-        f"{end.isoformat()} inclusive — roughly the next {days} days. "
+        f"\n\nToday is {today.isoformat()}. Plan queries for individual upcoming "
+        f"{g.resource_label_plural} happening on or after {today.isoformat()} — "
+        "cover the near term **and** events announced further ahead (next month, "
+        "next season, on-sale tours). Do not restrict to only the next few weeks. "
         f"{g.portal_avoid_hint}\n"
-        f"{month_hint}"
     )
     suffix = (g.planner_date_suffix or "").strip()
     if suffix:
@@ -82,27 +79,22 @@ def planner_date_instruction(
     return body
 
 
-def curator_date_instruction(
-    guides: PromptGuides | None = None,
-    *,
-    days: int = DEFAULT_EVENT_HORIZON_DAYS,
-) -> str:
+def curator_date_instruction(guides: PromptGuides | None = None) -> str:
     """Prepended before search results for the normalisation step."""
     g = guides or PromptGuides()
     today = local_today()
-    end = today + timedelta(days=days)
     body = (
-        f"Today is {today.isoformat()}. Only include individual "
+        f"Today is {today.isoformat()}. Include every individual "
         f"{g.curator_resource_label_plural} "
-        f"with a primary performance date from {today.isoformat()} through "
-        f"{end.isoformat()} inclusive (next {days} days). "
+        f"with a primary performance date on or after {today.isoformat()} — "
+        "keep events far in the future too; do not impose an end date. "
         "Prefer a **specific show URL** when the excerpt names one (aggregator `/e/` "
         "links, Facebook events, ticketing pages over generic index pages — but **do not** "
         "skip multiple events visible on long listing pages.) "
         "When one shared listing URL wraps many dated shows seen in text, emit **one row "
         "per distinct show** (different act names or dates) even if the **url field repeats** "
-        "for rows that genuinely only have that portal link. Omit rows without an ISO "
-        "date — YYYY-MM-DD — in range.\n"
+        "for rows that genuinely only have that portal link. Omit only rows without an ISO "
+        "date — YYYY-MM-DD — or whose date has already passed.\n"
     )
     suffix = (g.curator_date_suffix or "").strip()
     if suffix:
@@ -110,20 +102,19 @@ def curator_date_instruction(
     return body
 
 
-def filter_events_in_upcoming_window(
-    resources: list[Resource],
-    *,
-    days: int = DEFAULT_EVENT_HORIZON_DAYS,
-) -> list[Resource]:
-    """Drop rows whose ``date`` is missing or outside today..today+days (UTC)."""
+def filter_future_events(resources: list[Resource]) -> list[Resource]:
+    """Keep every event dated today or later; drop undated and past rows.
+
+    No upper bound — events far in the future are retained (Task 7). The API
+    applies the one-month display window at read time, not here.
+    """
     today = local_today()
-    end = today + timedelta(days=days)
     out: list[Resource] = []
     for r in resources:
         d = parse_event_sort_date(r.date)
         if d is None:
             continue
-        if today <= d <= end:
+        if d >= today:
             out.append(r)
     return out
 

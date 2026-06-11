@@ -20,6 +20,6 @@ def display_timezone() -> ZoneInfo:
 
 
 def format_generated_timestamp() -> str:
-    """String for the 'Generated' line in Markdown and Notion (local wall clock + zone)."""
+    """String for the 'Generated' line in the events feed (local wall clock + zone)."""
     now = datetime.now(display_timezone())
     return now.strftime("%Y-%m-%d %H:%M %Z")

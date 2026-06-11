@@ -132,7 +132,7 @@ Restart `serve` after changing this value.
 
   | Endpoint | Purpose |
   |----------|---------|
-  | `GET /api/{db}/events` | Event list for a topic (JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc`) |
+  | `GET /api/{db}/events` | Event list for a topic — **next month only** (events dated today through today+30; the store keeps all future events, this query applies the display window). JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc` |
   | `GET /api/{db}/events/spotlight[?limit=4&exclude=id1,id2]` | Up to four random **upcoming** events that have a cached poster (`image_id` in MongoDB) — used by the spotlight carousel |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
   | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
@@ -188,9 +188,8 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 ## Behavior
 
 - Each successful run produces a fresh **`Run_<AEST timestamp>.md`** report under the output folder. The report has three sections — *Searches* (planner queries), *Search and crawl* (URLs grouped by host), *Normalize* (curated `Resource` JSON with source URLs) — so you can audit exactly what each LLM-driven step did.
-- If curated content **changed** since last run, the spreadsheet, `events.json`, and (when configured) Notion are also refreshed.
-- If nothing **meaningfully** changed, the spreadsheet and `events.json` are still rewritten so they always reflect the latest source-of-truth, but downstream Notion sync is skipped.
-- `data/<topic>/snapshot.json` stores a fingerprint (gitignored).
+- Curated events are merged into MongoDB (events + images collections) on every run; the Angular app reads them via the REST API.
+- `data/<topic>/snapshot.json` stores a fingerprint (gitignored) used to log whether anything changed since the last run.
 
 ## Tests
 

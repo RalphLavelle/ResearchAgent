@@ -80,8 +80,7 @@ EVENT_EXCLUSIONS: EventExclusionsConfig = load_event_exclusions(
     EVENT_EXCLUSIONS_CONFIG_PATH
 )
 SNAPSHOT_PATH = DATA_DIR / "snapshot.json"
-# Last research fingerprint successfully pushed to Notion (under data/, gitignored).
-NOTION_SYNC_STATE_PATH = DATA_DIR / "notion_sync_state.json"
+
 
 def _env_flag(name: str, *, default: bool = True) -> bool:
     """Parse ``true``/``false`` style env vars; *unset* keeps ``default``."""
@@ -181,17 +180,3 @@ CRAWL_MAX_TEXT_PER_PAGE = int(os.environ.get("CRAWL_MAX_TEXT_PER_PAGE", "38000")
 
 # Characters from search+crawl forwarded to curator (preserve crawl suffix when trimming).
 CURATOR_INPUT_MAX_CHARS = int(os.environ.get("CURATOR_INPUT_MAX_CHARS", "260000"))
-
-# Optional: sync research to a Notion page.
-# Create an internal integration, paste its secret; share the target page with that integration.
-NOTION_ENABLED = (os.environ.get("NOTION_ENABLED") or "false").strip().lower()
-NOTION_INTEGRATION_TOKEN = (os.environ.get("NOTION_INTEGRATION_TOKEN") or "").strip()
-NOTION_RESEARCH_PAGE_ID = (os.environ.get("NOTION_RESEARCH_PAGE_ID") or "").strip()
-NOTION_API_VERSION = (
-    (os.environ.get("NOTION_API_VERSION") or "").strip() or "2022-06-28"
-)
-
-
-def notion_sync_configured() -> bool:
-    """True when both token and page id are set (Notion sync runs on full writes)."""
-    return bool(NOTION_INTEGRATION_TOKEN and NOTION_RESEARCH_PAGE_ID and NOTION_ENABLED == "true")

@@ -1,7 +1,7 @@
 # Copy to topics/<your-topic-id>/prompt_guides.yaml
 #
 # The engine appends planner_date_suffix / curator_date_suffix after generic
-# date-window text (today + next N days). Adjust labels for your domain.
+# date text (today onward — all future events). Adjust labels for your domain.
 
 resource_label_plural: "events"
 curator_resource_label_plural: "events"

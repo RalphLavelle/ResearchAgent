@@ -5,7 +5,8 @@ from datetime import date, timedelta
 import pytest
 
 from agent.event_window import (
-    filter_events_in_upcoming_window,
+    api_window_iso_bounds,
+    filter_future_events,
     format_event_weekday_date,
     local_today,
     parse_event_sort_date,
@@ -26,7 +27,9 @@ def test_parse_invalid() -> None:
     assert parse_event_sort_date("Sat 3 May") is None
 
 
-def test_filter_drops_outside_window(monkeypatch: pytest.MonkeyPatch) -> None:
+def test_filter_keeps_all_future_drops_past_and_undated(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     fixed = date(2026, 4, 1)
     monkeypatch.setattr("agent.event_window.local_today", lambda: fixed)
     rows = [
@@ -34,10 +37,20 @@ def test_filter_drops_outside_window(monkeypatch: pytest.MonkeyPatch) -> None:
         Resource(title="B", url="https://b.example/e", date="2026-03-01"),
         Resource(title="C", url="https://c.example/e", date=""),
         Resource(title="D", url="https://d.example/e", date="2026-05-01"),
+        # Far-future event must be kept now (no upper bound).
+        Resource(title="E", url="https://e.example/e", date="2027-01-20"),
     ]
-    out = filter_events_in_upcoming_window(rows, days=30)
+    out = filter_future_events(rows)
     titles = {r.title for r in out}
-    assert titles == {"A", "D"}
+    assert titles == {"A", "D", "E"}
+
+
+def test_api_window_iso_bounds_is_one_month(monkeypatch: pytest.MonkeyPatch) -> None:
+    fixed = date(2026, 4, 1)
+    monkeypatch.setattr("agent.event_window.local_today", lambda: fixed)
+    start, end = api_window_iso_bounds()
+    assert start == "2026-04-01"
+    assert end == "2026-05-01"
 
 
 def test_sort_ascending_soonest_first() -> None:
