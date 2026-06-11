@@ -43,10 +43,10 @@ export class TopicService {
     const reg = this.#registry();
     if (!reg) {
       return {
-        name: 'Events',
+        name: 'Gigsorooni',
         db: 'bgc',
         background_image: '/topics/live-music-brisbane-gold-coast/assets/bg.jpg',
-        site_title: 'Live music events',
+        site_title: 'Gigsorooni',
         site_emoji: '🎵'
       };
     }

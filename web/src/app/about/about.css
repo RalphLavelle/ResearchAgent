@@ -42,7 +42,7 @@
 .about__footer-note {
   margin: var(--space-7) 0 0;
   padding-top: var(--space-5);
-  border-top: var(--border-thin) solid rgba(30, 42, 58, 0.12);
+  border-top: var(--border-thin) solid rgba(31, 27, 24, 0.14);
 }
 
 .about__back {

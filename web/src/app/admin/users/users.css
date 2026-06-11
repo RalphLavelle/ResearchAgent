@@ -153,7 +153,7 @@
 .page-btn {
   padding: var(--space-2) var(--space-4);
   border-radius: var(--radius-pill);
-  border: var(--border-thin) solid rgba(37, 99, 235, 0.25);
+  border: var(--border-thin) solid rgba(217, 108, 45, 0.28);
   background: rgba(255, 255, 255, 0.95);
   color: var(--color-nav-accent);
   font-weight: 600;

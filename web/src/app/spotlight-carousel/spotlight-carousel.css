@@ -34,7 +34,7 @@
   gap: var(--space-2);
   flex-shrink: 0;
   padding: var(--space-2) var(--space-4);
-  border: var(--border-thin) solid rgba(37, 99, 235, 0.28);
+  border: var(--border-thin) solid rgba(217, 108, 45, 0.28);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.92);
   color: var(--color-nav-accent);
@@ -93,7 +93,7 @@
   width: 2.5rem;
   height: 2.5rem;
   padding: 0;
-  border: var(--border-thin) solid rgba(37, 99, 235, 0.25);
+  border: var(--border-thin) solid rgba(45, 127, 122, 0.3);
   border-radius: var(--radius-pill);
   background: rgba(255, 255, 255, 0.92);
   color: var(--color-nav-accent);

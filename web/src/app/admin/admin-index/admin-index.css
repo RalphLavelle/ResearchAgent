@@ -60,7 +60,7 @@
 .admin-card:hover {
   transform: translateY(-0.125rem);
   box-shadow: var(--shadow-nav-hover);
-  border-color: rgba(37, 99, 235, 0.25);
+  border-color: rgba(217, 108, 45, 0.28);
 }
 
 .admin-card:focus-visible {
