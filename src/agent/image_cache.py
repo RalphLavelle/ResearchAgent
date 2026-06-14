@@ -78,12 +78,18 @@ def _download(url: str) -> tuple[bytes, str] | None:
 
 def cache_thumbnails(resources: list[Resource], *, db_name: str) -> list[Resource]:
     """Download each distinct poster URL once; many events may share one blob."""
+    from agent.enrich import poster_quality_score
+    from agent.event_window import split_title_parts
+
     image_id_updates: dict[str, str | None] = {}
+    quality_updates: dict[str, int] = {}
+    poster_url_updates: dict[str, str] = {}
     out: list[Resource] = []
 
     for r in resources:
         eid = (r.id or "").strip()
         url = (r.thumbnail_url or "").strip()
+        act, _, _ = split_title_parts(r.title or "")
 
         # Already an API path from a previous run.
         if url.startswith(f"/api/{db_name}/images/"):
@@ -92,8 +98,12 @@ def cache_thumbnails(resources: list[Resource], *, db_name: str) -> list[Resourc
 
         if not eid or not url or not url.lower().startswith("http"):
             image_id_updates[eid] = None
+            quality_updates[eid] = -1
             out.append(r.model_copy(update={"thumbnail_url": None}) if url and not url.startswith("http") else r)
             continue
+
+        quality_updates[eid] = poster_quality_score(url, act)
+        poster_url_updates[eid] = url
 
         existing_id = image_store.find_image_by_source(db_name, url)
         if existing_id:
@@ -106,6 +116,8 @@ def cache_thumbnails(resources: list[Resource], *, db_name: str) -> list[Resourc
         result = _download(url)
         if result is None:
             image_id_updates[eid] = None
+            quality_updates[eid] = -1
+            poster_url_updates.pop(eid, None)
             out.append(r.model_copy(update={"thumbnail_url": None}))
             continue
 
@@ -123,7 +135,12 @@ def cache_thumbnails(resources: list[Resource], *, db_name: str) -> list[Resourc
         out.append(r.model_copy(update={"thumbnail_url": api_image_url(db_name, fname)}))
 
     if image_id_updates:
-        image_store.bulk_update_event_image_ids(db_name, image_id_updates)
+        image_store.bulk_update_event_image_ids(
+            db_name,
+            image_id_updates,
+            qualities=quality_updates,
+            poster_urls=poster_url_updates,
+        )
 
     return out
 

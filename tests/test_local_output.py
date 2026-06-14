@@ -48,7 +48,7 @@ def _posters_from_db() -> list[str]:
 def test_merge_creates_events(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
     r = _make_resource("Band A @ Venue X, Brisbane", "https://example.com/a")
-    added, skipped, removed = merge_and_write([r])
+    added, skipped, removed, _, _ = merge_and_write([r])
     assert added == 1
     assert skipped == 0
     assert removed == 0
@@ -70,7 +70,7 @@ def test_new_url_added_on_second_run(tmp_path: Path, monkeypatch: pytest.MonkeyP
     r1 = _make_resource("Band A", "https://example.com/a")
     r2 = _make_resource("Band B", "https://example.com/b")
     merge_and_write([r1])
-    added, _, _ = merge_and_write([r2])
+    added, _, _, _, _ = merge_and_write([r2])
     assert added == 1
     urls = _urls_from_db()
     assert "https://example.com/a" in urls
@@ -82,7 +82,7 @@ def test_past_events_removed(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) ->
     past = Resource(title="Old Gig", url="https://example.com/old", date="2020-01-01")
     future = _make_resource("New Gig", "https://example.com/new")
     merge_and_write([past, future])
-    _, _, removed = merge_and_write([])
+    _, _, removed, _, _ = merge_and_write([])
     assert removed == 1
     urls = _urls_from_db()
     assert "https://example.com/old" not in urls
@@ -109,7 +109,7 @@ def test_exact_url_duplicate_skipped(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
     r = _make_resource("Band A @ Venue X, Gold Coast", "https://example.com/a")
     merge_and_write([r])
-    added, skipped, _ = merge_and_write([r])
+    added, skipped, _, _, _ = merge_and_write([r])
     assert added == 0
     assert skipped == 1
     # No source should be added for same-domain same-URL
@@ -127,7 +127,7 @@ def test_semantic_duplicate_adds_source_different_domain(
     r2 = Resource(title="The Beths @ The Tivoli, Brisbane", url="https://oztix.com.au/beths", date=d)
 
     merge_and_write([r1])
-    added, skipped, _ = merge_and_write([r2])
+    added, skipped, _, _, _ = merge_and_write([r2])
 
     assert added == 0
     assert skipped == 1
@@ -148,7 +148,7 @@ def test_semantic_duplicate_venue_variation_ignored(
     r2 = Resource(title="The Beths @ Tivoli Theatre, Brisbane", url="https://oztix.com.au/beths", date=d)
 
     merge_and_write([r1])
-    added, skipped, _ = merge_and_write([r2])
+    added, skipped, _, _, _ = merge_and_write([r2])
 
     assert added == 0
     assert skipped == 1
@@ -182,7 +182,7 @@ def test_partial_act_name_same_venue_date_is_duplicate(
     r2 = Resource(title="The Beths, with Wax Chattels @ The Tivoli, Brisbane", url="https://oztix.com.au/beths", date=d)
 
     merge_and_write([r1])
-    added, skipped, _ = merge_and_write([r2])
+    added, skipped, _, _, _ = merge_and_write([r2])
 
     assert added == 0
     assert skipped == 1
@@ -231,8 +231,8 @@ def test_partial_act_name_different_venue_not_duplicate(
     r1 = Resource(title="The Beths @ The Tivoli, Brisbane", url="https://ticketek.com.au/beths", date=d)
     r2 = Resource(title="The Beths, with Wax Chattels @ Fortitude Music Hall, Brisbane", url="https://oztix.com.au/beths", date=d)
 
-    added1, _, _ = merge_and_write([r1])
-    added2, _, _ = merge_and_write([r2])
+    added1, _, _, _, _ = merge_and_write([r1])
+    added2, _, _, _, _ = merge_and_write([r2])
 
     assert added1 == 1
     assert added2 == 1
@@ -250,8 +250,8 @@ def test_different_date_not_a_duplicate(
     r1 = Resource(title="The Beths @ The Tivoli, Brisbane", url="https://ticketek.com.au/beths/1", date=d1)
     r2 = Resource(title="The Beths @ The Tivoli, Brisbane", url="https://ticketek.com.au/beths/2", date=d2)
 
-    added1, _, _ = merge_and_write([r1])
-    added2, _, _ = merge_and_write([r2])
+    added1, _, _, _, _ = merge_and_write([r1])
+    added2, _, _, _, _ = merge_and_write([r2])
 
     assert added1 == 1
     assert added2 == 1
@@ -281,6 +281,23 @@ def test_write_output_returns_merge_stats(
     assert stats.removed_exclusion == 0
     assert stats.removed_dedupe == 0
     assert stats.total_after == 2
+
+
+def test_merge_and_write_tracks_url_outcomes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Per-URL tallies distinguish new rows from duplicate skips."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    r1 = _make_resource("Band A @ Venue X, Brisbane", "https://example.com/a")
+    r2 = _make_resource("Band B @ Venue Y, Brisbane", "https://example.com/b")
+    merge_and_write([r1])
+
+    _, skipped, _, outcomes, distinct = merge_and_write([r1, r2])
+    assert skipped == 1
+    assert outcomes["https://example.com/a"] == (0, 1)
+    assert outcomes["https://example.com/b"] == (1, 1)
+    assert distinct["https://example.com/a"] == 1
+    assert distinct["https://example.com/b"] == 1
 
 
 def test_write_output_counts_duplicates_and_total(

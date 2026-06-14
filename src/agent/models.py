@@ -64,6 +64,7 @@ class AgentState(TypedDict, total=False):
     queries: list[str]
     raw_search_text: str
     crawled_urls: list[str]
+    memory_seed: str
     resources: list[dict]
     fingerprint: str
     fingerprint_unchanged: bool

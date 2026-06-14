@@ -219,7 +219,48 @@ def _extract_internal_links(page_url: str, html: str, host: str) -> list[str]:
     return found[:96]
 
 
-def deep_search_supplement(ddg_blob: str) -> tuple[str, list[str], str | None]:
+def _merge_crawl_seeds(
+    ddg_blob: str,
+    extra_seeds: list[str] | None,
+) -> list[str]:
+    """Combine guaranteed memory seeds with DuckDuckGo-derived seeds."""
+    extra: list[str] = []
+    seen_urls: set[str] = set()
+    extra_hosts: set[str] = set()
+    for raw in extra_seeds or []:
+        u = _strip_url_trailing_junk((raw or "").strip())
+        if not u.startswith("http"):
+            continue
+        key = u.lower()
+        if key in seen_urls:
+            continue
+        seen_urls.add(key)
+        extra.append(u)
+        try:
+            extra_hosts.add(urlparse(u).netloc.lower())
+        except ValueError:
+            continue
+
+    ddg_seeds = extract_seed_urls_from_ddg_blob(ddg_blob, config.MAX_CRAWL_SEEDS)
+    seeds = list(extra)
+    for u in ddg_seeds:
+        try:
+            host = urlparse(u).netloc.lower()
+        except ValueError:
+            continue
+        if host in extra_hosts:
+            continue
+        if u.lower() in seen_urls:
+            continue
+        seen_urls.add(u.lower())
+        seeds.append(u)
+    return seeds
+
+
+def deep_search_supplement(
+    ddg_blob: str,
+    extra_seeds: list[str] | None = None,
+) -> tuple[str, list[str], str | None]:
     """Crawl seeds and return ``(curator_text, fetched_urls, crawl_note)``.
 
     The first element is the markdown-ish text appended for the curator LLM
@@ -229,15 +270,15 @@ def deep_search_supplement(ddg_blob: str) -> tuple[str, list[str], str | None]:
     which pages contributed to the curator input. The third element explains
     why no pages were crawled when ``fetched_urls`` is empty.
     """
-    if not (ddg_blob or "").strip():
-        return (
-            "",
-            [],
-            "Same-site crawl skipped — search step produced no text to extract seed URLs from.",
-        )
-
-    seeds = extract_seed_urls_from_ddg_blob(ddg_blob, config.MAX_CRAWL_SEEDS)
+    blob = ddg_blob or ""
+    seeds = _merge_crawl_seeds(blob, extra_seeds)
     if not seeds:
+        if not blob.strip():
+            return (
+                "",
+                [],
+                "Same-site crawl skipped — search step produced no text and no remembered URLs were available.",
+            )
         logger.info("Same-site crawl: no seed URLs extracted from DuckDuckGo blob.")
         return (
             "",

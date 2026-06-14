@@ -197,10 +197,25 @@ def update_event_image_id(db_name: str, event_id: str, image_id: str | None) -> 
     )
 
 
-def bulk_update_event_image_ids(db_name: str, mapping: dict[str, str | None]) -> None:
-    """Batch-update ``image_id`` on multiple events."""
+def bulk_update_event_image_ids(
+    db_name: str,
+    mapping: dict[str, str | None],
+    *,
+    qualities: dict[str, int] | None = None,
+    poster_urls: dict[str, str] | None = None,
+) -> None:
+    """Batch-update ``image_id``, ``poster_quality``, and optional ``poster_url``."""
     from agent.mongodb import EVENTS_COLLECTION
 
     coll = get_database(db_name)[EVENTS_COLLECTION]
+    quality_map = qualities or {}
+    url_map = poster_urls or {}
     for eid, image_id in mapping.items():
-        coll.update_one({"_id": eid}, {"$set": {"image_id": image_id or None}})
+        fields: dict[str, Any] = {
+            "image_id": image_id or None,
+            "poster_quality": int(quality_map.get(eid, -1)),
+        }
+        poster_url = str(url_map.get(eid) or "").strip()
+        if poster_url:
+            fields["poster_url"] = poster_url
+        coll.update_one({"_id": eid}, {"$set": fields})

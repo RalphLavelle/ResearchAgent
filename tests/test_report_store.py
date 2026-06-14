@@ -60,6 +60,15 @@ def test_build_report_document_shape() -> None:
     assert doc["diagnostics"]["planner"].startswith("Planner:")
 
 
+def test_build_report_document_includes_memory_seed() -> None:
+    doc = build_report_document(
+        queries=["q"],
+        crawled_urls=[],
+        memory_seed="https://venue.example/whats-on",
+    )
+    assert doc["memory_seed"] == "https://venue.example/whats-on"
+
+
 def test_build_report_document_omits_empty_diagnostics() -> None:
     doc = build_report_document(
         queries=[],

@@ -1,6 +1,29 @@
 """Tests for URL extraction and HTML→text conversion (no network)."""
 
-from agent.site_crawl import _html_to_text, extract_seed_urls_from_ddg_blob
+from agent.site_crawl import (
+    _html_to_text,
+    _merge_crawl_seeds,
+    extract_seed_urls_from_ddg_blob,
+)
+
+
+def test_merge_crawl_seeds_prepends_memory_url() -> None:
+    blob = """
+link: https://venue.example/events
+link: https://other.example/page
+"""
+    seeds = _merge_crawl_seeds(
+        blob,
+        ["https://memory.example/whats-on"],
+    )
+    assert seeds[0] == "https://memory.example/whats-on"
+    assert "https://venue.example/events" in seeds
+    assert len(seeds) >= 2
+
+
+def test_merge_crawl_seeds_allows_memory_without_ddg_blob() -> None:
+    seeds = _merge_crawl_seeds("", ["https://memory.example/listings"])
+    assert seeds == ["https://memory.example/listings"]
 
 
 def test_extract_seeds_from_link_lines() -> None:

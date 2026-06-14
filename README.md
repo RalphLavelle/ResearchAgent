@@ -15,7 +15,8 @@ Each topic has its own **MongoDB database** (the `db` field in `topics.json`, e.
 | `events` | Source of truth — curated gigs (name, venue, date, URLs, tags, poster link, etc.) |
 | `images` | Cached poster image bytes (one blob per upstream URL; many events can share one) |
 | `venues` | Normalised venue records linked from events |
-| `reports` | Pipeline run reports (searches, crawled URLs, merge stats) |
+| `reports` | Pipeline run reports (searches, crawled URLs, merge stats, optional memory seed) |
+| `sources` | Multi-event listing URLs only — one document per host with a `urls` array (pages that yielded 2+ distinct events in a run); stale entries (`runs_contributed > 3 × events_added`) are pruned; one weighted-random URL is revisited each crawl |
 | `users` | Weekly email subscribers |
 | `schema_migrations` | Applied one-shot schema migration ids |
 
@@ -174,7 +175,7 @@ Restart `serve` after changing this value.
   | Endpoint | Purpose |
   |----------|---------|
   | `GET /api/{db}/events` | Event list for a topic — **next month only** (events dated today through today+30; the store keeps all future events, this query applies the display window). JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc` |
-  | `GET /api/{db}/events/spotlight[?limit=4&exclude=id1,id2]` | Up to four random **upcoming** events that have a cached poster (`image_id` in MongoDB) — used by the spotlight carousel |
+  | `GET /api/{db}/events/spotlight[?limit=4&exclude=id1,id2]` | Up to four random **upcoming** events with an **event-specific** cached poster (`poster_quality` ≥ 2 — scored on read and backfilled for legacy rows) |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
   | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
   | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `location`, `aliases`) — used by `/admin/venues` (50 per page max) |

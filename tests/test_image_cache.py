@@ -22,17 +22,59 @@ def _resource(eid: str, thumb: str | None) -> Resource:
 
 
 def test_cache_thumbnails_writes_to_mongodb(monkeypatch: pytest.MonkeyPatch) -> None:
-    url = "https://upstream.example/poster.jpg"
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    url = "https://upstream.example/the-beths-tour.jpg"
     fake_bytes = b"\xff\xd8\xff\xe0fakejpeg"
     monkeypatch.setattr(image_cache, "_download", lambda u: (fake_bytes, "image/jpeg"))
 
-    out = cache_thumbnails([_resource("evt-1", url)], db_name=DB)
+    get_database(DB)[EVENTS_COLLECTION].insert_one({"_id": "evt-1", "event": "The Beths"})
+
+    resource = Resource(
+        id="evt-1",
+        title="The Beths @ Venue, City",
+        url="https://example.com/event/evt-1",
+        date="2099-12-31",
+        thumbnail_url=url,
+    )
+    out = cache_thumbnails([resource], db_name=DB)
 
     fname = image_store.file_name_for_source(url, ".jpg")
     assert out[0].thumbnail_url == api_image_url(DB, fname)
     fetched = image_store.fetch_image(DB, fname)
     assert fetched is not None
     assert fetched[0] == fake_bytes
+
+    doc = get_database(DB)[EVENTS_COLLECTION].find_one({"_id": "evt-1"})
+    assert doc is not None
+    assert doc["poster_quality"] >= 2
+    assert doc["poster_url"] == url
+
+
+def test_cache_thumbnails_sets_poster_quality_negative_on_download_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    monkeypatch.setattr(image_cache, "_download", lambda url: None)
+    get_database(DB)[EVENTS_COLLECTION].insert_one({"_id": "evt-fail", "event": "The Beths"})
+
+    cache_thumbnails(
+        [
+            Resource(
+                id="evt-fail",
+                title="The Beths @ Venue, City",
+                url="https://example.com/event/evt-fail",
+                date="2099-12-31",
+                thumbnail_url="https://upstream.example/missing.jpg",
+            )
+        ],
+        db_name=DB,
+    )
+
+    doc = get_database(DB)[EVENTS_COLLECTION].find_one({"_id": "evt-fail"})
+    assert doc is not None
+    assert doc.get("poster_quality") == -1
 
 
 def test_cache_thumbnails_reuses_blob_for_same_source_url(

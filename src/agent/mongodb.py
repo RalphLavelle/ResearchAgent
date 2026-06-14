@@ -2,7 +2,8 @@
 
 Each research topic uses the ``db`` property from ``topics.json`` as its
 database name. Collections: ``events``, ``venues``, ``images`` (poster blobs),
-``reports``, and ``users`` (weekly email subscribers).
+``reports``, ``sources`` (fruitful crawl URLs), and ``users`` (weekly email
+subscribers).
 """
 
 from __future__ import annotations
@@ -20,6 +21,7 @@ EVENTS_COLLECTION = "events"
 VENUES_COLLECTION = "venues"
 IMAGES_COLLECTION = "images"
 REPORTS_COLLECTION = "reports"
+SOURCES_COLLECTION = "sources"
 USERS_COLLECTION = "users"
 
 # Hostnames that are NOT valid Atlas cluster endpoints (common copy-paste mistakes).
@@ -106,8 +108,11 @@ def ensure_collection_indexes(db_name: str) -> None:
     db = get_client()[name]
     db[EVENTS_COLLECTION].create_index("venue.id", background=True)
     db[EVENTS_COLLECTION].create_index("date", background=True)
+    db[EVENTS_COLLECTION].create_index("poster_quality", background=True, sparse=True)
     db[EVENTS_COLLECTION].create_index("image_id", background=True, sparse=True)
     db[IMAGES_COLLECTION].create_index("source_url", background=True)
+    db[SOURCES_COLLECTION].create_index("host", unique=True, background=True)
+    db[SOURCES_COLLECTION].create_index("urls.url", background=True)
     db[USERS_COLLECTION].create_index("email", unique=True, background=True)
 
 

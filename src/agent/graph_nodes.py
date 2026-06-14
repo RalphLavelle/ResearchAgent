@@ -195,11 +195,20 @@ def node_crawl(state: AgentState) -> AgentState:
         logger.info("Crawl step skipped (CRAWL_ENABLED=false).")
         return {"crawled_urls": [], **_merge_diagnostic(state, "crawl", reason)}
     try:
+        from agent.source_store import pick_weighted_seed_url
+
+        memory_seed = pick_weighted_seed_url(config.ACTIVE_TOPIC.db)
+        extra_seed_list = [memory_seed] if memory_seed else []
+        if memory_seed:
+            logger.info("Crawl step: using remembered URL as extra seed: %s", memory_seed)
         logger.info(
             "Crawl step starting (runs after DuckDuckGo text is collected; downloads can take several minutes)."
         )
         t0 = monotonic()
-        extra, fetched_urls, crawl_note = deep_search_supplement(raw)
+        extra, fetched_urls, crawl_note = deep_search_supplement(
+            raw,
+            extra_seeds=extra_seed_list,
+        )
         elapsed = monotonic() - t0
         logger.info(
             "Crawl step finished in %.1f s (~%s extra chars for curator).",
@@ -208,6 +217,7 @@ def node_crawl(state: AgentState) -> AgentState:
         )
         out: AgentState = {
             "crawled_urls": list(fetched_urls),
+            "memory_seed": memory_seed or "",
             **_merge_diagnostic(state, "crawl", crawl_note if not fetched_urls else None),
         }
         if extra.strip():
@@ -367,12 +377,25 @@ def node_local_output(state: AgentState) -> AgentState:
         save_snapshot(config.SNAPSHOT_PATH, fp, resources)
 
         try:
+            from agent.source_store import record_url_outcomes
+
+            record_url_outcomes(
+                active_db_name(),
+                merge_stats.url_outcomes,
+                distinct_counts=merge_stats.url_distinct_event_counts,
+            )
+        except Exception as source_exc:
+            logger.warning("Fruitful URL memory update failed (continuing): %s", source_exc)
+
+        try:
+            memory_seed = str(state.get("memory_seed") or "").strip() or None
             report_id = save_run_report(
                 active_db_name(),
                 queries=queries,
                 crawled_urls=crawled_urls,
                 merge_stats=merge_stats,
                 diagnostics=dict(state.get("pipeline_diagnostics") or {}),
+                memory_seed=memory_seed,
             )
             logger.info("Run report saved (id=%s)", report_id)
         except Exception as report_exc:

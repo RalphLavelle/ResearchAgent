@@ -74,7 +74,7 @@ def test_partial_act_match_uses_venue_id_with_aliases(
     vid = str(venue_store.list_venues(db)[0]["_id"])
     venue_store.add_alias(db, vid, "The Tivoli")
 
-    added, skipped, _ = merge_and_write(
+    added, skipped, _, _, _ = merge_and_write(
         [
             Resource(
                 title="The Beths, with Wax Chattels @ The Tivoli, Brisbane",

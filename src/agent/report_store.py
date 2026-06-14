@@ -48,6 +48,7 @@ def build_report_document(
     crawled_urls: list[str],
     merge_stats: MergeStats | None = None,
     diagnostics: dict[str, str] | None = None,
+    memory_seed: str | None = None,
     when: datetime | None = None,
 ) -> dict[str, Any]:
     """Shape one report row before insert."""
@@ -69,6 +70,9 @@ def build_report_document(
     }
     if cleaned:
         doc["diagnostics"] = cleaned
+    seed = (memory_seed or "").strip()
+    if seed:
+        doc["memory_seed"] = seed
     return doc
 
 
@@ -79,6 +83,7 @@ def save_run_report(
     crawled_urls: list[str],
     merge_stats: MergeStats | None = None,
     diagnostics: dict[str, str] | None = None,
+    memory_seed: str | None = None,
     when: datetime | None = None,
 ) -> str:
     """Insert a report into the topic's ``reports`` collection."""
@@ -87,6 +92,7 @@ def save_run_report(
         crawled_urls=crawled_urls,
         merge_stats=merge_stats,
         diagnostics=diagnostics,
+        memory_seed=memory_seed,
         when=when,
     )
     coll = get_database(db_name)[REPORTS_COLLECTION]

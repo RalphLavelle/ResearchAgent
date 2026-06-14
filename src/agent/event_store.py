@@ -153,7 +153,13 @@ def row_to_doc(row: list, *, db_name: str = "") -> dict[str, Any]:
     poster = str(row[IDX_POSTER] or "").strip()
     if db_name and poster.lower().startswith("http"):
         from agent import image_store
+        from agent.enrich import poster_quality_score
 
+        doc["poster_url"] = poster
+        doc["poster_quality"] = poster_quality_score(
+            poster,
+            str(row[IDX_EVENT] or "").strip(),
+        )
         doc["image_id"] = image_store.ensure_source_registered(db_name, poster)
     venue_doc = venue_to_mongo(venue_name, venue_id)
     if venue_doc is not None:
@@ -212,19 +218,65 @@ def load_events_api_payload(db_name: str) -> dict[str, Any]:
     return build_events_payload_from_rows(rows, thumbnail_urls=thumbnail_urls)
 
 
+def _spotlight_poster_urls(db_name: str, docs: list[dict[str, Any]]) -> dict[str, str]:
+    """Resolve upstream poster URL per event (``poster_url`` field or images collection)."""
+    from agent import image_store
+
+    urls: dict[str, str] = {}
+    pending_image_ids: set[str] = set()
+    image_id_by_event: dict[str, str] = {}
+
+    for doc in docs:
+        eid = str(doc.get("_id") or "").strip()
+        if not eid:
+            continue
+        legacy = str(doc.get("poster_url") or "").strip()
+        if legacy:
+            urls[eid] = legacy
+            continue
+        image_id = str(doc.get("image_id") or "").strip()
+        if image_id:
+            pending_image_ids.add(image_id)
+            image_id_by_event[eid] = image_id
+
+    if pending_image_ids:
+        sources = image_store.source_urls_by_image_ids(db_name, pending_image_ids)
+        for eid, image_id in image_id_by_event.items():
+            source = sources.get(image_id, "")
+            if source:
+                urls[eid] = source
+    return urls
+
+
+def _spotlight_poster_quality(doc: dict[str, Any], poster_url: str) -> int:
+    """Return stored quality when known; otherwise score from poster URL + act name."""
+    from agent.enrich import SPOTLIGHT_MIN_POSTER_QUALITY, poster_quality_score
+
+    stored = doc.get("poster_quality")
+    if isinstance(stored, int) and stored >= SPOTLIGHT_MIN_POSTER_QUALITY:
+        return stored
+    if isinstance(stored, int) and 0 <= stored < SPOTLIGHT_MIN_POSTER_QUALITY:
+        return stored
+    act = str(doc.get("event") or "").strip()
+    return poster_quality_score(poster_url, act)
+
+
 def load_spotlight_api_payload(
     db_name: str,
     *,
     limit: int = 4,
     exclude_ids: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Build ``GET /api/<db>/events/spotlight`` — only events with cached posters.
+    """Build ``GET /api/<db>/events/spotlight`` — only events with event-specific posters.
 
-    Candidates must have ``image_id`` (poster successfully cached in MongoDB),
-    a valid ``http(s)`` listing URL, and a date on or after ``local_today()``.
-    Up to *limit* rows are chosen at random from that pool.
+    Candidates must have ``image_id`` (poster cached in MongoDB), a valid
+    ``http(s)`` listing URL, and a date on or after ``local_today()``. Rows with
+    a stored ``poster_quality`` below the spotlight minimum are excluded at query
+    time; legacy rows missing ``poster_quality`` are scored from the poster URL
+    (and backfilled) before selection. Up to *limit* rows are chosen at random.
     """
     from agent import venue_store
+    from agent.enrich import SPOTLIGHT_MIN_POSTER_QUALITY
     from agent.event_window import local_today
     from agent.image_cache import api_image_url
     from agent.json_output import build_events_payload_from_rows
@@ -237,6 +289,10 @@ def load_spotlight_api_payload(
 
     query: dict[str, Any] = {
         "image_id": {"$exists": True, "$type": "string", "$ne": ""},
+        "$or": [
+            {"poster_quality": {"$gte": SPOTLIGHT_MIN_POSTER_QUALITY}},
+            {"poster_quality": {"$exists": False}},
+        ],
         "url": {"$regex": r"^https?://", "$options": "i"},
         "date": {"$gte": today_iso},
     }
@@ -245,9 +301,23 @@ def load_spotlight_api_payload(
 
     venue_locations = venue_store.locations_by_id(db_name)
     coll = get_database(db_name)[EVENTS_COLLECTION]
-    candidates: list[tuple[dict[str, Any], list]] = []
+    raw_docs = list(coll.find(query))
+    poster_urls = _spotlight_poster_urls(db_name, raw_docs)
 
-    for doc in coll.find(query):
+    candidates: list[tuple[dict[str, Any], list]] = []
+    backfill: list[tuple[str, dict[str, Any]]] = []
+
+    for doc in raw_docs:
+        eid = str(doc.get("_id") or "").strip()
+        poster_url = poster_urls.get(eid, "")
+        quality = _spotlight_poster_quality(doc, poster_url)
+        if quality < SPOTLIGHT_MIN_POSTER_QUALITY:
+            continue
+        if doc.get("poster_quality") is None and poster_url:
+            fields: dict[str, Any] = {"poster_quality": quality, "poster_url": poster_url}
+            backfill.append((eid, fields))
+            doc = {**doc, **fields}
+
         row = doc_to_row(doc)
         url = str(row[IDX_URL] or "").strip().lower()
         if not url.startswith("http"):
@@ -255,8 +325,12 @@ def load_spotlight_api_payload(
         venue_id = venue_id_from_doc(doc)
         legacy_location = str(doc.get("location") or "").strip()
         row[IDX_LOCATION] = venue_locations.get(venue_id, legacy_location)
-        row[IDX_POSTER] = str(doc.get("poster_url") or "").strip()
+        row[IDX_POSTER] = poster_url or str(doc.get("poster_url") or "").strip()
         candidates.append((doc, row))
+
+    if backfill:
+        for eid, fields in backfill:
+            coll.update_one({"_id": eid}, {"$set": fields})
 
     if not candidates:
         return {"events": []}

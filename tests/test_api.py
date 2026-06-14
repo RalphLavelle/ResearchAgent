@@ -166,19 +166,19 @@ def test_get_events_spotlight_only_returns_cached_posters() -> None:
     get_database("test-db")[IMAGES_COLLECTION].insert_one(
         {
             "_id": "poster.jpg",
-            "source_url": "https://cdn.example.com/poster.jpg",
+            "source_url": "https://cdn.example.com/the-beths-tour.jpg",
             "content_type": "image/jpeg",
             "data": b"fake",
         }
     )
     with_poster = [
-        "Band With Poster",
+        "The Beths",
         "The Venue",
         "",
         __import__("datetime").date(2099, 6, 1),
         "https://example.com/with-poster",
         "",
-        "https://cdn.example.com/poster.jpg",
+        "https://cdn.example.com/the-beths-tour.jpg",
         "",
         "2026-06-01",
         "evt-poster",
@@ -209,6 +209,80 @@ def test_get_events_spotlight_only_returns_cached_posters() -> None:
     assert events[0]["thumbnailUrl"] == "/api/test-db/images/poster.jpg"
 
 
+def test_get_events_spotlight_includes_legacy_rows_missing_poster_quality() -> None:
+    from agent.mongodb import EVENTS_COLLECTION, IMAGES_COLLECTION, get_database
+
+    get_database("test-db")[IMAGES_COLLECTION].insert_one(
+        {
+            "_id": "legacy.jpg",
+            "source_url": "https://cdn.example.com/the-beths-tour.jpg",
+            "content_type": "image/jpeg",
+            "data": b"fake",
+        }
+    )
+    get_database("test-db")[EVENTS_COLLECTION].insert_one(
+        {
+            "_id": "evt-legacy",
+            "event": "The Beths",
+            "url": "https://example.com/legacy",
+            "date": "2099-06-10",
+            "image_id": "legacy.jpg",
+            "venue": {"name": "Venue", "id": ""},
+        }
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/events/spotlight?limit=4")
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["id"] == "evt-legacy"
+
+    doc = get_database("test-db")[EVENTS_COLLECTION].find_one({"_id": "evt-legacy"})
+    assert doc is not None
+    assert doc["poster_quality"] >= 2
+    assert doc["poster_url"] == "https://cdn.example.com/the-beths-tour.jpg"
+
+
+def test_get_events_spotlight_excludes_generic_cached_posters() -> None:
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    coll = get_database("test-db")[EVENTS_COLLECTION]
+    coll.insert_many(
+        [
+            {
+                "_id": "evt-specific",
+                "event": "The Beths",
+                "url": "https://example.com/specific",
+                "date": "2099-06-10",
+                "image_id": "specific.jpg",
+                "poster_quality": 3,
+                "poster_url": "https://cdn.example.com/the-beths-tour.jpg",
+                "venue": {"name": "Venue", "id": ""},
+            },
+            {
+                "_id": "evt-generic",
+                "event": "The Beths",
+                "url": "https://example.com/generic",
+                "date": "2099-06-11",
+                "image_id": "generic.jpg",
+                "poster_quality": 1,
+                "poster_url": "https://venue.example/og-image.jpg",
+                "venue": {"name": "Venue", "id": ""},
+            },
+        ]
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/events/spotlight?limit=4")
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["id"] == "evt-specific"
+
+
 def test_get_events_spotlight_respects_exclude() -> None:
     from agent.mongodb import EVENTS_COLLECTION, get_database
 
@@ -221,6 +295,7 @@ def test_get_events_spotlight_respects_exclude() -> None:
                 "url": f"https://example.com/{idx}",
                 "date": "2099-06-10",
                 "image_id": f"img-{idx}.jpg",
+                "poster_quality": 2,
                 "venue": {"name": "Venue", "id": ""},
             }
         )

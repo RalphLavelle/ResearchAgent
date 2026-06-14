@@ -243,6 +243,15 @@ def poster_quality_score(poster_url: str | None, act: str) -> int:
     return (2 + overlap) if overlap > 0 else 1
 
 
+# Spotlight carousel (Tasks 5, 11): only act-specific posters (score >= 2).
+SPOTLIGHT_MIN_POSTER_QUALITY = 2
+
+
+def qualifies_for_spotlight(poster_url: str | None, act: str) -> bool:
+    """True when the poster is event-specific, not a generic site image."""
+    return poster_quality_score(poster_url, act) >= SPOTLIGHT_MIN_POSTER_QUALITY
+
+
 def _best_img_for_title(
     title: str,
     candidates: list[tuple[str, str]],

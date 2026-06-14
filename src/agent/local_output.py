@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime
 from pathlib import Path
 from urllib.parse import urlparse
@@ -44,6 +44,12 @@ from agent.event_window import (
     local_today,
 )
 from agent.models import Resource
+from agent.source_store import (
+    DistinctEventKey,
+    UrlOutcome,
+    distinct_event_counts,
+    note_url_event,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +78,8 @@ class MergeStats:
                          (``drop_terms`` literal match and/or LLM interpretation of ``exclusions``).
         removed_dedupe:    Rows merged away by the optional LLM semantic-dedupe pass.
         total_after:       Final spreadsheet row count after all merging is done.
+        url_outcomes:              Per-URL (events_added, events_seen) tallies from this run's merge.
+        url_distinct_event_counts: Distinct (act, date) events per URL in this run's merge.
     """
 
     added: int
@@ -80,6 +88,8 @@ class MergeStats:
     removed_exclusion: int
     removed_dedupe: int
     total_after: int
+    url_outcomes: dict[str, UrlOutcome] = field(default_factory=dict)
+    url_distinct_event_counts: dict[str, int] = field(default_factory=dict)
 
 # ── Schema ────────────────────────────────────────────────────────────────────
 # Column names in display order.  The Date cell stores a Python date object
@@ -508,7 +518,9 @@ def run_llm_semantic_dedupe(db_name: str | None = None) -> int:
 # ── Merge + expire + dedup ────────────────────────────────────────────────────
 
 
-def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
+def merge_and_write(
+    new_resources: list[Resource],
+) -> tuple[int, int, int, dict[str, UrlOutcome], dict[str, int]]:
     """Merge new events into the persistent spreadsheet.
 
     Steps:
@@ -524,10 +536,13 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
     4. Sort soonest-first and save.
 
     Returns:
-        (added, skipped_duplicate, removed_past) counts.
+        (added, skipped_duplicate, removed_past, url_outcomes, url_distinct_counts)
+        counts and per-URL tallies.
     """
     db_name = active_db_name()
     today = local_today()
+    url_outcomes: dict[str, UrlOutcome] = {}
+    url_distinct_keys: dict[str, set[DistinctEventKey]] = {}
 
     existing = _load_existing_rows(db_name)
     for row in existing.values():
@@ -580,6 +595,7 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
                             "URL re-ingest for '%s' — upgraded Poster URL.", r.title,
                         )
                     break
+            note_url_event(url_outcomes, url_distinct_keys, url, dk, added=False)
             skipped += 1
             continue
 
@@ -596,6 +612,7 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
                 logger.debug(
                     "Exact-name duplicate for '%s' — upgraded Poster URL.", r.title,
                 )
+            note_url_event(url_outcomes, url_distinct_keys, url, dk, added=False)
             skipped += 1
             continue
 
@@ -626,6 +643,7 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
                         "Partial-name duplicate for '%s' — upgraded Poster URL.",
                         r.title,
                     )
+                note_url_event(url_outcomes, url_distinct_keys, url, dk, added=False)
                 skipped += 1
                 continue
 
@@ -641,6 +659,7 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
         existing[sid] = new_row
         if dk:
             dedup_index[dk] = sid
+        note_url_event(url_outcomes, url_distinct_keys, url, dk, added=True)
         added += 1
 
     _write_workbook(db_name, existing)
@@ -648,7 +667,7 @@ def merge_and_write(new_resources: list[Resource]) -> tuple[int, int, int]:
         "Events DB: +%d added, %d duplicate/skipped, %d expired removed → %d total",
         added, skipped, removed_past, len(existing),
     )
-    return added, skipped, removed_past
+    return added, skipped, removed_past, url_outcomes, distinct_event_counts(url_distinct_keys)
 
 
 # ── Public API (called from graph_nodes) ─────────────────────────────────────
@@ -674,7 +693,7 @@ def write_output(resources: list[Resource]) -> MergeStats:
 
     db_name = active_db_name()
 
-    added, skipped, removed_past = merge_and_write(resources)
+    added, skipped, removed_past, url_outcomes, url_distinct_counts = merge_and_write(resources)
 
     removed_exclusion = 0
     try:
@@ -724,4 +743,6 @@ def write_output(resources: list[Resource]) -> MergeStats:
         removed_exclusion=removed_exclusion,
         removed_dedupe=removed_dedupe,
         total_after=total_after,
+        url_outcomes=url_outcomes,
+        url_distinct_event_counts=url_distinct_counts,
     )
