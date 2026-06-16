@@ -77,6 +77,54 @@ def test_cache_thumbnails_sets_poster_quality_negative_on_download_failure(
     assert doc.get("poster_quality") == -1
 
 
+def test_cache_thumbnails_downloads_when_only_placeholder_registered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A data-less placeholder (from ``ensure_source_registered``) must not
+    fool the cache into skipping the real download — the regression behind the
+    ``.jpg`` 404s (Task 12)."""
+    from agent.mongodb import IMAGES_COLLECTION, get_database
+
+    url = "https://upstream.example/agnes-blues.jpg"
+    fake_bytes = b"\xff\xd8\xff\xe0realjpeg"
+    calls: list[str] = []
+    monkeypatch.setattr(
+        image_cache,
+        "_download",
+        lambda u: calls.append(u) or (fake_bytes, "image/jpeg"),
+    )
+
+    placeholder_id = image_store.ensure_source_registered(DB, url)
+    assert image_store.fetch_image(DB, placeholder_id) is None
+
+    out = cache_thumbnails([_resource("evt-placeholder", url)], db_name=DB)
+
+    assert calls == [url]
+    fetched = image_store.fetch_image(DB, image_store.file_name_for_source(url, ".jpg"))
+    assert fetched is not None and fetched[0] == fake_bytes
+    assert out[0].thumbnail_url == api_image_url(
+        DB, image_store.file_name_for_source(url, ".jpg")
+    )
+
+
+def test_find_image_by_source_ignores_placeholder_without_data() -> None:
+    """``find_image_by_source`` reports a URL as cached only once bytes exist."""
+    url = "https://upstream.example/only-registered.jpg"
+    image_store.ensure_source_registered(DB, url)
+    assert image_store.find_image_by_source(DB, url) is None
+
+    image_store.store_image(
+        DB,
+        image_id=image_store.file_name_for_source(url, ".jpg"),
+        source_url=url,
+        data=b"bytes",
+        content_type="image/jpeg",
+    )
+    assert image_store.find_image_by_source(DB, url) == image_store.file_name_for_source(
+        url, ".jpg"
+    )
+
+
 def test_cache_thumbnails_reuses_blob_for_same_source_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

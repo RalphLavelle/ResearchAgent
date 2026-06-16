@@ -79,9 +79,16 @@ def fetch_image(db_name: str, image_id: str) -> tuple[bytes, str] | None:
 
 
 def find_image_by_source(db_name: str, source_url: str) -> str | None:
-    """Return image document id for a cached upstream URL, if any."""
+    """Return image document id for a fully cached upstream URL, if any.
+
+    Only documents that actually hold image bytes (a non-null ``data`` field)
+    count as cached. Placeholder rows created by ``ensure_source_registered``
+    record the ``source_url`` but have no blob yet; ignoring them here lets the
+    image cache know it still needs to download the real poster, instead of
+    wrongly assuming the URL is already cached and skipping the download.
+    """
     doc = get_database(db_name)[IMAGES_COLLECTION].find_one(
-        {"source_url": source_url.strip()},
+        {"source_url": source_url.strip(), "data": {"$exists": True, "$ne": None}},
         {"_id": 1},
     )
     if doc:
