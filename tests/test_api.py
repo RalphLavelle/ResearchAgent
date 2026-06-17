@@ -309,6 +309,52 @@ def test_get_events_spotlight_respects_exclude() -> None:
     assert events[0]["id"] == "evt-2"
 
 
+def test_post_admin_run_once_requires_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    client = TestClient(create_app())
+    response = client.post("/api/admin/run-once", json={"password": "wrong"})
+
+    assert response.status_code == 401
+
+
+def test_post_admin_run_once_runs_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    def fake_execute(*, dry_run: bool = False):
+        assert dry_run is False
+        return {"run_log_message": "Saved 2 new event(s)."}
+
+    monkeypatch.setattr("agent.api.execute_run_once", fake_execute)
+
+    client = TestClient(create_app())
+    response = client.post("/api/admin/run-once", json={"password": "secret-admin"})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["message"] == "Saved 2 new event(s)."
+
+
+def test_post_admin_run_once_llm_not_ready(monkeypatch: pytest.MonkeyPatch) -> None:
+    from agent.runner import LLMNotReadyError
+
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    def raise_not_ready(*, dry_run: bool = False):
+        raise LLMNotReadyError("LLM backend is not reachable or misconfigured.")
+
+    monkeypatch.setattr("agent.api.execute_run_once", raise_not_ready)
+
+    client = TestClient(create_app())
+    response = client.post("/api/admin/run-once", json={"password": "secret-admin"})
+
+    assert response.status_code == 503
+    assert "LLM backend" in response.json()["error"]
+
+
 def test_post_admin_verify_password_accepts_correct_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
 

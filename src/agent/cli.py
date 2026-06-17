@@ -6,8 +6,8 @@ import argparse
 import logging
 import sys
 
+from agent.runner import LLMNotReadyError, execute_run_once
 from agent.scheduler import serve
-from agent.workflow import run_once
 
 logging.basicConfig(
     level=logging.INFO,
@@ -55,33 +55,27 @@ def main(argv: list[str] | None = None) -> int:
 
     args = parser.parse_args(argv)
 
-    from agent import config
-    from agent.image_cache import dedupe_images_for_all_topics
     from agent.llm_factory import verify_llm_at_startup
+    from agent.runner import prepare_run_environment
 
-    try:
-        removed = dedupe_images_for_all_topics(data_base=config.DATA_BASE_DIR)
-        if removed:
-            logger.info(
-                "Removed %s duplicate poster file(s) across topic image caches.",
-                removed,
-            )
-    except OSError as exc:
-        logger.warning("Image dedupe migration skipped: %s", exc)
-
-    if args.command in ("run-once", "serve") and not verify_llm_at_startup():
-        logger.error(
-            "LLM backend is not reachable or misconfigured — fix .env then retry."
-        )
-        return 3
+    prepare_run_environment()
 
     if args.command == "run-once":
-        result = run_once(dry_run=args.dry_run)
+        try:
+            result = execute_run_once(dry_run=args.dry_run)
+        except LLMNotReadyError as exc:
+            logger.error("%s", exc)
+            return 3
         msg = result.get("run_log_message", "")
         print(msg)
         return 0
 
     if args.command == "serve":
+        if not verify_llm_at_startup():
+            logger.error(
+                "LLM backend is not reachable or misconfigured — fix .env then retry."
+            )
+            return 3
         serve()
         return 0
 

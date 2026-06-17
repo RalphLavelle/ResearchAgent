@@ -12,6 +12,7 @@ import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { RouterLink } from '@angular/router';
 
 import { TopicService } from '../topic/topic.service';
+import { AdminAuthService } from '../admin/admin-auth.service';
 
 /** One pipeline run report from ``GET /api/<db>/reports``. */
 export interface RunReport {
@@ -29,6 +30,15 @@ export interface ReportsPayload {
   reports: RunReport[];
 }
 
+/** Response from ``POST /api/admin/run-once``. */
+interface RunOnceResponse {
+  ok: boolean;
+  message?: string;
+}
+
+/** UI state for the manual pipeline trigger on this page. */
+type RunTriggerStatus = 'idle' | 'running' | 'completed' | 'error';
+
 @Component({
   selector: 'app-reports',
   imports: [DatePipe, RouterLink],
@@ -42,10 +52,14 @@ export class ReportsComponent {
   protected readonly error = signal<string | null>(null);
   /** Only one report row expanded at a time. */
   protected readonly expandedId = signal<string | null>(null);
+  /** Manual pipeline run triggered from the admin reports page. */
+  protected readonly runStatus = signal<RunTriggerStatus>('idle');
+  protected readonly runMessage = signal<string | null>(null);
 
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
   readonly #topic = inject(TopicService);
+  readonly #adminAuth = inject(AdminAuthService);
 
   constructor() {
     effect(() => {
@@ -140,6 +154,45 @@ export class ReportsComponent {
       labels[key] ?? key,
       value,
     ]);
+  }
+
+  /** True while the pipeline run button should stay disabled. */
+  protected isRunBusy(): boolean {
+    return this.runStatus() === 'running';
+  }
+
+  /** Start a single research pipeline pass via the admin API. */
+  protected triggerRunOnce(): void {
+    if (this.isRunBusy()) {
+      return;
+    }
+
+    const password = this.#adminAuth.getStoredPassword();
+    if (!password) {
+      this.runStatus.set('error');
+      this.runMessage.set('Admin session expired — sign in again from Admin.');
+      return;
+    }
+
+    this.runStatus.set('running');
+    this.runMessage.set(null);
+
+    this.#http
+      .post<RunOnceResponse>('/api/admin/run-once', { password })
+      .pipe(takeUntilDestroyed(this.#destroyRef))
+      .subscribe({
+        next: (data) => {
+          this.runStatus.set('completed');
+          this.runMessage.set(data.message?.trim() || 'Pipeline run completed.');
+          this.#loadReports(this.#topic.active().db);
+        },
+        error: (err) => {
+          this.runStatus.set('error');
+          this.runMessage.set(
+            String(err?.error?.error ?? 'Could not run the research pipeline.')
+          );
+        },
+      });
   }
 
   #stepDiagnostic(report: RunReport, step: string): string | null {

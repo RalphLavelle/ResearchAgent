@@ -184,6 +184,7 @@ Restart `serve` after changing this value.
   | `PUT /api/{db}/venues/{venue_id}` | Save edited venue JSON back to MongoDB |
   | `DELETE /api/{db}/venues/{venue_id}` | Delete a venue; body `{ "replacementVenueId": "..." }` reassigns linked events, or `{ "deleteLinkedEvents": true }` deletes them first |
   | `POST /api/admin/verify-password` | Admin gate — body `{ "password": "..." }`; checks `ADMIN_PASSWORD` in `.env` |
+  | `POST /api/admin/run-once` | Trigger one full pipeline pass (same as `python -m agent run-once`); body `{ "password": "..." }`; returns `{ "ok": true, "message": "..." }` — used by **Run pipeline now** on `/admin/reports` |
   | `GET /api/{db}/users[?limit=50&skip=0]` | Weekly email subscribers (`id`, `email`, `subscribed_at`) — used by `/admin/users` |
   | `POST /api/{db}/users/subscribe` | Weekly email signup — body `{ "email": "..." }`; saves to the topic's `users` collection |
 
@@ -225,7 +226,7 @@ npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Admin** in the nav (or `/admin`) for pipeline reports, venue records, and email subscribers — you'll be prompted for the password set as **`ADMIN_PASSWORD`** in `.env` (stored in the browser's `sessionStorage` for the tab session). The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Admin** in the nav (or `/admin`) for pipeline reports, venue records, and email subscribers — you'll be prompted for the password set as **`ADMIN_PASSWORD`** in `.env` (stored in the browser's `sessionStorage` for the tab session). On **Reports**, use **Run pipeline now** to trigger the same pass as `python -m agent run-once` (shows a spinner while running, then refreshes the report list). The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
 
 ## Behavior
 

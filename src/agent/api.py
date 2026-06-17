@@ -17,6 +17,7 @@ from agent.event_store import load_events_api_payload, load_spotlight_api_payloa
 from agent.image_store import fetch_image
 from agent.mongodb import get_database
 from agent.report_store import list_reports
+from agent.runner import LLMNotReadyError, execute_run_once
 from agent.topics import load_topics
 from agent import user_store, venue_store
 
@@ -284,6 +285,35 @@ async def post_user_subscribe(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+async def post_admin_run_once(request: Request) -> JSONResponse:
+    """Run one full research pipeline pass (same as ``python -m agent run-once``)."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
+        password = str(body.get("password") or "")
+        expected = config.ADMIN_PASSWORD
+        if not expected:
+            return JSONResponse(
+                {"error": "Admin password is not configured on the server"},
+                status_code=503,
+            )
+        if not secrets.compare_digest(password, expected):
+            return JSONResponse({"error": "Incorrect password"}, status_code=401)
+
+        def _run() -> str:
+            result = execute_run_once(dry_run=False)
+            return str(result.get("run_log_message") or "")
+
+        message = await run_in_threadpool(_run)
+        return JSONResponse({"ok": True, "message": message})
+    except LLMNotReadyError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except Exception as exc:
+        logger.exception("API admin run-once error")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 async def post_admin_verify_password(request: Request) -> JSONResponse:
     """Check the admin password from ``ADMIN_PASSWORD`` in ``.env``."""
     try:
@@ -335,6 +365,7 @@ def create_app() -> Starlette:
             Route("/api/{db}/users", get_users, methods=["GET"]),
             Route("/api/{db}/users/subscribe", post_user_subscribe, methods=["POST"]),
             Route("/api/{db}/images/{image_id}", get_image, methods=["GET"]),
+            Route("/api/admin/run-once", post_admin_run_once, methods=["POST"]),
             Route("/api/admin/verify-password", post_admin_verify_password, methods=["POST"]),
             Route("/health", lambda r: JSONResponse({"ok": True}), methods=["GET"]),
         ],
