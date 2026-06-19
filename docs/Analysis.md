@@ -197,7 +197,7 @@ Prompts live in **YAML under `topics/<id>/`**, not in Python strings (except sma
 SystemMessage(config.SUBJECT.planner_system_prompt)
 HumanMessage(
   config.SUBJECT.planner_user_message
-  + planner_date_instruction(PROMPT_GUIDES)      # engine: today + 30-day window
+  + planner_date_instruction(PROMPT_GUIDES)      # engine: today onward, all future events
   + "Produce up to N queries"
   + build_planner_variation_block(PROMPT_GUIDES) # engine: recent queries + random angles
 )

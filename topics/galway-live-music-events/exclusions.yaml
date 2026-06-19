@@ -17,5 +17,4 @@ exclusions:
   - Mediums, psychics
   - School events
   - Children's events
-  - Any event whose date is before "today" or after the allowed window
-    described in the user message above the search results.
+  - Any event whose performance date is before today (past events only — keep all future dates).

@@ -226,7 +226,7 @@ npm install
 npm start
 ```
 
-Then open the URL printed by the dev server (typically `http://localhost:4200/`). Use **Admin** in the nav (or `/admin`) for pipeline reports, venue records, and email subscribers — you'll be prompted for the password set as **`ADMIN_PASSWORD`** in `.env` (stored in the browser's `sessionStorage` for the tab session). On **Reports**, use **Run pipeline now** to trigger the same pass as `python -m agent run-once` (shows a spinner while running, then refreshes the report list). The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
+Then open the URL printed by the dev server (typically `http://localhost:4200/`). **Tag and venue filters are bookmarkable:** `/tags/rock` shows only rock-tagged gigs; `/venues/the-triffid` shows only that venue (slug from the venue name). Click an active filter again or use “show all gigs” to return to `/`. Use **Admin** in the nav (or `/admin`) for pipeline reports, venue records, and email subscribers — you'll be prompted for the password set as **`ADMIN_PASSWORD`** in `.env` (stored in the browser's `sessionStorage` for the tab session). On **Reports**, use **Run pipeline now** to trigger the same pass as `python -m agent run-once` (shows a spinner while running, then refreshes the report list). The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
 
 ## Behavior
 

@@ -34,6 +34,7 @@ from agent.local_output import (
     _write_workbook,
 )
 from agent.structured_output import invoke_structured
+from agent.event_window import local_today
 
 logger = logging.getLogger(__name__)
 
@@ -123,6 +124,7 @@ def _llm_excluded_event_ids(events: list[dict], rules: list[str]) -> set[str]:
         body = body[:180_000] + "\n…(truncated)"
         logger.warning("Exclusion prompt truncated for size.")
 
+    today = local_today().isoformat()
     llm = build_chat_llm()
     try:
         out: ExclusionPruneResult = invoke_structured(
@@ -131,6 +133,9 @@ def _llm_excluded_event_ids(events: list[dict], rules: list[str]) -> set[str]:
                 SystemMessage(content=_SYSTEM),
                 HumanMessage(
                     content=(
+                        f"Today is {today}. Date rules mean calendar dates strictly "
+                        f"before {today} only — do not exclude events on or after "
+                        f"{today}, regardless of how far in the future.\n\n"
                         "Exclusion rules:\n"
                         f"{numbered_rules}\n\n"
                         "Events:\n"

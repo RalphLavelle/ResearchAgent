@@ -274,7 +274,6 @@ button.venue-btn {
   line-height: 1.35;
 }
 
-.venue-filter-hint,
 .filter-hint {
   margin: 0 0 var(--space-3);
   padding: var(--space-2) var(--space-3);
@@ -283,6 +282,23 @@ button.venue-btn {
   color: var(--color-table-head);
   font-size: var(--text-sm);
   line-height: 1.4;
+}
+
+.filter-hint__clear {
+  font-weight: 700;
+  color: var(--color-link);
+  text-decoration: none;
+}
+
+.filter-hint__clear:hover {
+  color: var(--color-link-hover);
+  text-decoration: underline;
+}
+
+.filter-hint__clear:focus-visible {
+  outline: var(--border-thick) solid var(--color-focus);
+  outline-offset: var(--outline-offset-sm);
+  border-radius: var(--radius-xs);
 }
 
 .tag-filter-bar {

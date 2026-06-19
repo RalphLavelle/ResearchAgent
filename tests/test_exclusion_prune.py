@@ -108,8 +108,11 @@ def test_apply_event_exclusions_llm_union_with_drop_terms(
 
     monkeypatch.setattr("agent.exclusion_prune.build_chat_llm", lambda: object())
 
-    def fake_invoke(_llm, _messages, output_model):  # noqa: ANN001
+    def fake_invoke(_llm, messages, output_model):  # noqa: ANN001
         assert output_model is ExclusionPruneResult
+        human = messages[1].content
+        assert "Today is" in human
+        assert "do not exclude events on or after" in human
         return ExclusionPruneResult(excluded_event_ids=[rid_school])
 
     monkeypatch.setattr("agent.exclusion_prune.invoke_structured", fake_invoke)

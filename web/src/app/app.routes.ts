@@ -11,6 +11,16 @@ import { ReportsComponent } from './reports/reports';
 
 export const routes: Routes = [
   { path: '', component: HomeComponent, title: 'Gigsorooni — Upcoming gigs' },
+  {
+    path: 'tags/:tagSlug',
+    component: HomeComponent,
+    title: 'Gigsorooni — Filter by tag',
+  },
+  {
+    path: 'venues/:venueSlug',
+    component: HomeComponent,
+    title: 'Gigsorooni — Filter by venue',
+  },
   { path: 'admin/login', component: AdminLoginComponent, title: 'Admin login' },
   {
     path: 'admin',

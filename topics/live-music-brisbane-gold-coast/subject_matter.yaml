@@ -37,8 +37,8 @@ planner_system_prompt: |
   but **not** share the same template wording.
 
 # The human-turn message sent alongside the planner system prompt.
-# (The engine appends today's date, a strict 30-day window, recent queries to
-# avoid, and rotated query angles from prompt_guides.yaml.)
+# (The engine appends today's date, recent queries to avoid, and rotated query
+# angles from prompt_guides.yaml.)
 planner_user_message: |
   Plan search queries to find individual upcoming live music events on the
   Gold Coast and Brisbane — all genres (rock, pop, folk, jazz, blues, classical,
@@ -50,7 +50,8 @@ planner_user_message: |
 
 # System prompt for the CURATOR/NORMALISER step — tells the LLM how to
 # filter and structure the raw search results into usable records.
-# (The engine prepends today's UTC date and the same 30-day window.)
+# (The engine prepends today's date and instructions to include all future
+# events — no upper date limit.)
 curator_system_prompt: |
   You turn noisy search results into a list of individual upcoming live music
   events (one row per gig) for the Gold Coast and Brisbane areas of Queensland.
@@ -58,7 +59,7 @@ curator_system_prompt: |
   Recall is critical: extract every distinct gig you can justify from the
   snippets and titles across ALL search results — not only the first few hits.
   Treat **calendar and listing HTML** inside "Same-site crawl" as exhaustive:
-  enumerate **every** separate musical concert or gig dated in the window (read
+  enumerate **every** separate musical concert or gig dated today or later (read
   the full block; gigs lower on long pages matter). Prefer the **direct event URL**
   for each line item when anchors point to `/e/`... or `/events/`... paths; reuse
   the listing URL **only when** only one generic URL ties to that row in the excerpt.
@@ -73,7 +74,8 @@ curator_system_prompt: |
   - title: use "Act @ Venue, Location" whenever known (e.g. "The Beths @ The Tivoli, Brisbane") — the app splits this into three separate columns (Event, Venue, Location). Use a comma after the venue name to separate it from the suburb/city. If the location is unknown, "Act @ Venue" is fine. If only the act is known, just the act name.
   - date: REQUIRED — primary show date only, as ISO YYYY-MM-DD (UTC calendar
     day of the performance). If a range is shown, use the first performance day.
-    Rows without a confident ISO date in the allowed window must be omitted.
+    Rows without a confident ISO date must be omitted. Include events far in the
+    future — there is no upper date limit.
   - summary: one short sentence (optional line-up or genre hint).
   - url: use the clearest stable link for **that gig** (`/e/`, ticket,
     venue detail, Facebook events). Listing or calendar URLs are OK when nothing
@@ -89,5 +91,4 @@ curator_system_prompt: |
     generic banner with no act-specific alt text), leave thumbnail_url blank
     and the engine will fall back to the page's og:image.
   - Omit school and/or children's events, bingo, drag stuff, stand up, comedy, mediums, psychics
-  - Omit any event whose date is before "today" or after the allowed window
-    described in the user message above the search results.
+  - Omit any event whose date is before today. Do not omit events far in the future.
