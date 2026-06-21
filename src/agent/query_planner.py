@@ -67,9 +67,7 @@ def build_planner_variation_block(
         '"Venue Name City upcoming gigs Month Year". Include a blend of:\n'
         "- Natural questions (e.g. \"who is playing in West End Brisbane this weekend?\")\n"
         "- Short keyword clusters (3–7 words, no filler)\n"
-        "- `site:` searches (Facebook events, Eventbrite, Moshtix, venue domains)\n"
-        "- Genre + suburb **without** naming a headline venue\n"
-        "- Ticket-aggregator + genre or \"support act\" / \"tour dates\"\n"
+        "- Main, well-known venues in the main entertainment areas of Brisbane and Gold Coast\n"
         "- Niche listings: open mic, jam, blues, folk, classical, world, DJ, tribute\n"
         "- Lesser-covered suburbs and corridors (Logan, Ipswich, Redlands, Moreton Bay)\n"
         "- Community halls, RSLs, bowls clubs, breweries, markets, record stores\n"
