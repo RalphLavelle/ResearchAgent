@@ -77,6 +77,7 @@ class MergeStats:
         removed_exclusion: Rows removed after merge by ``apply_event_exclusions``
                          (``drop_terms`` literal match and/or LLM interpretation of ``exclusions``).
         removed_dedupe:    Rows merged away by the optional LLM semantic-dedupe pass.
+        removed_orphan_venues: Venue documents deleted because they had zero linked events.
         total_after:       Final spreadsheet row count after all merging is done.
         url_outcomes:              Per-URL (events_added, events_seen) tallies from this run's merge.
         url_distinct_event_counts: Distinct (act, date) events per URL in this run's merge.
@@ -87,6 +88,7 @@ class MergeStats:
     removed_past: int
     removed_exclusion: int
     removed_dedupe: int
+    removed_orphan_venues: int
     total_after: int
     url_outcomes: dict[str, UrlOutcome] = field(default_factory=dict)
     url_distinct_event_counts: dict[str, int] = field(default_factory=dict)
@@ -744,6 +746,14 @@ def write_output(resources: list[Resource]) -> MergeStats:
     except Exception as exc:
         logger.warning("Venue last_event_date update skipped: %s", exc)
 
+    removed_orphan_venues = 0
+    try:
+        from agent import venue_store
+
+        removed_orphan_venues = venue_store.delete_venues_without_events(db_name)
+    except Exception as exc:
+        logger.warning("Venue tidy-up skipped: %s", exc)
+
     total_after = len(synced)
     return MergeStats(
         added=added,
@@ -751,6 +761,7 @@ def write_output(resources: list[Resource]) -> MergeStats:
         removed_past=removed_past,
         removed_exclusion=removed_exclusion,
         removed_dedupe=removed_dedupe,
+        removed_orphan_venues=removed_orphan_venues,
         total_after=total_after,
         url_outcomes=url_outcomes,
         url_distinct_event_counts=url_distinct_counts,

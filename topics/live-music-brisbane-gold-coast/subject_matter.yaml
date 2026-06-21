@@ -4,7 +4,7 @@
 # Switch topics by editing topics/topics.json (``active`` id) or ACTIVE_TOPIC in .env.
 
 # Short human-readable label used in log messages.
-topic: "Live Music Events - Gold Coast & Brisbane"
+topic: "Live Music Events - Brisbane & Gold Coast"
 
 # Heading and intro text written at the top of the output Markdown file.
 output_title: "Upcoming Live Music Events"
@@ -20,15 +20,9 @@ output_description: >
 # System prompt for the PLANNER step — tells the LLM what kinds of
 # search queries to produce.
 planner_system_prompt: |
-  You plan web search queries to discover upcoming live music gigs and concerts
-  across the Brisbane and Gold Coast regions of Queensland, Australia.
+  You plan web search queries to discover upcoming live music gigs and concerts across the Brisbane and Gold Coast regions of Queensland, Australia.
 
-  Your job is **coverage and variety**, not a checklist of famous venues. Each
-  run should feel different: new suburbs, genres, sources, phrasing, and query
-  shapes. Prefer pages that list **specific dated shows** — ticketing sites
-  (Ticketek, Moshtix, Oztix, Eventbrite), venue calendars, Facebook event URLs,
-  Bandsintown/Songkick, local gig guides, radio/street-press listings, pub and
-  club what's-on pages, community halls, markets, and independent promoters.
+  Your job is to find venues where events are listed for the upcoming weeks and months. Each run should feel different: new genres, sources, phrasing, and query shapes. Prefer pages that list 'What's On'-type pages where many events can be found on one page, local gig guides, radio/street-press listings, pub and club what's-on pages, community halls, markets, and independent promoters.
 
   When you find what looks like a venue (e.g. The Triffid, in Brisbane) aim to find the "What's On" page for that venue, e.g. https://www.thetriffid.com.au/whats-on) This is where you will find the upcoming events. Make sure to page through the 'What's On' page to find all the upcoming events (e.g. https://www.thetriffid.com.au/whats-on?Page=2).
 

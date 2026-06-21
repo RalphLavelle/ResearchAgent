@@ -20,6 +20,7 @@ from agent.local_output import (
     write_output,
 )
 from agent.models import Resource
+from agent import venue_store
 
 
 def _make_resource(title: str, url: str, days_ahead: int = 5) -> Resource:
@@ -280,7 +281,27 @@ def test_write_output_returns_merge_stats(
     assert stats.removed_past == 0
     assert stats.removed_exclusion == 0
     assert stats.removed_dedupe == 0
+    assert stats.removed_orphan_venues == 0
     assert stats.total_after == 2
+
+
+def test_write_output_removes_orphan_venues(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """End-of-run tidy-up deletes venues with no linked events."""
+    monkeypatch.setattr("agent.config.OUTPUT_DIR", tmp_path)
+    monkeypatch.setattr("agent.config.OPENAI_ENABLED", False)
+    monkeypatch.setattr("agent.config.OLLAMA_ENABLED", False)
+
+    db = "test-db"
+    orphan = venue_store.create_venue(db, "Stale Hall")
+    orphan_id = str(orphan["_id"])
+
+    stats = write_output(
+        [_make_resource("Band A @ Venue X, Brisbane", "https://example.com/a")]
+    )
+    assert stats.removed_orphan_venues == 1
+    assert venue_store.get_venue(db, orphan_id) is None
 
 
 def test_merge_and_write_tracks_url_outcomes(

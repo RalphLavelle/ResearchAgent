@@ -9,13 +9,10 @@ planner_recent_queries_limit: 32
 
 planner_query_angles:
   - "Gold Coast surf suburbs and beachside pubs (Burleigh, Coolangatta, Palm Beach, Mermaid)"
-  - "Brisbane inner-north and Valley live-music rooms"
+  - "Brisbane Fortitude Valley"
   - "Brisbane south-side and West End gig listings"
   - "Logan, Ipswich, and Redlands corridor shows"
   - "Moreton Bay and Redcliffe peninsula events"
-  - "site:facebook.com events Gold Coast OR Brisbane music"
-  - "site:eventbrite.com.au live music Queensland"
-  - "site:oztix.com.au OR site:moshtix.com.au upcoming"
   - "open mic, jam night, and acoustic session listings"
   - "jazz, blues, and soul club nights"
   - "folk, roots, and singer-songwriter gigs"
@@ -26,17 +23,12 @@ planner_query_angles:
   - "university, TAFE, and student live music"
   - "RSL, bowls club, and community hall concerts"
   - "brewery, winery, and market live music"
-  - "Songkick OR Bandsintown Brisbane OR Gold Coast"
   - "local street press and gig guide roundups"
-  - "support act / tour dates / 'special guests' announcements"
-  - "question-form searches a fan might type into Google"
 
 planner_date_suffix: |
-  **Gold Coast first:** the user lives on the Gold Coast — at least half of
+  **Brisbane first:** some of
   your queries should target Gold Coast suburbs, venues, and ticket pages;
-  treat Brisbane as secondary. Even within that rule, **vary suburbs and phrasing**
-  every run — do not recycle the same venue names.
+  but treat Brisbane as the primary focus.
 
 curator_date_suffix: |
-  **Gold Coast balance:** include plenty of Gold Coast gigs, not only Brisbane —
-  when in doubt, prefer listings whose venue or address is on the Gold Coast.
+  **Gold Coast balance:** include plenty of Gold Coast gigs, not only Brisbane — when in doubt, prefer listings whose venue or address is in  Brisbane.

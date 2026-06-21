@@ -38,6 +38,7 @@ def merge_stats_to_changes(stats: MergeStats | None) -> dict[str, int]:
         "past events pruned": stats.removed_past,
         "removed by event exclusions": stats.removed_exclusion,
         "removed by llm semantic dedupe": stats.removed_dedupe,
+        "orphan venues removed": stats.removed_orphan_venues,
         "total rows after merge": stats.total_after,
     }
 

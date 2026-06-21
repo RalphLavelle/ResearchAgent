@@ -71,6 +71,7 @@ def test_get_reports_returns_saved_rows() -> None:
             removed_past=0,
             removed_exclusion=0,
             removed_dedupe=0,
+            removed_orphan_venues=0,
             total_after=1,
         ),
     )

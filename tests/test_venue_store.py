@@ -169,6 +169,31 @@ def test_admin_round_trip_preserves_mining_fields() -> None:
     assert after["last_event_date"] == "2026-09-30"
 
 
+def test_delete_venues_without_events() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    orphan = venue_store.create_venue(db, "Empty Hall")
+    linked = venue_store.create_venue(db, "Busy Room")
+    linked_id = str(linked["_id"])
+
+    get_database(db)[EVENTS_COLLECTION].insert_one(
+        {
+            "_id": "evt-busy",
+            "event": "Band",
+            "venue": venue_to_mongo("Busy Room", linked_id),
+            "url": "https://example.com/gig",
+            "date": "2026-08-01",
+        }
+    )
+
+    removed = venue_store.delete_venues_without_events(db)
+    assert removed == 1
+    assert venue_store.get_venue(db, str(orphan["_id"])) is None
+    assert venue_store.get_venue(db, linked_id) is not None
+
+
 def test_update_last_event_dates_uses_latest_event() -> None:
     from agent.event_store import venue_to_mongo
     from agent.mongodb import EVENTS_COLLECTION, get_database

@@ -449,6 +449,37 @@ def update_last_event_dates(db_name: str) -> int:
     return updated
 
 
+def delete_venues_without_events(db_name: str) -> int:
+    """Remove venue documents with zero linked events (Task 2 tidy-up).
+
+    Runs at the end of each pipeline pass after exclusions and dedupe so venues
+    left behind when all their events were culled do not clutter the admin UI.
+    """
+    from agent.event_store import venue_id_from_doc
+
+    events = get_database(db_name)[EVENTS_COLLECTION]
+    linked_ids: set[str] = set()
+    for doc in events.find({}, {"venue": 1, "venue_id": 1}):
+        vid = venue_id_from_doc(doc)
+        if vid:
+            linked_ids.add(vid)
+
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    removed = 0
+    for doc in coll.find({}, {"_id": 1}):
+        vid = str(doc["_id"])
+        if vid not in linked_ids:
+            coll.delete_one({"_id": vid})
+            removed += 1
+    if removed:
+        logger.info(
+            "Tidy-up: removed %d venue(s) with no linked events in db=%s",
+            removed,
+            db_name,
+        )
+    return removed
+
+
 def strip_lookup_keys(db_name: str) -> int:
     """Remove legacy ``name_key`` / ``alias_keys`` fields from venue documents."""
     coll = get_database(db_name)[VENUES_COLLECTION]

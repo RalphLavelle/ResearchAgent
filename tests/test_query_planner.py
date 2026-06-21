@@ -46,6 +46,7 @@ def test_recent_search_queries_deduplicates_newest_first() -> None:
             removed_past=0,
             removed_exclusion=0,
             removed_dedupe=0,
+            removed_orphan_venues=0,
             total_after=0,
         ),
     )
@@ -59,6 +60,7 @@ def test_recent_search_queries_deduplicates_newest_first() -> None:
             removed_past=0,
             removed_exclusion=0,
             removed_dedupe=0,
+            removed_orphan_venues=0,
             total_after=0,
         ),
     )

@@ -21,6 +21,7 @@ _SAMPLE_STATS = MergeStats(
     removed_past=4,
     removed_exclusion=2,
     removed_dedupe=1,
+    removed_orphan_venues=3,
     total_after=27,
 )
 
@@ -40,6 +41,7 @@ def test_merge_stats_to_changes_uses_task_labels() -> None:
     changes = merge_stats_to_changes(_SAMPLE_STATS)
     assert changes["added (new rows)"] == 19
     assert changes["skipped as duplicate"] == 0
+    assert changes["orphan venues removed"] == 3
     assert changes["total rows after merge"] == 27
 
 

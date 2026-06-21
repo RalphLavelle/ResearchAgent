@@ -200,6 +200,8 @@ Restart `serve` after changing this value.
 
 - **Venue-first mining** (prioritise big venues' full gig lists): when a known venue is recognised in the search results, the crawl step finds that venue's own **"What's On"** page, mines it as the **highest-priority seed** (following pagination so long listings are exploited exhaustively), and stores the link on the venue document as **`events_link`** (with `website` and `events_link_checked`). On later runs the stored `events_link` is reused directly — no need to rediscover it until it goes stale (`VENUE_EVENTS_LINK_TTL_DAYS`, default 30). Each venue also gets a **`last_event_date`** (the latest event date seen for it) so you can tell how far ahead its listings already reach. Tune with `VENUE_MINING_ENABLED` (default `true`) and `MAX_VENUE_SEEDS` (default 4) in `.env`.
 
+- **Venue tidy-up** (end of each run): after merge, exclusions, and dedupe, the pipeline deletes any venue in the `venues` collection that has **zero linked events** — e.g. when all its gigs were culled. The count appears on each run report as **orphan venues removed** so the admin venues page stays clean.
+
 - **Schema migrations** (one-shot database changes before each pipeline run):
 
   Add numbered Python files under **`migrations/`** (e.g. `001_remove_poster_url.py`). Each file defines `MIGRATION_ID` and `run(db_name)`. Pending migrations run automatically at the start of every `serve` / `run-once` pass and are recorded in the topic database's `schema_migrations` collection. Delete migration files from the repo once they have been applied everywhere.
