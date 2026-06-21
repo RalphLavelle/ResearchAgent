@@ -735,6 +735,15 @@ def write_output(resources: list[Resource]) -> MergeStats:
             logger.warning("LLM semantic dedupe skipped: %s", exc)
             removed_dedupe = 0
 
+    # Record each venue's latest event date (Task 1) so future runs know how
+    # far ahead a venue's listings already reach.
+    try:
+        from agent import venue_store
+
+        venue_store.update_last_event_dates(db_name)
+    except Exception as exc:
+        logger.warning("Venue last_event_date update skipped: %s", exc)
+
     total_after = len(synced)
     return MergeStats(
         added=added,

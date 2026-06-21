@@ -100,6 +100,9 @@ def _venue_to_api(doc: dict[str, Any]) -> dict[str, Any]:
         "name": str(doc.get("name") or ""),
         "aliases": [str(alias) for alias in (doc.get("aliases") or [])],
         "location": str(doc.get("location") or ""),
+        # Venue-first mining fields (Task 1) — shown on the admin venues page.
+        "events_link": str(doc.get("events_link") or ""),
+        "last_event_date": str(doc.get("last_event_date") or ""),
     }
 
 

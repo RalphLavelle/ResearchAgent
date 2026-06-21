@@ -24,6 +24,10 @@ LangGraph runs `plan → search → crawl → normalize → enrich → fingerpri
 - Use the **topic-creator** skill to scaffold new topics.
 - **Engine code** in `src/agent/` must stay topic-agnostic (no hard-coded “Gold Coast” etc. in logic—only in YAML).
 
+## Venue-first mining (Task 1)
+
+`venue_crawl.gather_venue_seed_urls` runs at the **start of `node_crawl`**: it recognises known venues (from the `venues` collection) in the DuckDuckGo blob by domain-label/name match (aggregator hosts excluded), fetches each venue homepage, and discovers its **"What's On"** page. The link is stored on the venue doc as `events_link` (+ `website`, `events_link_checked`) and returned as the **highest-priority crawl seed** (ahead of the weighted memory seed), so `site_crawl` mines it — pagination links (`?page=N`, `/page/N`) are boosted in `_link_event_priority` so paged listings are followed. Stored `events_link`s are reused on later runs until older than `VENUE_EVENTS_LINK_TTL_DAYS`. After merge, `venue_store.update_last_event_dates` sets each venue's `last_event_date` (max linked event date). Admin venue edits preserve these fields via `_MINING_FIELDS` passthrough in `venue_store`. Env: `VENUE_MINING_ENABLED`, `MAX_VENUE_SEEDS`, `VENUE_EVENTS_LINK_TTL_DAYS`.
+
 ## Deduplication (`local_output.merge_and_write`)
 
 Apply changes here when tasks mention duplicates or Sources:
@@ -80,6 +84,7 @@ $env:PYTHONPATH="src"; venv\Scripts\python.exe -m pytest
 | Per-run reports (MongoDB) | `src/agent/report_store.py` |
 | Events JSON for Angular | `src/agent/json_output.py` |
 | Crawl + image markers | `src/agent/site_crawl.py` |
+| Venue-first mining (What's On discovery + priority seeds) | `src/agent/venue_crawl.py` |
 | Per-event image enrichment | `src/agent/enrich.py` |
 | Local poster cache + GC | `src/agent/image_cache.py` |
 | Topics registry + paths | `src/agent/topics.py`, `topics/topics.json` |

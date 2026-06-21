@@ -24,6 +24,10 @@ export interface VenueRecord {
   name: string;
   aliases: string[];
   location: string;
+  /** Discovered "What's On" page for the venue (venue-first mining, Task 1). */
+  events_link?: string;
+  /** ISO date of the latest event seen for this venue. */
+  last_event_date?: string;
 }
 
 /** Root JSON shape from the venues API. */
@@ -89,6 +93,18 @@ export class AdminVenuesComponent {
       return '—';
     }
     return aliases.join(', ');
+  }
+
+  /** Short host label for a venue's "What's On" link (e.g. ``thetriffid.com.au``). */
+  protected eventsLinkHost(url: string | undefined): string {
+    if (!url) {
+      return '';
+    }
+    try {
+      return new URL(url).host.replace(/^www\./, '');
+    } catch {
+      return url;
+    }
   }
 
   protected openEdit(venue: VenueRecord): void {

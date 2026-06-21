@@ -175,6 +175,16 @@ MAX_CRAWL_DEPTH = int(os.environ.get("MAX_CRAWL_DEPTH", "2"))
 MAX_CRAWL_PAGES_PER_SEED = int(os.environ.get("MAX_CRAWL_PAGES_PER_SEED", "12"))
 CRAWL_DELAY_SEC = float(os.environ.get("CRAWL_DELAY_SEC", "0.35"))
 
+# Venue-first mining (Task 1): when a known venue is recognised in search
+# results, the agent finds its "What's On" page, stores the link on the venue
+# document, and mines that page (incl. pagination) as a top-priority seed on
+# later runs so big venues are exploited exhaustively.
+VENUE_MINING_ENABLED = _env_flag("VENUE_MINING_ENABLED", default=True)
+# Max venue "What's On" pages used as guaranteed priority crawl seeds per run.
+MAX_VENUE_SEEDS = int(os.environ.get("MAX_VENUE_SEEDS", "4"))
+# Re-verify a stored events_link after this many days (0 = never re-check).
+VENUE_EVENTS_LINK_TTL_DAYS = int(os.environ.get("VENUE_EVENTS_LINK_TTL_DAYS", "30"))
+
 # Larger excerpts keep whole calendar/listing HTML text for the curator (was 7000 in code default).
 CRAWL_MAX_TEXT_PER_PAGE = int(os.environ.get("CRAWL_MAX_TEXT_PER_PAGE", "38000"))
 

@@ -137,14 +137,25 @@ def get_venue(db_name: str, venue_id: str) -> dict[str, Any] | None:
     return get_database(db_name)[VENUES_COLLECTION].find_one({"_id": venue_id})
 
 
+# Optional venue fields populated by the venue-mining pipeline (Task 1).
+# Kept as passthrough so admin edits (which replace the whole document) never
+# wipe the agent's learned "What's On" link or last-seen event date.
+_MINING_FIELDS = ("website", "events_link", "events_link_checked", "last_event_date")
+
+
 def venue_document_to_json(doc: dict[str, Any]) -> dict[str, Any]:
     """Serialise a venue document for admin JSON editing."""
-    return {
+    payload: dict[str, Any] = {
         "_id": str(doc.get("_id") or ""),
         "name": str(doc.get("name") or ""),
         "aliases": [str(alias) for alias in (doc.get("aliases") or [])],
         "location": str(doc.get("location") or ""),
     }
+    for field in _MINING_FIELDS:
+        value = doc.get(field)
+        if value:
+            payload[field] = str(value)
+    return payload
 
 
 def normalize_venue_document(raw: dict[str, Any], venue_id: str) -> dict[str, Any]:
@@ -162,7 +173,18 @@ def normalize_venue_document(raw: dict[str, Any], venue_id: str) -> dict[str, An
         raise ValueError("aliases must be a list of strings.")
     aliases = [str(alias).strip() for alias in aliases_raw if str(alias).strip()]
     location = str(raw.get("location") or "").strip()
-    return {"_id": venue_id, "name": name, "aliases": aliases, "location": location}
+    doc: dict[str, Any] = {
+        "_id": venue_id,
+        "name": name,
+        "aliases": aliases,
+        "location": location,
+    }
+    # Preserve agent-learned mining fields through admin replace_one edits.
+    for field in _MINING_FIELDS:
+        value = raw.get(field)
+        if value not in (None, ""):
+            doc[field] = str(value)
+    return doc
 
 
 def update_venue(db_name: str, venue_id: str, raw: dict[str, Any]) -> dict[str, Any]:
@@ -308,6 +330,123 @@ def add_alias(db_name: str, venue_id: str, alias: str) -> bool:
     aliases.append(alias_text)
     coll.update_one({"_id": venue_id}, {"$set": {"aliases": aliases}})
     return True
+
+
+def venue_name_tokens_key(name: str) -> str:
+    """Collapse a venue name to alphanumerics for host matching.
+
+    ``"The Triffid"`` → ``"triffid"`` (leading ``the`` dropped), so it can be
+    compared against a domain label like ``thetriffid`` or ``triffid``.
+    """
+    core = without_leading_the(normalize_venue_key(name))
+    return "".join(ch for ch in core if ch.isalnum())
+
+
+def host_matches_venue(host: str, doc: dict[str, Any]) -> bool:
+    """True when *host*'s domain label looks like this venue's own site.
+
+    Compares the registrable-ish domain label (e.g. ``thetriffid`` from
+    ``www.thetriffid.com.au``) against the venue name and each alias.
+    """
+    label = (host or "").lower().split(":")[0]
+    parts = [p for p in label.split(".") if p and p not in ("www",)]
+    # Use the longest non-TLD label as the brand candidate.
+    candidates = sorted(parts, key=len, reverse=True)
+    if not candidates:
+        return False
+    brand = candidates[0]
+    names = [str(doc.get("name") or "")] + [str(a) for a in (doc.get("aliases") or [])]
+    for nm in names:
+        key = venue_name_tokens_key(nm)
+        if len(key) >= 4 and (key in brand or brand in key):
+            return True
+    return False
+
+
+def text_mentions_venue(text: str, doc: dict[str, Any]) -> bool:
+    """True when *text* (a search result title/snippet) names this venue."""
+    key = normalize_venue_key(text)
+    if not key:
+        return False
+    names = [str(doc.get("name") or "")] + [str(a) for a in (doc.get("aliases") or [])]
+    for nm in names:
+        nm_key = without_leading_the(normalize_venue_key(nm))
+        if len(nm_key) >= 4 and nm_key in key:
+            return True
+    return False
+
+
+def set_venue_web_fields(
+    db_name: str,
+    venue_id: str,
+    *,
+    website: str | None = None,
+    events_link: str | None = None,
+    checked_iso: str | None = None,
+) -> None:
+    """Persist the venue's own site and discovered "What's On" link (Task 1)."""
+    updates: dict[str, str] = {}
+    if website:
+        updates["website"] = website.strip()
+    if events_link:
+        updates["events_link"] = events_link.strip()
+        updates["events_link_checked"] = (checked_iso or "").strip()
+    if not updates:
+        return
+    get_database(db_name)[VENUES_COLLECTION].update_one(
+        {"_id": venue_id}, {"$set": updates}
+    )
+
+
+def venues_with_events_link(db_name: str) -> list[dict[str, Any]]:
+    """Return venues that already have a stored ``events_link`` (mining memory)."""
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    out: list[dict[str, Any]] = []
+    for doc in coll.find({"events_link": {"$exists": True, "$nin": ["", None]}}):
+        out.append(doc)
+    return out
+
+
+def set_last_event_date(db_name: str, venue_id: str, iso_date: str) -> None:
+    """Store the latest event date crawled for a venue (Task 1)."""
+    value = (iso_date or "").strip()
+    if not value:
+        return
+    get_database(db_name)[VENUES_COLLECTION].update_one(
+        {"_id": venue_id}, {"$set": {"last_event_date": value}}
+    )
+
+
+def update_last_event_dates(db_name: str) -> int:
+    """Recompute each venue's ``last_event_date`` from its linked events.
+
+    Returns the number of venue documents updated.
+    """
+    from agent.event_store import venue_id_from_doc
+
+    events = get_database(db_name)[EVENTS_COLLECTION]
+    latest: dict[str, str] = {}
+    for doc in events.find({}, {"venue": 1, "venue_id": 1, "date": 1}):
+        vid = venue_id_from_doc(doc)
+        if not vid:
+            continue
+        iso = str(doc.get("date") or "").strip()[:10]
+        if len(iso) != 10:
+            continue
+        if vid not in latest or iso > latest[vid]:
+            latest[vid] = iso
+
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    updated = 0
+    for vid, iso in latest.items():
+        result = coll.update_one(
+            {"_id": vid, "last_event_date": {"$ne": iso}},
+            {"$set": {"last_event_date": iso}},
+        )
+        updated += int(result.modified_count)
+    if updated:
+        logger.info("Updated last_event_date on %d venue(s) in db=%s", updated, db_name)
+    return updated
 
 
 def strip_lookup_keys(db_name: str) -> int:

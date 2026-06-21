@@ -61,6 +61,10 @@ def _link_event_priority(url: str) -> int:
         if frag in low:
             priority += 2
             break
+    # Pagination links keep the crawler moving through long venue listings so a
+    # venue's full gig list (which is often paged) gets mined (Task 1).
+    if re.search(r"(?:[?&](?:page|paged|pg|p)=\d+|/page/\d+|/p/\d+)", low):
+        priority += 8
     # Long query-string listing URLs slightly lower priority than short /e/... paths
     if low.count("?") > 1:
         priority -= 1

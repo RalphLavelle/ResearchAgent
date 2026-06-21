@@ -2,9 +2,19 @@
 
 from agent.site_crawl import (
     _html_to_text,
+    _link_event_priority,
     _merge_crawl_seeds,
     extract_seed_urls_from_ddg_blob,
 )
+
+
+def test_pagination_links_rank_above_plain_pages() -> None:
+    """Paged venue listings (Task 1) must be followed during the crawl."""
+    plain = _link_event_priority("https://venue.example/about")
+    page_query = _link_event_priority("https://venue.example/whats-on?page=2")
+    page_path = _link_event_priority("https://venue.example/whats-on/page/3")
+    assert page_query > plain
+    assert page_path > plain
 
 
 def test_merge_crawl_seeds_prepends_memory_url() -> None:

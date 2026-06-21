@@ -141,6 +141,32 @@
   white-space: nowrap;
 }
 
+.venues-cell--date {
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-muted);
+}
+
+.venues-link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-weight: 600;
+  color: var(--color-nav-accent);
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.venues-link:hover {
+  text-decoration: underline;
+}
+
+.venues-link:focus-visible {
+  outline: var(--border-medium) solid var(--color-nav-accent);
+  outline-offset: var(--outline-offset-sm);
+  border-radius: var(--radius-xs);
+}
+
 .row-btn {
   padding: var(--space-1) var(--space-3);
   margin-right: var(--space-2);

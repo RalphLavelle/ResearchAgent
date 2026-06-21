@@ -45,6 +45,8 @@
               <th scope="col">Name</th>
               <th scope="col">Location</th>
               <th scope="col">Aliases</th>
+              <th scope="col">What's On</th>
+              <th scope="col">Last event</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -54,6 +56,23 @@
                 <td class="venues-cell venues-cell--name">{{ venue.name }}</td>
                 <td class="venues-cell">{{ venue.location || '—' }}</td>
                 <td class="venues-cell">{{ aliasesLabel(venue.aliases) }}</td>
+                <td class="venues-cell">
+                  @if (venue.events_link) {
+                    <a
+                      class="venues-link"
+                      [href]="venue.events_link"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      [title]="venue.events_link"
+                    >
+                      {{ eventsLinkHost(venue.events_link) }}
+                      <span aria-hidden="true">↗</span>
+                    </a>
+                  } @else {
+                    —
+                  }
+                </td>
+                <td class="venues-cell venues-cell--date">{{ venue.last_event_date || '—' }}</td>
                 <td class="venues-cell venues-cell--actions">
                   <button type="button" class="row-btn" (click)="openEdit(venue)">
                     Edit

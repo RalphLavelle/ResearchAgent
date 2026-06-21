@@ -109,6 +109,100 @@ def test_strip_lookup_keys_removes_legacy_fields() -> None:
     assert venue_store.find_by_name_or_alias(db, "Alias") is not None
 
 
+def test_host_matches_venue_by_domain_label() -> None:
+    doc = {"name": "The Triffid", "aliases": []}
+    assert venue_store.host_matches_venue("www.thetriffid.com.au", doc)
+    assert venue_store.host_matches_venue("thetriffid.com.au", doc)
+    assert not venue_store.host_matches_venue("www.eventbrite.com.au", doc)
+
+
+def test_text_mentions_venue_in_search_title() -> None:
+    doc = {"name": "The Triffid", "aliases": ["Triffid Brisbane"]}
+    assert venue_store.text_mentions_venue("Gigs at The Triffid this winter", doc)
+    assert not venue_store.text_mentions_venue("Some other venue downtown", doc)
+
+
+def test_set_venue_web_fields_and_listing() -> None:
+    db = "test-db"
+    created = venue_store.create_venue(db, "The Triffid")
+    vid = str(created["_id"])
+    venue_store.set_venue_web_fields(
+        db,
+        vid,
+        website="https://www.thetriffid.com.au",
+        events_link="https://www.thetriffid.com.au/whats-on",
+        checked_iso="2026-06-21T00:00:00+00:00",
+    )
+    listed = venue_store.venues_with_events_link(db)
+    assert len(listed) == 1
+    assert listed[0]["events_link"] == "https://www.thetriffid.com.au/whats-on"
+
+
+def test_admin_round_trip_preserves_mining_fields() -> None:
+    """Editing a venue in the admin UI must not wipe agent-learned fields."""
+    db = "test-db"
+    created = venue_store.create_venue(db, "The Triffid")
+    vid = str(created["_id"])
+    venue_store.set_venue_web_fields(
+        db,
+        vid,
+        website="https://www.thetriffid.com.au",
+        events_link="https://www.thetriffid.com.au/whats-on",
+        checked_iso="2026-06-21T00:00:00+00:00",
+    )
+    venue_store.set_last_event_date(db, vid, "2026-09-30")
+
+    doc = venue_store.get_venue(db, vid)
+    assert doc is not None
+    payload = venue_store.venue_document_to_json(doc)
+    assert payload["events_link"] == "https://www.thetriffid.com.au/whats-on"
+    assert payload["last_event_date"] == "2026-09-30"
+
+    # Simulate the admin editor saving the same payload back (renaming only).
+    payload["name"] = "The Triffid (Newstead)"
+    venue_store.update_venue(db, vid, payload)
+
+    after = venue_store.get_venue(db, vid)
+    assert after is not None
+    assert after["name"] == "The Triffid (Newstead)"
+    assert after["events_link"] == "https://www.thetriffid.com.au/whats-on"
+    assert after["last_event_date"] == "2026-09-30"
+
+
+def test_update_last_event_dates_uses_latest_event() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    created = venue_store.create_venue(db, "The Triffid")
+    vid = str(created["_id"])
+    coll = get_database(db)[EVENTS_COLLECTION]
+    coll.insert_many(
+        [
+            {
+                "_id": "evt-a",
+                "event": "Band A",
+                "venue": venue_to_mongo("The Triffid", vid),
+                "url": "https://example.com/a",
+                "date": "2026-07-01",
+            },
+            {
+                "_id": "evt-b",
+                "event": "Band B",
+                "venue": venue_to_mongo("The Triffid", vid),
+                "url": "https://example.com/b",
+                "date": "2026-09-15",
+            },
+        ]
+    )
+
+    updated = venue_store.update_last_event_dates(db)
+    assert updated == 1
+    doc = venue_store.get_venue(db, vid)
+    assert doc is not None
+    assert doc["last_event_date"] == "2026-09-15"
+
+
 def test_list_venues_page_returns_slice_and_total() -> None:
     db = "test-db"
     for name in ("Alpha Hall", "Beta Room", "Gamma Stage"):

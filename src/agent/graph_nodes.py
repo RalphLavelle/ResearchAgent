@@ -197,9 +197,29 @@ def node_crawl(state: AgentState) -> AgentState:
     try:
         from agent.source_store import pick_weighted_seed_url
 
+        # Venue-first mining (Task 1): recognise known venues in the search
+        # results, find their "What's On" pages, and mine them as the highest
+        # priority seeds so big venues are exploited exhaustively.
+        venue_seeds: list[str] = []
+        try:
+            from agent.venue_crawl import gather_venue_seed_urls
+
+            venue_seeds = gather_venue_seed_urls(config.ACTIVE_TOPIC.db, raw)
+            if venue_seeds:
+                logger.info(
+                    "Crawl step: %d venue 'What's On' page(s) prioritised: %s",
+                    len(venue_seeds),
+                    ", ".join(venue_seeds),
+                )
+        except Exception as venue_exc:
+            logger.warning("Venue mining skipped (continuing): %s", venue_exc)
+            venue_seeds = []
+
         memory_seed = pick_weighted_seed_url(config.ACTIVE_TOPIC.db)
-        extra_seed_list = [memory_seed] if memory_seed else []
+        # Venue seeds first (highest priority), then the weighted memory seed.
+        extra_seed_list = list(venue_seeds)
         if memory_seed:
+            extra_seed_list.append(memory_seed)
             logger.info("Crawl step: using remembered URL as extra seed: %s", memory_seed)
         logger.info(
             "Crawl step starting (runs after DuckDuckGo text is collected; downloads can take several minutes)."

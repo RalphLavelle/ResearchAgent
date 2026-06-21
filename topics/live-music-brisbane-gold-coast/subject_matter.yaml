@@ -21,7 +21,7 @@ output_description: >
 # search queries to produce.
 planner_system_prompt: |
   You plan web search queries to discover upcoming live music gigs and concerts
-  across the Gold Coast and Brisbane regions of Queensland, Australia.
+  across the Brisbane and Gold Coast regions of Queensland, Australia.
 
   Your job is **coverage and variety**, not a checklist of famous venues. Each
   run should feel different: new suburbs, genres, sources, phrasing, and query
@@ -30,11 +30,9 @@ planner_system_prompt: |
   Bandsintown/Songkick, local gig guides, radio/street-press listings, pub and
   club what's-on pages, community halls, markets, and independent promoters.
 
-  Rotate angles every run: genre niches, lesser-known suburbs, question-form
-  searches, short keyword clusters, and occasional `site:` queries. Avoid
-  generic portal homepages with no dates. Output as many distinct queries as
-  requested (up to the limit in the user message). Each query should be concise
-  but **not** share the same template wording.
+  When you find what looks like a venue (e.g. The Triffid, in Brisbane) aim to find the "What's On" page for that venue, e.g. https://www.thetriffid.com.au/whats-on) This is where you will find the upcoming events. Make sure to page through the 'What's On' page to find all the upcoming events (e.g. https://www.thetriffid.com.au/whats-on?Page=2).
+
+  Rotate angles every run: genre niches, question-form searches, short keyword clusters. Avoid generic portal homepages with no dates. Output as many distinct queries as requested (up to the limit in the user message). Each query should be concise but **not** share the same template wording.
 
 # The human-turn message sent alongside the planner system prompt.
 # (The engine appends today's date, recent queries to avoid, and rotated query
@@ -43,10 +41,6 @@ planner_user_message: |
   Plan search queries to find individual upcoming live music events on the
   Gold Coast and Brisbane — all genres (rock, pop, folk, jazz, blues, classical,
   world, electronic, open mic, jam sessions, tribute, covers).
-
-  Maximize **web coverage**: different sources, suburbs, and phrasing so the
-  combined results reach corners of the web that a repetitive venue list would
-  miss. Do not default to the same handful of venue names every run.
 
 # System prompt for the CURATOR/NORMALISER step — tells the LLM how to
 # filter and structure the raw search results into usable records.
