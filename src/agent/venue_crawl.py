@@ -13,6 +13,7 @@ module only does the lightweight "find the What's On URL" discovery step.
 from __future__ import annotations
 
 import logging
+import random
 import re
 from datetime import datetime, timedelta, timezone
 from urllib.parse import urljoin, urlparse
@@ -165,11 +166,18 @@ def _discover_for_venue(client: httpx.Client, doc: dict, root_url: str) -> str |
 
 
 def gather_venue_seed_urls(db_name: str, ddg_blob: str) -> list[str]:
-    """Return ordered priority "What's On" seed URLs for the crawler.
+    """Return priority "What's On" seed URLs for the crawler.
 
-    1. Reuse venues that already have a fresh stored ``events_link`` (memory).
-    2. Recognise more venues in the DuckDuckGo results, discover + persist
-       their What's On page, and add it.
+    Two independent tiers, each with its own cap, so they never starve each
+    other (the old code returned early once memory was full, which meant new
+    venues were never discovered and the same few venues were mined forever):
+
+    1. **Memory** — reuse up to ``MAX_VENUE_SEEDS`` venues that already have a
+       fresh stored ``events_link``, picked **least-recently-mined first** so
+       coverage rotates instead of repeating the same venues every run.
+    2. **Discovery** — *always* try to find up to
+       ``MAX_VENUE_DISCOVERIES_PER_RUN`` brand-new venues' What's On pages in
+       this run's search results, so the pool of linked venues keeps growing.
     """
     if not config.VENUE_MINING_ENABLED:
         return []
@@ -185,33 +193,53 @@ def gather_venue_seed_urls(db_name: str, ddg_blob: str) -> list[str]:
     seeds: list[str] = []
     seen: set[str] = set()
     resolved_ids: set[str] = set()
-
-    # 1) Memory: venues we already found a link for.
-    for doc in known:
-        link = str(doc.get("events_link") or "").strip()
-        if link and _events_link_is_fresh(doc):
-            key = link.lower()
-            if key not in seen:
-                seen.add(key)
-                seeds.append(link)
-                resolved_ids.add(str(doc["_id"]))
-        if len(seeds) >= config.MAX_VENUE_SEEDS:
-            return seeds[: config.MAX_VENUE_SEEDS]
-
-    # 2) Discovery: recognise venues in this run's search results.
-    results = parse_ddg_results(ddg_blob)
-    if not results:
-        return seeds[: config.MAX_VENUE_SEEDS]
-
+    seed_venue_ids: list[str] = []
     iso_now = datetime.now(timezone.utc).isoformat()
+
+    def _finish() -> list[str]:
+        """Record which venues were mined (for rotation) and return the seeds."""
+        try:
+            venue_store.mark_venues_mined(db_name, seed_venue_ids, iso_now)
+        except Exception as exc:
+            logger.warning("Could not record last_mined for venues: %s", exc)
+        return seeds
+
+    # 1) Memory: venues we already found a link for. Sort least-recently-mined
+    #    first (missing last_mined = never mined = highest priority); a random
+    #    shuffle first breaks ties so never-mined venues rotate from run one.
+    fresh = [
+        doc
+        for doc in known
+        if str(doc.get("events_link") or "").strip() and _events_link_is_fresh(doc)
+    ]
+    random.shuffle(fresh)
+    fresh.sort(key=lambda d: str(d.get("last_mined") or ""))
+    for doc in fresh[: max(0, config.MAX_VENUE_SEEDS)]:
+        link = str(doc.get("events_link") or "").strip()
+        key = link.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        seeds.append(link)
+        resolved_ids.add(str(doc["_id"]))
+        seed_venue_ids.append(str(doc["_id"]))
+
+    # 2) Discovery: ALWAYS recognise NEW venues in this run's search results,
+    #    even when the memory tier above is full, so the linked-venue pool grows.
+    results = parse_ddg_results(ddg_blob)
+    discovery_cap = max(0, config.MAX_VENUE_DISCOVERIES_PER_RUN)
+    if not results or discovery_cap <= 0:
+        return _finish()
+
     timeout = httpx.Timeout(15.0, connect=6.0)
     headers = {"User-Agent": USER_AGENT, "Accept": "text/html,*/*;q=0.8"}
     attempts = 0
-    max_attempts = max(1, config.MAX_VENUE_SEEDS * 3)
+    discovered = 0
+    max_attempts = max(1, discovery_cap * 3)
 
     with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True) as client:
         for res in results:
-            if len(seeds) >= config.MAX_VENUE_SEEDS or attempts >= max_attempts:
+            if discovered >= discovery_cap or attempts >= max_attempts:
                 break
             host = urlparse(res["link"]).netloc.lower()
             if not host or _is_aggregator_host(host):
@@ -252,5 +280,7 @@ def gather_venue_seed_urls(db_name: str, ddg_blob: str) -> list[str]:
             if link.lower() not in seen:
                 seen.add(link.lower())
                 seeds.append(link)
+                seed_venue_ids.append(str(match["_id"]))
+                discovered += 1
 
-    return seeds[: config.MAX_VENUE_SEEDS]
+    return _finish()

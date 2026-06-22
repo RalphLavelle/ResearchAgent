@@ -29,6 +29,8 @@ from agent.pipeline_diagnostics import format_step_error
 from agent.query_planner import (
     build_planner_variation_block,
     load_recent_planner_queries,
+    load_targeted_venue_queries,
+    merge_queries,
 )
 from agent.site_crawl import deep_search_supplement
 from agent.models import (
@@ -112,6 +114,18 @@ def node_plan(state: AgentState) -> AgentState:
             **_merge_diagnostic(state, "planner", reason),
         }
 
+    # Targeted venue searches: each run actively re-checks a random handful of
+    # known venues ("What's on in <venue> in <location>, Australia"). These take
+    # priority over planner queries so some generated queries are discarded in
+    # their favour (see merge_queries).
+    targeted = load_targeted_venue_queries(config.ACTIVE_TOPIC.db, config.PROMPT_GUIDES)
+    if targeted:
+        logger.info(
+            "Planner: injecting %d targeted venue search(es): %s",
+            len(targeted),
+            "; ".join(targeted),
+        )
+
     llm = build_planner_llm()
     recent = load_recent_planner_queries(
         config.ACTIVE_TOPIC.db,
@@ -134,7 +148,8 @@ def node_plan(state: AgentState) -> AgentState:
             [SystemMessage(content=config.SUBJECT.planner_system_prompt), msg],
             PlanQueries,
         )
-        qs = (plan.queries or [])[: config.MAX_SEARCH_QUERIES]
+        planned = list(plan.queries or [])
+        qs = merge_queries(targeted, planned, limit=config.MAX_SEARCH_QUERIES)
         if not qs:
             reason = (
                 "Planner returned zero search queries — the LLM response was empty or "
@@ -147,6 +162,15 @@ def node_plan(state: AgentState) -> AgentState:
             }
         return {"queries": qs, **_merge_diagnostic(state, "planner", None)}
     except Exception as exc:
+        # Planner LLM failed, but targeted venue queries can still drive the run.
+        if targeted:
+            qs = merge_queries(targeted, [], limit=config.MAX_SEARCH_QUERIES)
+            logger.warning(
+                "Plan step failed (%s) — continuing with %d targeted venue query(ies).",
+                exc,
+                len(qs),
+            )
+            return {"queries": qs, **_merge_diagnostic(state, "planner", None)}
         reason = format_step_error("Planner", exc)
         logger.exception("Plan step failed: %s", exc)
         return {

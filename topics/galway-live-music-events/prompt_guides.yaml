@@ -4,6 +4,16 @@
 resource_label_plural: "gigs and concerts"
 curator_resource_label_plural: "gigs or concerts"
 
+# Targeted venue searches: each run re-checks a random 3-6 known venues with a
+# "What's on in <venue> in <region>, Ireland" query. {location} uses the venue's
+# own stored location, falling back to one of these regions at random.
+venue_query_template: "What's on in {venue} in {location}, Ireland"
+venue_query_locations:
+  - "Galway City"
+  - "Salthill"
+venue_query_min: 3
+venue_query_max: 6
+
 planner_date_suffix: |
   **Galway City focus:** the user is based in Galway — at least three quarters of
   your queries should target Galway City venues, pubs, and ticket pages. Include

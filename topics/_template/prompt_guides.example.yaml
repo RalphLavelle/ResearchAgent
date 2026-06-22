@@ -6,6 +6,15 @@
 resource_label_plural: "events"
 curator_resource_label_plural: "events"
 
+# Targeted venue searches: each run injects a random venue_query_min..max queries
+# built from your venues collection so known venues are actively re-checked.
+# {location} uses the venue's stored location, else a random fallback below.
+venue_query_template: "What's on in {venue} in {location}"
+venue_query_locations:
+  - "Your City"
+venue_query_min: 3
+venue_query_max: 6
+
 planner_date_suffix: |
   Optional extra planner hints (geography, priority venues, etc.).
 

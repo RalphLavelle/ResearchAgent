@@ -50,6 +50,31 @@ class PromptGuides(BaseModel):
         description="How many prior search strings from reports to ask the planner to avoid.",
     )
 
+    # Targeted venue searches (Task: "Target the venues more actively").
+    # Each run injects a random handful of "What's on in <venue>" queries built
+    # from the venues collection so known venues are actively re-checked.
+    venue_query_template: str = Field(
+        default="What's on in {venue} in {location}, Australia",
+        description=(
+            "Template for targeted venue searches. Supports {venue} and {location} placeholders."
+        ),
+    )
+    venue_query_locations: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Fallback region names (e.g. ['Brisbane', 'Gold Coast']) used for {location} "
+            "when a venue has no stored location of its own."
+        ),
+    )
+    venue_query_min: int = Field(
+        default=3,
+        description="Minimum number of targeted venue queries to inject per run.",
+    )
+    venue_query_max: int = Field(
+        default=6,
+        description="Maximum number of targeted venue queries to inject per run.",
+    )
+
 
 def load_prompt_guides(path: Path) -> PromptGuides:
     """Load ``prompt_guides.yaml`` for the active topic, or return defaults."""

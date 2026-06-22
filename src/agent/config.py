@@ -175,13 +175,25 @@ MAX_CRAWL_DEPTH = int(os.environ.get("MAX_CRAWL_DEPTH", "2"))
 MAX_CRAWL_PAGES_PER_SEED = int(os.environ.get("MAX_CRAWL_PAGES_PER_SEED", "12"))
 CRAWL_DELAY_SEC = float(os.environ.get("CRAWL_DELAY_SEC", "0.35"))
 
+# Task 4: when expanding links during the crawl, drop clearly non-event pages
+# (cart, checkout, login, legal, "win a competition", etc.) before they are
+# enqueued so the bounded page budget is spent on gig/event/whats-on pages.
+# Set CRAWL_SKIP_NON_EVENT_PAGES=false to fall back to the old behaviour.
+CRAWL_SKIP_NON_EVENT_PAGES = _env_flag("CRAWL_SKIP_NON_EVENT_PAGES", default=True)
+
 # Venue-first mining (Task 1): when a known venue is recognised in search
 # results, the agent finds its "What's On" page, stores the link on the venue
 # document, and mines that page (incl. pagination) as a top-priority seed on
 # later runs so big venues are exploited exhaustively.
 VENUE_MINING_ENABLED = _env_flag("VENUE_MINING_ENABLED", default=True)
-# Max venue "What's On" pages used as guaranteed priority crawl seeds per run.
+# Max *remembered* venue "What's On" pages reused as priority crawl seeds per
+# run. These rotate least-recently-mined-first (see venue_crawl) so coverage
+# spreads across all known venues instead of repeating the same few each run.
 MAX_VENUE_SEEDS = int(os.environ.get("MAX_VENUE_SEEDS", "4"))
+# Max *new* venues whose "What's On" page is discovered each run. Discovery runs
+# even when the memory seeds above are full, so the pool of linked venues keeps
+# growing — which is what makes the rotation meaningful over time.
+MAX_VENUE_DISCOVERIES_PER_RUN = int(os.environ.get("MAX_VENUE_DISCOVERIES_PER_RUN", "3"))
 # Re-verify a stored events_link after this many days (0 = never re-check).
 VENUE_EVENTS_LINK_TTL_DAYS = int(os.environ.get("VENUE_EVENTS_LINK_TTL_DAYS", "30"))
 

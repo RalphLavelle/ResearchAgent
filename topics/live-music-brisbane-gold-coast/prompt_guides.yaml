@@ -7,6 +7,16 @@ curator_resource_label_plural: "gigs or concerts"
 planner_angle_pick_count: 5
 planner_recent_queries_limit: 32
 
+# Targeted venue searches: each run re-checks a random 3-6 known venues with a
+# "What's on in <venue> in <region>, Australia" query. {location} uses the
+# venue's own stored location, falling back to one of these regions at random.
+venue_query_template: "What's on in {venue} in {location}, Australia"
+venue_query_locations:
+  - "Brisbane"
+  - "Gold Coast"
+venue_query_min: 3
+venue_query_max: 6
+
 planner_query_angles:
   - "Gold Coast surf suburbs and beachside pubs (Burleigh, Coolangatta, Palm Beach, Mermaid)"
   - "Brisbane Fortitude Valley"

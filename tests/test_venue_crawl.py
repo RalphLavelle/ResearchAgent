@@ -120,3 +120,112 @@ def test_gather_seeds_disabled_returns_empty(monkeypatch: pytest.MonkeyPatch) ->
     db = "test-db"
     venue_store.create_venue(db, "The Triffid")
     assert venue_crawl.gather_venue_seed_urls(db, "anything") == []
+
+
+# ── Rotation: least-recently-mined venues first ───────────────────────────────
+
+
+def _add_fresh_venue(db: str, name: str, link: str) -> str:
+    """Create a venue with a freshly-verified events_link; return its id."""
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc).isoformat()
+    doc = venue_store.create_venue(db, name)
+    vid = str(doc["_id"])
+    venue_store.set_venue_web_fields(
+        db,
+        vid,
+        website=f"https://{name.lower()}.example",
+        events_link=link,
+        checked_iso=now,
+    )
+    return vid
+
+
+def test_gather_seeds_rotates_least_recently_mined_first(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Within the seed cap, never-mined venues come first, then oldest mined.
+
+    This stops the agent re-crawling only the alphabetically-first venues every
+    run; coverage rotates across all venues over successive runs.
+    """
+    db = "test-db"
+    alpha = _add_fresh_venue(db, "Alpha", "https://alpha.example/whats-on")
+    beta = _add_fresh_venue(db, "Beta", "https://beta.example/whats-on")
+    gamma = _add_fresh_venue(db, "Gamma", "https://gamma.example/whats-on")
+
+    # Alpha mined most recently, Beta a while ago, Gamma never mined.
+    venue_store.mark_venues_mined(db, [alpha], "2026-06-20T00:00:00+00:00")
+    venue_store.mark_venues_mined(db, [beta], "2026-06-01T00:00:00+00:00")
+
+    monkeypatch.setattr("agent.config.MAX_VENUE_SEEDS", 2)
+    seeds = venue_crawl.gather_venue_seed_urls(db, "")
+
+    # Gamma (never mined) first, then Beta (older than Alpha); Alpha is dropped.
+    assert seeds == [
+        "https://gamma.example/whats-on",
+        "https://beta.example/whats-on",
+    ]
+
+
+def test_gather_seeds_records_last_mined_on_chosen_only(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The venues actually mined this run get a fresh last_mined stamp."""
+    db = "test-db"
+    alpha = _add_fresh_venue(db, "Alpha", "https://alpha.example/whats-on")
+    beta = _add_fresh_venue(db, "Beta", "https://beta.example/whats-on")
+    venue_store.mark_venues_mined(db, [alpha], "2026-06-20T00:00:00+00:00")
+    venue_store.mark_venues_mined(db, [beta], "2026-06-01T00:00:00+00:00")
+
+    monkeypatch.setattr("agent.config.MAX_VENUE_SEEDS", 1)
+    venue_crawl.gather_venue_seed_urls(db, "")
+
+    # Only Beta (the oldest) was seeded, so only Beta's stamp moved forward.
+    beta_doc = venue_store.get_venue(db, beta)
+    alpha_doc = venue_store.get_venue(db, alpha)
+    assert beta_doc is not None and alpha_doc is not None
+    assert beta_doc.get("last_mined") != "2026-06-01T00:00:00+00:00"
+    assert alpha_doc.get("last_mined") == "2026-06-20T00:00:00+00:00"
+
+
+def test_discovery_runs_even_when_memory_seeds_are_full(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """New venues must keep being discovered when the memory tier is full.
+
+    Regression guard: the old code returned early once it had MAX_VENUE_SEEDS
+    remembered venues, so it never discovered new ones — the linked-venue pool
+    froze and the crawler hit the same handful of venues on every run.
+    """
+    db = "test-db"
+    # Two remembered venues fill the memory tier (cap = 2)...
+    _add_fresh_venue(db, "Alpha", "https://alpha.example/whats-on")
+    _add_fresh_venue(db, "Beta", "https://beta.example/whats-on")
+    # ...and a third venue with no link yet, present in this run's search blob.
+    crowbar = venue_store.create_venue(db, "Crowbar")
+
+    monkeypatch.setattr("agent.config.MAX_VENUE_SEEDS", 2)
+    monkeypatch.setattr("agent.config.MAX_VENUE_DISCOVERIES_PER_RUN", 3)
+    monkeypatch.setattr(
+        venue_crawl,
+        "_discover_for_venue",
+        lambda _client, _doc, root: f"{root}/whats-on",
+    )
+
+    blob = """
+title: Crowbar Brisbane
+snippet: Live music venue
+link: https://www.crowbar.com.au/
+---
+"""
+    seeds = venue_crawl.gather_venue_seed_urls(db, blob)
+
+    # Crowbar was discovered and persisted despite the memory tier being full.
+    crowbar_doc = venue_store.get_venue(db, str(crowbar["_id"]))
+    assert crowbar_doc is not None
+    assert crowbar_doc.get("events_link") == "https://www.crowbar.com.au/whats-on"
+    assert "https://www.crowbar.com.au/whats-on" in seeds
+    # Memory tier (2) + the 1 discovery = 3 seeds in total.
+    assert len(seeds) == 3

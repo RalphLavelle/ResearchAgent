@@ -12,6 +12,7 @@ import logging
 import re
 import time
 from collections import deque
+from dataclasses import dataclass, field
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -22,6 +23,30 @@ from agent.enrich import USER_AGENT
 
 logger = logging.getLogger(__name__)
 
+
+@dataclass
+class _SeedCrawl:
+    """Per-seed BFS state so several seeds can be crawled round-robin.
+
+    Each seed keeps its own queue, visited set, and fetched-page count. The
+    crawler gives every seed one page per round, sharing the global page budget
+    fairly instead of letting the first seed(s) drain it.
+    """
+
+    host: str
+    queue: deque[tuple[str, int]] = field(default_factory=deque)
+    visited: set[str] = field(default_factory=set)
+    pages: int = 0
+
+    def next_unvisited(self) -> tuple[str, int] | None:
+        """Pop and return this seed's next ``(url, depth)`` not yet fetched."""
+        while self.queue:
+            url, depth = self.queue.popleft()
+            if url in self.visited:
+                continue
+            return url, depth
+        return None
+
 _LINK_LINE = re.compile(r"^link:\s*(https?://\S+)", re.I | re.MULTILINE)
 _BINARYISH = re.compile(
     r"\.(pdf|zip|jpg|jpeg|png|gif|webp|svg|mp4|mp3|wav|m4a|doc|docx)(\?|$)",
@@ -29,6 +54,116 @@ _BINARYISH = re.compile(
 )
 _MAX_HTML_BYTES = 600_000
 # Default excerpt length overridden by ``config.CRAWL_MAX_TEXT_PER_PAGE``.
+
+# Task 4 — whole path segments that are essentially never music/event listings.
+# These are transactional, account, legal, or utility pages found on venue and
+# ticketing sites (e.g. /cart, /checkout, /my-account, /privacy, the "/win" of a
+# competition). Crawling them wastes the bounded page budget that should go to
+# gig/event/whats-on pages, so they are dropped before they are ever enqueued.
+_NON_EVENT_SEGMENTS = frozenset(
+    {
+        # Cart / checkout / commerce flow
+        "cart", "carts", "basket", "baskets", "checkout", "checkouts",
+        "order", "orders", "wishlist", "wishlists", "gift-card", "gift-cards",
+        "giftcard", "giftcards", "voucher", "vouchers",
+        # Account / auth
+        "account", "accounts", "my-account", "myaccount", "login", "log-in",
+        "signin", "sign-in", "signup", "sign-up", "register", "registration",
+        "logout", "log-out", "password", "reset-password", "profile",
+        # Legal / policy / utility
+        "terms", "terms-and-conditions", "terms-of-service", "tos", "legal",
+        "privacy", "privacy-policy", "cookie", "cookies", "disclaimer",
+        "refund", "refunds", "returns", "shipping", "delivery", "postage",
+        "faq", "faqs", "help", "support", "sitemap", "search", "404",
+        # Recruitment / press / fundraising
+        "careers", "career", "jobs", "vacancies", "press", "media-kit",
+        "donate", "donation", "donations",
+        # Promotions that aren't gigs
+        "win", "competition", "competitions", "giveaway", "giveaways",
+        "sweepstake", "sweepstakes",
+    }
+)
+
+# Generic content pages that occasionally exist but rarely list gigs; matched as
+# path fragments and softly de-prioritised (not hard-skipped) so a ticket page
+# living under one of them — e.g. /shop/tickets — keeps its positive event score.
+# These pages CAN occasionally mention a gig (a /news post, an /about page), so
+# they are kept and crawled last rather than dropped outright.
+_LOW_VALUE_FRAGMENTS = (
+    "/about", "/contact", "/gallery", "/photos", "/blog", "/news", "/team",
+    "/staff", "/history", "/our-story", "/location", "/find-us", "/directions",
+    "/parking", "/hire", "/venue-hire", "/function", "/functions", "/wedding",
+    "/weddings", "/merch", "/shop", "/store", "/product", "/products",
+    "/membership", "/subscribe", "/newsletter", "/accommodation", "/rooms",
+    "/stay",
+)
+
+# Food / dining "words" (path segments split on - and _). A page that is purely
+# about food or drink — e.g. Miami Marketta's ``/street-food-lineup`` or a plain
+# ``/menu`` — is about the kitchen, not the stage, so it is treated like the
+# transactional pages above (skipped) UNLESS the same URL also carries an event
+# signal (so ``/food-and-live-music`` or ``/dinner-show-tickets`` is still kept).
+_FOOD_DINING_WORDS = frozenset({
+    "food", "foods", "menu", "menus", "dining", "drinks", "drink", "catering",
+    "brunch", "degustation", "buffet", "eats",
+})
+
+# Substrings that signal a page is about gigs/tickets/shows — used both to score
+# links and to protect food/content pages that genuinely host events from being
+# skipped. (``lineup`` is deliberately excluded: it appears in food line-ups too,
+# and a real music line-up page carries no food word so it is never skipped.)
+_EVENT_SIGNAL_SUBSTRINGS = (
+    "/e/", "event", "ticket", "gig", "/show", "shows", "concert", "live-music",
+    "livemusic", "whats-on", "whatson", "what-s-on", "gig-guide", "gigguide",
+    "calendar", "eventbrite", "bandsintown", "songkick", "ticketmaster",
+    "moshtix", "oztix", "allevents.", "meetup.",
+)
+
+
+def _has_event_signal(url: str) -> bool:
+    """True when the URL looks like a gig / ticket / show / what's-on page."""
+    return any(s in url.lower() for s in _EVENT_SIGNAL_SUBSTRINGS)
+
+
+def _segment_words(path: str) -> set[str]:
+    """Path segments plus their hyphen/underscore-split words, lowercased."""
+    words: set[str] = set()
+    for seg in path.split("/"):
+        seg = seg.strip()
+        if not seg:
+            continue
+        words.add(seg)
+        for word in re.split(r"[-_]", seg):
+            if word:
+                words.add(word)
+    return words
+
+
+def _is_unlikely_event_page(url: str) -> bool:
+    """True for pages that almost never list gigs, so the crawl can skip them.
+
+    Two groups are dropped:
+
+    1. Transactional / account / legal / utility pages (``/cart``, ``/login``,
+       ``/privacy``, the ``/win`` of a competition) — never events.
+    2. Food / dining pages (``/street-food-lineup``, ``/menu``) — about the
+       kitchen, not the stage — *unless* the URL also carries an event signal.
+
+    Matching is on whole path *segments* (and their hyphen-split words), not raw
+    substrings, so look-alikes like ``/winery-sessions`` or ``/search-live-music``
+    are not mistaken for the bare ``/win`` or ``/search`` utility pages.
+    """
+    try:
+        path = urlparse(url).path.lower()
+    except ValueError:
+        return False
+    segments = [seg for seg in path.split("/") if seg]
+    if any(seg in _NON_EVENT_SEGMENTS for seg in segments):
+        return True
+    if not _has_event_signal(url):
+        if _segment_words(path) & _FOOD_DINING_WORDS:
+            return True
+    return False
 
 
 def _link_event_priority(url: str) -> int:
@@ -39,17 +174,16 @@ def _link_event_priority(url: str) -> int:
         priority += 12
     for frag in (
         "/e/",
-        "/events/",
-        "/event/",
-        "/gig/",
-        "/gigs/",
-        "/shows/",
-        "/show/",
+        "event",
+        "ticket",
+        "/gig",
+        "/show",
+        "concert",
+        "live-music",
+        "livemusic",
         "eventbrite",
         "bandsintown",
         "songkick",
-        "/tickets",
-        "-tickets",
         "ticketmaster",
         "moshtix",
         "oztix",
@@ -65,6 +199,22 @@ def _link_event_priority(url: str) -> int:
     # venue's full gig list (which is often paged) gets mined (Task 1).
     if re.search(r"(?:[?&](?:page|paged|pg|p)=\d+|/page/\d+|/p/\d+)", low):
         priority += 8
+    # Generic content pages (about, gallery, shop, …) sink below event pages so
+    # the bounded crawl budget targets gigs first (Task 4). A page that also
+    # looks event-y (e.g. /shop/tickets) keeps a net positive score.
+    for frag in _LOW_VALUE_FRAGMENTS:
+        if frag in low:
+            priority -= 4
+            break
+    # Food / dining pages (street-food-lineup, menu) sink well below neutral
+    # event-detail pages unless they also carry an event signal (Task 4).
+    if priority <= 0 and not _has_event_signal(low):
+        try:
+            path = urlparse(low).path
+        except ValueError:
+            path = ""
+        if _segment_words(path) & _FOOD_DINING_WORDS:
+            priority -= 8
     # Long query-string listing URLs slightly lower priority than short /e/... paths
     if low.count("?") > 1:
         priority -= 1
@@ -215,6 +365,10 @@ def _extract_internal_links(page_url: str, html: str, host: str) -> list[str]:
         clean = abs_u.split("#", 1)[0]
         if _BINARYISH.search(clean) or clean in seen:
             continue
+        # Skip cart/checkout/login/legal/"win" pages so the bounded page budget
+        # is spent on event-likely pages instead (Task 4).
+        if config.CRAWL_SKIP_NON_EVENT_PAGES and _is_unlikely_event_page(clean):
+            continue
         seen.add(clean)
         found.append(clean)
         if len(found) >= _max_discover:
@@ -259,6 +413,22 @@ def _merge_crawl_seeds(
         seen_urls.add(u.lower())
         seeds.append(u)
     return seeds
+
+
+def _fetch_html_page(client: httpx.Client, url: str) -> str | None:
+    """Fetch one URL and return its HTML, or ``None`` for failures / non-HTML."""
+    try:
+        resp = client.get(url)
+        resp.raise_for_status()
+    except Exception as exc:
+        logger.debug("crawl skip %s: %s", url, exc)
+        return None
+    html = resp.text
+    ctype = (resp.headers.get("content-type") or "").lower()
+    head = html.lower()[:8000]
+    if "html" not in ctype and "<html" not in head and "<!doctype html" not in head:
+        return None
+    return html
 
 
 def deep_search_supplement(
@@ -308,52 +478,55 @@ def deep_search_supplement(
     pages_done = 0
     headers = {"User-Agent": USER_AGENT, "Accept": "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"}
 
-    with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True) as client:
-        for seed in seeds:
-            if pages_done >= max_total:
-                break
-            try:
-                host = urlparse(seed).netloc.lower()
-            except ValueError:
-                continue
-            q: deque[tuple[str, int]] = deque([(seed, 0)])
-            visited: set[str] = set()
-            seed_pages = 0
-            while q and pages_done < max_total and seed_pages < per_seed:
-                url, depth = q.popleft()
-                if url in visited:
-                    continue
-                visited.add(url)
-                try:
-                    resp = client.get(url)
-                    resp.raise_for_status()
-                    blob = resp.text
-                    ctype = (resp.headers.get("content-type") or "").lower()
-                    head = blob.lower()[:8000]
-                    if (
-                        "html" not in ctype
-                        and "<html" not in head
-                        and "<!doctype html" not in head
-                    ):
-                        continue
-                    text_body = _html_to_text(blob, url)
-                    chunks.append(text_body)
-                    fetched_urls.append(url)
-                    pages_done += 1
-                    seed_pages += 1
-                except Exception as exc:
-                    logger.debug("crawl skip %s: %s", url, exc)
-                    continue
-                time.sleep(max(0.0, config.CRAWL_DELAY_SEC))
+    # One independent BFS context per seed. We crawl them **round-robin** (one
+    # page per seed per round) instead of draining each seed before the next, so
+    # the total page budget is shared fairly. Previously the first venue seeds
+    # consumed the whole budget, starving the search-result seeds — which is why
+    # reports kept showing the same handful of venue hosts every run.
+    contexts: list[_SeedCrawl] = []
+    for seed in seeds:
+        try:
+            host = urlparse(seed).netloc.lower()
+        except ValueError:
+            continue
+        if not host:
+            continue
+        contexts.append(_SeedCrawl(host=host, queue=deque([(seed, 0)])))
 
+    with httpx.Client(headers=headers, timeout=timeout, follow_redirects=True) as client:
+        while pages_done < max_total and contexts:
+            progressed = False
+            for ctx in contexts:
+                if pages_done >= max_total:
+                    break
+                if ctx.pages >= per_seed:
+                    continue
+                next_page = ctx.next_unvisited()
+                if next_page is None:
+                    continue
+                url, depth = next_page
+                ctx.visited.add(url)
+                progressed = True
+                html = _fetch_html_page(client, url)
+                if html is None:
+                    continue
+                chunks.append(_html_to_text(html, url))
+                fetched_urls.append(url)
+                pages_done += 1
+                ctx.pages += 1
+                time.sleep(max(0.0, config.CRAWL_DELAY_SEC))
                 if depth >= max_depth:
                     continue
                 try:
-                    for link in _extract_internal_links(url, blob, host):
-                        if link not in visited:
-                            q.append((link, depth + 1))
+                    for link in _extract_internal_links(url, html, ctx.host):
+                        if link not in ctx.visited:
+                            ctx.queue.append((link, depth + 1))
                 except Exception:
                     continue
+            # Drop seeds that can no longer contribute this run.
+            contexts = [c for c in contexts if c.queue and c.pages < per_seed]
+            if not progressed:
+                break
 
     if not chunks:
         logger.info("Same-site crawl finished: zero HTML pages harvested (timeouts or skips).")

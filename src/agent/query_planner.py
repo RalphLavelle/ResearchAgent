@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import random
-from typing import Sequence
+from typing import Any, Mapping, Sequence
 
 from agent.prompt_guides import PromptGuides
 from agent.report_store import recent_search_queries
@@ -79,3 +79,114 @@ def build_planner_variation_block(
 def load_recent_planner_queries(db_name: str, *, limit: int = 30) -> list[str]:
     """Recent search strings from MongoDB run reports (newest runs first)."""
     return recent_search_queries(db_name, limit=limit)
+
+
+def _render_venue_query(template: str, *, venue: str, location: str) -> str:
+    """Fill a venue-query template, tidying gaps left by a blank location.
+
+    ``"What's on in {venue} in {location}, Australia"`` with an empty location
+    becomes ``"What's on in The Triffid, Australia"`` instead of leaving a
+    dangling ``" in ,"``.
+    """
+    try:
+        rendered = template.format(venue=venue, location=location)
+    except (KeyError, IndexError, ValueError):
+        # Bad template placeholders — fall back to a sensible plain query.
+        rendered = f"What's on at {venue}".strip()
+    # Tidy the common "blank location" artefacts, then collapse double spaces.
+    rendered = rendered.replace(" in ,", ",").replace(" in .", ".")
+    return " ".join(rendered.split()).strip()
+
+
+def build_targeted_venue_queries(
+    venues: Sequence[Mapping[str, Any]],
+    guides: PromptGuides,
+    *,
+    rng: random.Random | None = None,
+) -> list[str]:
+    """Build a random handful of "What's on in <venue>" search queries.
+
+    Picks between ``guides.venue_query_min`` and ``guides.venue_query_max``
+    venues at random and renders ``guides.venue_query_template`` for each. The
+    ``{location}`` slot uses the venue's own stored ``location`` when present,
+    otherwise a random fallback from ``guides.venue_query_locations``.
+    """
+    template = (guides.venue_query_template or "").strip()
+    if not template:
+        return []
+
+    named = [v for v in venues if str((v or {}).get("name") or "").strip()]
+    if not named:
+        return []
+
+    r = rng or random.Random()
+    lo = max(0, int(guides.venue_query_min))
+    hi = max(lo, int(guides.venue_query_max))
+    want = min(r.randint(lo, hi), len(named))
+    if want <= 0:
+        return []
+
+    chosen = r.sample(named, want)
+    locations = [
+        str(loc).strip()
+        for loc in (guides.venue_query_locations or [])
+        if str(loc).strip()
+    ]
+
+    queries: list[str] = []
+    seen: set[str] = set()
+    for venue in chosen:
+        name = str(venue.get("name") or "").strip()
+        location = str(venue.get("location") or "").strip()
+        if not location and locations:
+            location = r.choice(locations)
+        query = _render_venue_query(template, venue=name, location=location)
+        key = query.lower()
+        if query and key not in seen:
+            seen.add(key)
+            queries.append(query)
+    return queries
+
+
+def load_targeted_venue_queries(
+    db_name: str,
+    guides: PromptGuides,
+    *,
+    rng: random.Random | None = None,
+) -> list[str]:
+    """Load venues from MongoDB and build targeted "What's on" queries."""
+    from agent.venue_store import list_venues
+
+    try:
+        venues = list_venues(db_name)
+    except Exception:
+        # Venue store unavailable (e.g. no Mongo) — skip targeted queries.
+        return []
+    return build_targeted_venue_queries(venues, guides, rng=rng)
+
+
+def merge_queries(
+    targeted: Sequence[str],
+    planned: Sequence[str],
+    *,
+    limit: int,
+) -> list[str]:
+    """Combine targeted venue queries (priority) with planner queries.
+
+    Targeted queries come first so they always survive the ``limit`` cap; the
+    remaining slots are filled with planner queries, dropping case-insensitive
+    duplicates. This is what lets each run "discard some" planner queries in
+    favour of the targeted venue ones.
+    """
+    combined: list[str] = []
+    seen: set[str] = set()
+    for query in list(targeted) + list(planned):
+        text = (query or "").strip()
+        key = text.lower()
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        combined.append(text)
+    if limit > 0:
+        return combined[:limit]
+    return combined

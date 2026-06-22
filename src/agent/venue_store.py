@@ -140,7 +140,13 @@ def get_venue(db_name: str, venue_id: str) -> dict[str, Any] | None:
 # Optional venue fields populated by the venue-mining pipeline (Task 1).
 # Kept as passthrough so admin edits (which replace the whole document) never
 # wipe the agent's learned "What's On" link or last-seen event date.
-_MINING_FIELDS = ("website", "events_link", "events_link_checked", "last_event_date")
+_MINING_FIELDS = (
+    "website",
+    "events_link",
+    "events_link_checked",
+    "last_event_date",
+    "last_mined",
+)
 
 
 def venue_document_to_json(doc: dict[str, Any]) -> dict[str, Any]:
@@ -395,6 +401,22 @@ def set_venue_web_fields(
         return
     get_database(db_name)[VENUES_COLLECTION].update_one(
         {"_id": venue_id}, {"$set": updates}
+    )
+
+
+def mark_venues_mined(db_name: str, venue_ids: list[str], iso_now: str) -> None:
+    """Record that these venues were used as crawl seeds this run.
+
+    The ``last_mined`` timestamp lets ``gather_venue_seed_urls`` rotate coverage:
+    each run prefers the venues that have gone longest without being crawled,
+    so we no longer re-crawl only the alphabetically-first venues every time.
+    """
+    when = (iso_now or "").strip()
+    ids = [vid for vid in (venue_ids or []) if vid]
+    if not when or not ids:
+        return
+    get_database(db_name)[VENUES_COLLECTION].update_many(
+        {"_id": {"$in": ids}}, {"$set": {"last_mined": when}}
     )
 
 

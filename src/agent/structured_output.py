@@ -39,7 +39,7 @@ _NUMBERED_QUERY_LINE = re.compile(r"^\s*\d+[\.)]\s*(.+)$", re.MULTILINE)
 _FALLBACK_EXAMPLES: dict[str, dict[str, Any]] = {
     "PlanQueries": {
         "queries": [
-            "site:facebook.com/events Gold Coast live music June 2026",
+            "big venues in Brisbane or the Gold Coast live music June 2026",
             "who is playing at breweries in Burleigh Heads this winter?",
         ]
     },

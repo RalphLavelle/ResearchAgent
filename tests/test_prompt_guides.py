@@ -16,9 +16,28 @@ def test_load_prompt_guides_from_repo_topic() -> None:
     path = root / "topics" / "live-music-brisbane-gold-coast" / "prompt_guides.yaml"
     guides = load_prompt_guides(path)
     assert guides.resource_label_plural == "gigs and concerts"
-    assert "Gold Coast first" in guides.planner_date_suffix
+    assert "Brisbane first" in guides.planner_date_suffix
     assert "Gold Coast balance" in guides.curator_date_suffix
     assert len(guides.planner_query_angles) >= 5
+
+
+def test_load_prompt_guides_venue_query_fields() -> None:
+    root = Path(__file__).resolve().parents[1]
+    path = root / "topics" / "live-music-brisbane-gold-coast" / "prompt_guides.yaml"
+    guides = load_prompt_guides(path)
+    assert "{venue}" in guides.venue_query_template
+    assert "{location}" in guides.venue_query_template
+    assert "Brisbane" in guides.venue_query_locations
+    assert guides.venue_query_min == 3
+    assert guides.venue_query_max == 6
+
+
+def test_prompt_guides_venue_query_defaults() -> None:
+    guides = PromptGuides()
+    assert guides.venue_query_min == 3
+    assert guides.venue_query_max == 6
+    assert guides.venue_query_locations == []
+    assert "{venue}" in guides.venue_query_template
 
 
 def test_event_window_uses_topic_suffix() -> None:
