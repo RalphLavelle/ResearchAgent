@@ -1,5 +1,4 @@
 import { NgOptimizedImage } from '@angular/common';
-import { HttpClient } from '@angular/common/http';
 import {
   ChangeDetectionStrategy,
   Component,
@@ -12,12 +11,8 @@ import {
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
-import {
-  EventsPayload,
-  ResearchEvent,
-  normalizeResearchEvent,
-  posterSrc,
-} from '../events/research-event.model';
+import { ResearchEvent, posterSrc } from '../events/research-event.model';
+import { EventsStore } from '../events/events-store.service';
 import { TopicService } from '../topic/topic.service';
 import { EmailSignupModalComponent } from './email-signup-modal/email-signup-modal';
 import {
@@ -43,10 +38,16 @@ export class ListComponent {
   /** Shared slug helpers exposed for the template. */
   protected readonly venueFilterKey = venueFilterKey;
 
-  /** Loaded snapshot: database-backed events + generation time. */
-  protected readonly payload = signal<EventsPayload | null>(null);
-  protected readonly loading = signal(true);
-  protected readonly error = signal<string | null>(null);
+  readonly #destroyRef = inject(DestroyRef);
+  readonly #events = inject(EventsStore);
+  readonly #topic = inject(TopicService);
+  readonly #route = inject(ActivatedRoute);
+  readonly #router = inject(Router);
+
+  /** Cached events snapshot — shared across route remounts (see EventsStore). */
+  protected readonly payload = this.#events.payload;
+  protected readonly loading = this.#events.loading;
+  protected readonly error = this.#events.error;
 
   /**
    * Defensive fallback: event IDs whose poster failed to load even though the
@@ -64,11 +65,6 @@ export class ListComponent {
   /** Active topic MongoDB name — passed to the signup modal API call. */
   protected readonly activeDb = computed(() => this.#topic.active().db);
 
-  readonly #http = inject(HttpClient);
-  readonly #destroyRef = inject(DestroyRef);
-  readonly #topic = inject(TopicService);
-  readonly #route = inject(ActivatedRoute);
-  readonly #router = inject(Router);
   /** Venue slug from the URL until events load and we can resolve the filter key. */
   readonly #pendingVenueSlug = signal<string | null>(null);
 
@@ -120,7 +116,7 @@ export class ListComponent {
     effect(() => {
       const db = this.#topic.active().db;
       if (!this.#topic.loading()) {
-        this.#loadEvents(db);
+        this.#events.load(db);
       }
     });
 
@@ -215,36 +211,5 @@ export class ListComponent {
     this.activeTagFilter.set(null);
     this.activeVenueFilterKey.set(null);
     this.#pendingVenueSlug.set(null);
-  }
-
-  #loadEvents(db: string): void {
-    this.loading.set(true);
-    this.error.set(null);
-    const url = `/api/${db}/events?t=${Date.now()}`;
-
-    this.#http
-      .get<EventsPayload>(url)
-      .pipe(takeUntilDestroyed(this.#destroyRef))
-      .subscribe({
-        next: (data) => {
-          const events = data.events.map((ev) => normalizeResearchEvent(ev));
-          this.payload.set({
-            ...data,
-            events,
-          });
-          const slug = this.#pendingVenueSlug();
-          if (slug) {
-            this.activeVenueFilterKey.set(venueFilterKeyForSlug(events, slug));
-          }
-          this.loading.set(false);
-        },
-        error: () => {
-          this.error.set(
-            `Could not load events for topic database "${db}". ` +
-              'Run the research pipeline and ensure MONGODB_URI is set and `python -m agent api` is running.'
-          );
-          this.loading.set(false);
-        },
-      });
   }
 }
