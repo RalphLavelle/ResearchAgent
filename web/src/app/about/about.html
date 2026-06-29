@@ -1,46 +1,98 @@
 <article class="about">
-  <h1 class="about__title">We use AI!</h1>
-  <p class="about__intro">
-    In order to find the events it lists here this website uses a large language model (LLM) in a
-    couple of ways. LLMs are one type of AI, of which ChatGPT is probably the most famous. So how does
-    it work?
-  </p>
+  <header class="about__hero">
+    <h1 class="about__title">How this site finds gigs 🎸</h1>
+    <p class="about__intro">
+      Behind the event list is a <strong>research agent</strong> — a pipeline of steps that runs about
+      every hour. It searches the web, reads venue pages, and saves curated gigs to a database. Only
+      <strong>two</strong> of those steps use a large language model (LLM, the same family of AI as
+      ChatGPT). The rest is ordinary code: crawlers, deduplication rules, and image caching.
+    </p>
+  </header>
 
   <app-spotlight-carousel />
 
-  <section class="about__section" aria-labelledby="about-how">
-    <h2 id="about-how" class="sr-only">How the agent uses AI</h2>
-    <p>
-      Every hour or so, we use an LLM to come up with variations on the question &lsquo;What musical
-      events are on in the next 30 days in Brisbane and the Gold Coast?&rsquo; Being an incredibly
-      expensive piece of software the LLM actually knows about these locations and can come up with
-      variations of the locations and the words &lsquo;music events&rsquo;, like &lsquo;gigs&rsquo;,
-      &lsquo;What&rsquo;s on in Fortitude Valley?&rsquo;, &lsquo;concerts&rsquo;, etc. The queries it
-      generates never quite repeat themselves so over time the search results the app gets back finds
-      a very broad range of websites. Yes you could do this without an LLM but it would be like
-      playing Voodoo Chile on a ukulele.
+  <section class="about__overview" aria-labelledby="about-overview-heading">
+    <h2 id="about-overview-heading" class="about__section-title">
+      <span aria-hidden="true">🗺️</span>
+      The pipeline at a glance
+    </h2>
+    <p class="about__overview-lead">
+      Seven steps, left to right. Orange <span class="about__ai-tag">AI</span> badges mark where an
+      LLM is called.
     </p>
-    <p>
-      Second, as anyone who has ever tried parsing, or &lsquo;scraping&rsquo;, a website can tell you,
-      that&rsquo;s fraught with fragility and frustration. Ordinary websites, such as the ones that
-      have gig listings, are not particularly set up to be easily read by machines. That&rsquo;s where
-      the LLM comes in again: it&rsquo;s good at turning messy data into data you can use. When the
-      search terms we generated find results that look promising we send the pages to the LLM which
-      picks out individual gigs (and venues, images, dates, etc.) when it finds them. If you
-      didn&rsquo;t have an LLM you&rsquo;d better have a large budget and a lot of patience.
+    <figure class="about__figure">
+      <img
+        ngSrc="/about/pipeline-overview.png"
+        width="920"
+        height="280"
+        alt="Flow diagram: Plan, Search, Crawl, Curate, Enrich, and Save steps; Plan and Curate use AI"
+        class="about__diagram"
+      />
+      <figcaption class="about__figcaption">
+        Saved events land in MongoDB — the same data this website lists.
+      </figcaption>
+    </figure>
+  </section>
+
+  <section class="about__steps" aria-labelledby="about-steps-heading">
+    <h2 id="about-steps-heading" class="about__section-title">
+      <span aria-hidden="true">🎛️</span>
+      Step by step
+    </h2>
+    <p class="about__steps-lead">
+      Tap a row to expand it. Panels start collapsed so you can skim the summaries first.
     </p>
+
+    <div class="about__accordion">
+      @for (step of steps; track step.id) {
+        <details class="step-panel" [class.step-panel--llm]="step.usesLlm">
+          <summary class="step-panel__summary">
+            <span class="step-panel__order" aria-hidden="true">{{ step.order }}</span>
+            <span class="step-panel__emoji" aria-hidden="true">{{ step.emoji }}</span>
+            <span class="step-panel__headings">
+              <span class="step-panel__title">{{ step.title }}</span>
+              <span class="step-panel__summary-text">{{ step.summary }}</span>
+            </span>
+            <span
+              class="step-panel__badge"
+              [class.step-panel__badge--llm]="step.usesLlm"
+            >
+              {{ stepBadge(step) }}
+            </span>
+            <span class="step-panel__chevron" aria-hidden="true"></span>
+          </summary>
+
+          <div class="step-panel__body">
+            @for (paragraph of step.details; track paragraph) {
+              <p class="step-panel__detail">{{ paragraph }}</p>
+            }
+
+            @if (step.diagramSrc) {
+              <figure class="about__figure about__figure--inline">
+                <img
+                  [ngSrc]="step.diagramSrc"
+                  width="640"
+                  [height]="step.id === 'curate' ? 380 : 360"
+                  [alt]="step.diagramAlt ?? ''"
+                  class="about__diagram"
+                />
+              </figure>
+            }
+          </div>
+        </details>
+      }
+    </div>
+  </section>
+
+  <section class="about__myth" aria-labelledby="about-myth-heading">
+    <h2 id="about-myth-heading" class="about__section-title">
+      <span aria-hidden="true">💡</span>
+      What AI does <em>not</em> do here
+    </h2>
     <p>
-      Lastly, a lot of gigs show up on more than one web page, especially for the big bands. The
-      problem of duplicates is a well-known one in this situation. &lsquo;Powderfinger live at the
-      Tivoli&rsquo; is obviously the same gig as &lsquo;The Tivoli Theatre, Fortitude Valley, proudly
-      presents&hellip;Powderfinger!&rsquo;. Once again, our trusty LLM comes to the rescue and decides
-      that there are not in fact two bands, both called Powderfinger, playing in the same theatre on
-      the same night. Which is a shame, of course, but that&rsquo;s just how it is.
-    </p>
-    <p>
-      So there you have it. AI in the verse, and AI in the chorus. At the end of the day, though, the
-      only thing that matters is that we find all the gigs on in Brisbane and the Gold Coast that are
-      out there on the web.
+      Duplicate gigs (“Powderfinger at the Tivoli” on two different sites) are merged by
+      <strong>deterministic rules</strong>, not by asking an LLM. Crawling, poster downloads, and
+      saving to the database are all plain code too — fast, repeatable, and easy to test.
     </p>
   </section>
 
