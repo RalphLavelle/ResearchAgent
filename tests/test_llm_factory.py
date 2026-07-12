@@ -166,3 +166,60 @@ def test_verify_remote_url_fails_without_api_key(monkeypatch: pytest.MonkeyPatch
     monkeypatch.setattr("agent.config.OLLAMA_API_KEY", "")
     monkeypatch.setattr("agent.config.OLLAMA_MODEL", "kimi-k2.6")
     assert verify_llm_at_startup() is False
+
+
+# ── Planner temperature ─────────────────────────────────────────────────────
+
+def test_sample_planner_temperature_stays_in_bounds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from random import Random
+
+    from agent.llm_factory import sample_planner_temperature
+
+    monkeypatch.setattr("agent.config.PLANNER_TEMPERATURE_MIN", 0.2)
+    monkeypatch.setattr("agent.config.PLANNER_TEMPERATURE_MAX", 0.8)
+    rng = Random(42)
+    samples = [sample_planner_temperature(rng=rng) for _ in range(30)]
+    assert all(0.2 <= s <= 0.8 for s in samples)
+    # With a fixed seed the sequence is deterministic and not all identical.
+    assert len(set(round(s, 5) for s in samples)) > 1
+
+
+def test_sample_planner_temperature_fixed_when_min_equals_max(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.llm_factory import sample_planner_temperature
+
+    monkeypatch.setattr("agent.config.PLANNER_TEMPERATURE_MIN", 0.55)
+    monkeypatch.setattr("agent.config.PLANNER_TEMPERATURE_MAX", 0.55)
+    assert sample_planner_temperature() == 0.55
+
+
+def test_build_planner_llm_uses_explicit_temperature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.llm_factory import build_planner_llm
+
+    monkeypatch.setattr("agent.config.OPENAI_ENABLED", True)
+    monkeypatch.setattr("agent.config.OLLAMA_ENABLED", False)
+    monkeypatch.setattr("agent.config.OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agent.config.OPENAI_MODEL", "gpt-4o")
+
+    llm = build_planner_llm(temperature=0.37)
+    assert float(llm.temperature) == 0.37
+
+
+def test_build_chat_llm_stays_at_zero_temperature(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Curator / tagging / dedupe must stay deterministic (temperature 0)."""
+    from agent.llm_factory import build_chat_llm
+
+    monkeypatch.setattr("agent.config.OPENAI_ENABLED", True)
+    monkeypatch.setattr("agent.config.OLLAMA_ENABLED", False)
+    monkeypatch.setattr("agent.config.OPENAI_API_KEY", "sk-test")
+    monkeypatch.setattr("agent.config.OPENAI_MODEL", "gpt-4o")
+
+    llm = build_chat_llm()
+    assert float(llm.temperature) == 0

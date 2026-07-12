@@ -234,6 +234,50 @@
   color: var(--color-date);
 }
 
+.report-cell--model {
+  max-width: 12rem;
+}
+
+.model-chip {
+  display: inline-block;
+  max-width: 100%;
+  padding: 0.15rem 0.55rem;
+  border-radius: var(--radius-full);
+  font-size: 0.8rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  color: #4c1d95;
+  background: linear-gradient(135deg, #ede9fe, #fce7f3);
+  overflow-wrap: anywhere;
+}
+
+.model-missing {
+  color: var(--color-muted, #94a3b8);
+}
+
+.detail-model {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.detail-model code {
+  display: inline-block;
+  padding: 0.2rem 0.65rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9rem;
+  font-family: ui-monospace, 'Cascadia Code', 'Segoe UI Mono', monospace;
+  color: #4c1d95;
+  background: linear-gradient(135deg, #ede9fe, #fce7f3);
+}
+
+.detail-temp {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--color-date, #0f766e);
+}
+
 .report-detail-row td {
   padding: 0;
   border-bottom: var(--border-thin) solid var(--table-row-border);

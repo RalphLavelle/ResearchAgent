@@ -9,9 +9,11 @@ import {
   signal,
 } from '@angular/core';
 import { takeUntilDestroyed } from '@angular/core/rxjs-interop';
+import { FormsModule } from '@angular/forms';
+import { HttpClient } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
-import { ResearchEvent, posterSrc } from '../events/research-event.model';
+import { ResearchEvent, normalizeResearchEvent, posterSrc } from '../events/research-event.model';
 import { EventsStore } from '../events/events-store.service';
 import { TopicService } from '../topic/topic.service';
 import { EmailSignupModalComponent } from './email-signup-modal/email-signup-modal';
@@ -22,11 +24,19 @@ import {
 } from './event-filter-slug';
 import { SpotlightCarouselComponent } from '../spotlight-carousel/spotlight-carousel';
 
+/** Response from ``POST /api/<db>/events/search``. */
+interface SearchPayload {
+  generated: string;
+  events: ResearchEvent[];
+  searchQuery: string;
+}
+
 @Component({
   selector: 'app-list',
   imports: [
     NgOptimizedImage,
     RouterLink,
+    FormsModule,
     EmailSignupModalComponent,
     SpotlightCarouselComponent,
   ],
@@ -43,6 +53,7 @@ export class ListComponent {
   readonly #topic = inject(TopicService);
   readonly #route = inject(ActivatedRoute);
   readonly #router = inject(Router);
+  readonly #http = inject(HttpClient);
 
   /** Cached events snapshot — shared across route remounts (see EventsStore). */
   protected readonly payload = this.#events.payload;
@@ -61,12 +72,22 @@ export class ListComponent {
   protected readonly activeTagFilter = signal<string | null>(null);
   /** When true, the weekly email signup modal is open. */
   protected readonly emailSignupOpen = signal(false);
+  /** Bound to the AI search input — updated as the user types. */
+  protected readonly searchInput = signal('');
+  /** Active search term after the user presses Enter (synced to ``?search=``). */
+  protected readonly activeSearchQuery = signal<string | null>(null);
+  /** LLM-filtered events when a search is active; null before the first search. */
+  protected readonly searchResults = signal<ResearchEvent[] | null>(null);
+  protected readonly searchLoading = signal(false);
+  protected readonly searchError = signal<string | null>(null);
 
   /** Active topic MongoDB name — passed to the signup modal API call. */
   protected readonly activeDb = computed(() => this.#topic.active().db);
 
   /** Venue slug from the URL until events load and we can resolve the filter key. */
   readonly #pendingVenueSlug = signal<string | null>(null);
+  /** Search term from ``?search=`` waiting for the active topic database to be ready. */
+  readonly #pendingSearchTerm = signal<string | null>(null);
 
   /** Sorted distinct tags across all loaded events (for the filter bar). */
   protected readonly distinctTags = computed(() => {
@@ -86,15 +107,23 @@ export class ListComponent {
     return [...found].sort();
   });
 
-  /** Events after optional venue and tag filters are applied. */
+  /** Events after optional venue, tag, and AI search filters are applied. */
   protected readonly visibleEvents = computed(() => {
+    const searchActive = this.activeSearchQuery();
+    const searchRows = this.searchResults();
     const data = this.payload();
     if (!data) {
       return [] as ResearchEvent[];
     }
+
+    const baseEvents =
+      searchActive && searchRows !== null
+        ? searchRows
+        : data.events;
+
     const venueKey = this.activeVenueFilterKey();
     const tag = this.activeTagFilter();
-    return data.events.filter((ev) => {
+    return baseEvents.filter((ev) => {
       if (venueKey && venueFilterKey(ev) !== venueKey) {
         return false;
       }
@@ -111,6 +140,41 @@ export class ListComponent {
         params.get('tagSlug'),
         params.get('venueSlug'),
       );
+    });
+
+    this.#route.queryParamMap
+      .pipe(takeUntilDestroyed(this.#destroyRef))
+      .subscribe((params) => {
+        const term = (params.get('search') ?? '').trim();
+        if (!term) {
+          this.#clearSearchState();
+          return;
+        }
+
+        // Search spans all events — drop tag/venue path segments if present.
+        const tagSlug = this.#route.snapshot.paramMap.get('tagSlug');
+        const venueSlug = this.#route.snapshot.paramMap.get('venueSlug');
+        if (tagSlug || venueSlug) {
+          void this.#router.navigate(['/'], {
+            queryParams: { search: term },
+            replaceUrl: true,
+          });
+          return;
+        }
+
+        this.searchInput.set(term);
+        this.activeSearchQuery.set(term);
+        this.#pendingSearchTerm.set(term);
+      });
+
+    effect(() => {
+      const term = this.#pendingSearchTerm();
+      const db = this.#topic.active().db;
+      if (!term || !db || this.#topic.loading()) {
+        return;
+      }
+      this.#pendingSearchTerm.set(null);
+      this.#runSearch(term);
     });
 
     effect(() => {
@@ -176,6 +240,32 @@ export class ListComponent {
     this.emailSignupOpen.set(false);
   }
 
+  /** Run AI search when the user presses Enter in the search bar. */
+  protected onSearchSubmit(event: Event): void {
+    event.preventDefault();
+    const term = this.searchInput().trim();
+    if (!term) {
+      void this.#router.navigate(['/'], {
+        queryParams: { search: null },
+      });
+      return;
+    }
+    // Leave tag/venue routes — search applies to the full event list.
+    void this.#router.navigate(['/'], {
+      queryParams: { search: term },
+    });
+  }
+
+  /** Clear the active AI search and remove ``?search`` from the URL. */
+  protected clearSearch(): void {
+    this.searchInput.set('');
+    void this.#router.navigate([], {
+      relativeTo: this.#route,
+      queryParams: { search: null },
+      queryParamsHandling: 'merge',
+    });
+  }
+
   protected onPosterError(eventId: string): void {
     this.posterErrors.update((current) => {
       if (current.has(eventId)) {
@@ -211,5 +301,47 @@ export class ListComponent {
     this.activeTagFilter.set(null);
     this.activeVenueFilterKey.set(null);
     this.#pendingVenueSlug.set(null);
+  }
+
+  #clearSearchState(): void {
+    this.#pendingSearchTerm.set(null);
+    this.activeSearchQuery.set(null);
+    this.searchResults.set(null);
+    this.searchLoading.set(false);
+    this.searchError.set(null);
+    if (!this.#route.snapshot.queryParamMap.get('search')) {
+      this.searchInput.set('');
+    }
+  }
+
+  #runSearch(term: string): void {
+    const db = this.#topic.active().db;
+    if (!db) {
+      return;
+    }
+
+    this.activeSearchQuery.set(term);
+    this.searchLoading.set(true);
+    this.searchError.set(null);
+    this.searchResults.set(null);
+
+    this.#http
+      .post<SearchPayload>(`/api/${db}/events/search`, { query: term })
+      .pipe(takeUntilDestroyed(this.#destroyRef))
+      .subscribe({
+        next: (data) => {
+          const events = (data.events ?? []).map((ev) =>
+            normalizeResearchEvent(ev as ResearchEvent),
+          );
+          this.searchResults.set(events);
+          this.searchLoading.set(false);
+        },
+        error: (err) => {
+          this.searchError.set(
+            String(err?.error?.error ?? 'AI search could not complete — try again shortly.'),
+          );
+          this.searchLoading.set(false);
+        },
+      });
   }
 }

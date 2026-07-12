@@ -15,8 +15,9 @@ Each topic has its own **MongoDB database** (the `db` field in `topics.json`, e.
 | `events` | Source of truth — curated gigs (name, venue, date, URLs, tags, poster link, etc.) |
 | `images` | Cached poster image bytes (one blob per upstream URL; many events can share one) |
 | `venues` | Normalised venue records linked from events |
-| `reports` | Pipeline run reports (searches, crawled URLs, merge stats, optional memory seed) |
+| `reports` | Pipeline run reports (searches, crawled URLs, merge stats, LLM model, optional memory seed) |
 | `sources` | Multi-event listing URLs only — one document per host with a `urls` array (pages that yielded 2+ distinct events in a run); stale entries (`runs_contributed > 3 × events_added`) are pruned; one weighted-random URL is revisited each crawl |
+| `strategy_scores` | Deterministic scorecards for source URLs, hosts, venues, and query strings, updated after each successful run report; venue scores now bias targeted venue query selection |
 | `users` | Weekly email subscribers |
 | `schema_migrations` | Applied one-shot schema migration ids |
 
@@ -158,6 +159,14 @@ Restart `serve` after changing this value.
   .\venv\Scripts\python.exe -m agent serve
   ```
 
+- **Strategy diagnostics** (read-only view of recursive self-improvement signals):
+
+  ```powershell
+  .\venv\Scripts\python.exe scripts\diag_strategy.py
+  ```
+
+  Prints remembered high-yield source URLs, venues with weak future coverage, recently crawled low-yield hosts, and repeated recent search queries for the active topic database.
+
 - **Migrate legacy spreadsheet / JSON / images to MongoDB:**
 
   ```powershell
@@ -175,9 +184,10 @@ Restart `serve` after changing this value.
   | Endpoint | Purpose |
   |----------|---------|
   | `GET /api/{db}/events` | Event list for a topic — **next month only** (events dated today through today+30; the store keeps all future events, this query applies the display window). JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc` |
+  | `POST /api/{db}/events/search` | AI natural-language search over the same display window — body `{ "query": "..." }`; returns `generated`, `events` (LLM-filtered), and `searchQuery`. Requires an LLM backend (OpenAI or Ollama). Used by the home-page search bar (`?search=` in the URL) |
   | `GET /api/{db}/events/spotlight[?limit=4&exclude=id1,id2]` | Up to four random **upcoming** events with an **event-specific** cached poster (`poster_quality` ≥ 2 — scored on read and backfilled for legacy rows) |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
-  | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
+  | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `llm_model`, `planner_temperature`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
   | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `location`, `aliases`) — used by `/admin/venues` (50 per page max) |
   | `GET /api/{db}/venues?all=true` | All venue records (for admin delete reassignment dropdown) |
   | `GET /api/{db}/venues/{venue_id}` | Raw venue JSON for admin editing (`_id`, `name`, `location`, `aliases`, `linkedEventCount`) |
@@ -196,7 +206,7 @@ Restart `serve` after changing this value.
   .\venv\Scripts\python.exe -m agent migrate-venues
   ```
 
-  Each topic database gets a `venues` collection (`name`, `location`, `aliases`). Events store a nested `venue` document `{ name, id }` linking to that collection; suburb/city lives on the venue record. Events also store a `tags` string array (up to three labels). After each merge, an LLM pass assigns tags to untagged rows, preferring tags already in the database. The Angular list page exposes tag filter pills alongside venue filters.
+  Each topic database gets a `venues` collection (`name`, `location`, `aliases`). Events store a nested `venue` document `{ name, id }` linking to that collection; suburb/city lives on the venue record. Events also store a `tags` string array (up to three labels). After each merge, an LLM pass assigns tags to untagged rows, preferring tags already in the database. The Angular list page exposes an AI search bar (bookmarkable via `?search=`), tag filter pills, and venue filters.
 
 - **Venue-first mining** (prioritise big venues' full gig lists): when a known venue is recognised in the search results, the crawl step finds that venue's own **"What's On"** page, mines it as a **priority seed** (following pagination so long listings are exploited exhaustively), and stores the link on the venue document as **`events_link`** (with `website` and `events_link_checked`). On later runs the stored `events_link` is reused directly — no need to rediscover it until it goes stale (`VENUE_EVENTS_LINK_TTL_DAYS`, default 30). Each venue also gets a **`last_event_date`** (the latest event date seen for it) so you can tell how far ahead its listings already reach. **Rotation:** remembered venues are mined **least-recently-first** (tracked per venue as **`last_mined`**, with a random tie-break), so coverage spreads across *all* known venues over successive runs instead of always re-crawling the same alphabetically-first few. **Discovery always runs** — even when the memory tier is full — so new venues keep getting linked and the rotation pool keeps growing (previously discovery stopped once you had `MAX_VENUE_SEEDS` linked venues, freezing the pool). Tune with `VENUE_MINING_ENABLED` (default `true`), `MAX_VENUE_SEEDS` (remembered venues reused per run, default 4), and `MAX_VENUE_DISCOVERIES_PER_RUN` (new venues discovered per run, default 3) in `.env`.
 
@@ -243,8 +253,9 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 ## Behavior
 
 - Each successful run merges new curated resources into the topic's **`events`** collection (with deduplication, exclusion rules, poster caching into **`images`**, and optional LLM semantic dedupe).
-- A run report is stored in MongoDB **`reports`** and includes planner queries, crawled URLs (grouped by host), and merge statistics.
-- If curated content **changed** since last run, Notion sync (when configured) is refreshed; otherwise downstream Notion sync may be skipped.
+- A run report is stored in MongoDB **`reports`** and includes planner queries, crawled URLs (grouped by host), merge statistics, the **LLM model** used for that run (from `OLLAMA_MODEL` when Ollama is enabled, or `OPENAI_MODEL` for OpenAI), and the **planner temperature** sampled for that run.
+- The **planner** (search-query generation) draws a fresh temperature each run from `PLANNER_TEMPERATURE_MIN`–`PLANNER_TEMPERATURE_MAX` (default `0.0`–`1.0`) so query wording varies more across runs. Curator, tagging, exclusion, and semantic-dedupe calls stay at **temperature 0** — they need stable structured answers, not creative variation.
+- If the **first LLM call** (planner) fails — for example a missing/wrong `OLLAMA_MODEL` — the run **aborts immediately** (`LLMInvocationError`). It does not continue with targeted venue searches alone, because later steps still need the same model.
 - `data/<topic_id>/snapshot.json` stores a fingerprint of the current run for change detection (gitignored).
 
 ## Tests
@@ -260,3 +271,6 @@ Then open the URL printed by the dev server (typically `http://localhost:4200/`)
 - `migrations/` — numbered one-shot schema migrations applied at pipeline startup.
 - `web/` — Angular app driven by `topics.json` and the MongoDB-backed REST API (`src/agent/api.py`).
 - `data/` — per-topic snapshot files only (gitignored); events and images live in MongoDB.
+
+## Digital Ocean
+Removed from DO on the 6/7/'26. SImply didn;t need to be paying the $5/mo when I wasn't using it. I can test it all locally. 

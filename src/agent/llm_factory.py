@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import random
 from typing import Any
 
 import httpx
@@ -21,8 +22,28 @@ from agent import config
 logger = logging.getLogger(__name__)
 
 
+def sample_planner_temperature(*, rng: random.Random | None = None) -> float:
+    """Pick one planner temperature for this run (uniform in configured bounds).
+
+    Temperature controls how "creative" vs "predictable" the model's next-token
+    choices are. For search-query planning we want variety across runs, so each
+    pipeline pass samples a fresh value in ``[PLANNER_TEMPERATURE_MIN,
+    PLANNER_TEMPERATURE_MAX]`` (default ``0.0``–``1.0``).
+    """
+    lo = float(config.PLANNER_TEMPERATURE_MIN)
+    hi = float(config.PLANNER_TEMPERATURE_MAX)
+    if lo >= hi:
+        return lo
+    picker = rng or random.Random()
+    return picker.uniform(lo, hi)
+
+
 def build_chat_llm() -> ChatOpenAI:
-    """Zero-temperature client for whichever backend ``config`` selects."""
+    """Zero-temperature client for extraction / tagging / dedupe.
+
+    Curator, event tagging, exclusion phrases, and semantic dedupe all need
+    stable structured answers — random temperature would only add noise there.
+    """
     if config.OPENAI_ENABLED:
         return ChatOpenAI(
             model=config.OPENAI_MODEL,
@@ -47,20 +68,38 @@ def build_chat_llm() -> ChatOpenAI:
     )
 
 
-def build_planner_llm() -> ChatOpenAI:
-    """Chat client for query planning — higher temperature for search diversity."""
-    temperature = config.PLANNER_TEMPERATURE
+def build_planner_llm(
+    *,
+    temperature: float | None = None,
+    rng: random.Random | None = None,
+) -> ChatOpenAI:
+    """Chat client for query planning — randomised temperature for search diversity.
+
+    Pass an explicit ``temperature`` in tests; otherwise a fresh sample is drawn
+    for each call via :func:`sample_planner_temperature`.
+    """
+    temp = (
+        float(temperature)
+        if temperature is not None
+        else sample_planner_temperature(rng=rng)
+    )
+    logger.info(
+        "Planner LLM temperature=%.3f (range %.2f–%.2f).",
+        temp,
+        config.PLANNER_TEMPERATURE_MIN,
+        config.PLANNER_TEMPERATURE_MAX,
+    )
     if config.OPENAI_ENABLED:
         return ChatOpenAI(
             model=config.OPENAI_MODEL,
-            temperature=temperature,
+            temperature=temp,
             api_key=config.OPENAI_API_KEY.strip() or None,
         )
 
     if config.OLLAMA_ENABLED:
         kwargs: dict[str, Any] = {
             "model": config.OLLAMA_MODEL,
-            "temperature": temperature,
+            "temperature": temp,
             "api_key": config.OLLAMA_API_KEY,
             "base_url": config.OLLAMA_BASE_URL,
         }

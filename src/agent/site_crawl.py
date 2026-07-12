@@ -324,15 +324,24 @@ def _html_to_text(html: str, page_url: str) -> str:
     for tag in soup(["script", "style", "noscript", "template", "svg"]):
         tag.decompose()
 
-    for img in list(soup.find_all("img")):
+    # Some sites (e.g. AllEvents) nest <img> inside <img>. Decomposing an outer
+    # tag also destroys nested ones still sitting in this list — their attrs
+    # become None and Tag.get() crashes. Skip already-dead tags, and unwrap
+    # rejected parents so any leftover nested markers/tags stay in the tree.
+    imgs = list(soup.find_all("img"))
+    imgs.sort(key=lambda tag: len(list(tag.parents)), reverse=True)
+    for img in imgs:
+        # BeautifulSoup clears attrs when a tag is decomposed.
+        if getattr(img, "decomposed", False) or img.attrs is None:
+            continue
         src = (img.get("src") or img.get("data-src") or img.get("data-lazy-src") or "").strip()
         if not _is_likely_event_image(src, img.get("width"), img.get("height")):
-            img.decompose()
+            img.unwrap()
             continue
         try:
             abs_src = urljoin(page_url, src)
         except ValueError:
-            img.decompose()
+            img.unwrap()
             continue
         # Keep alt text short so a page with many images doesn't blow the prompt budget.
         alt = (img.get("alt") or "").strip().replace("\n", " ").replace('"', "'")
@@ -510,7 +519,13 @@ def deep_search_supplement(
                 html = _fetch_html_page(client, url)
                 if html is None:
                     continue
-                chunks.append(_html_to_text(html, url))
+                # One bad page must not abort the whole crawl step (node_crawl
+                # used to treat any AttributeError here as "crawl failed").
+                try:
+                    chunks.append(_html_to_text(html, url))
+                except Exception as exc:
+                    logger.warning("crawl text extract failed for %s: %s", url, exc)
+                    continue
                 fetched_urls.append(url)
                 pages_done += 1
                 ctx.pages += 1

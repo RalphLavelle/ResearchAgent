@@ -61,6 +61,12 @@ _FALLBACK_EXAMPLES: dict[str, dict[str, Any]] = {
     "SemanticDedupeClusters": {
         "duplicate_groups": [{"event_ids": ["uuid-a", "uuid-b"]}]
     },
+    "EventSearchResult": {
+        "matches": [
+            {"event_id": "uuid-one", "tags": ["jazz", "free"]},
+            {"event_id": "uuid-two", "tags": ["dj set"]},
+        ]
+    },
 }
 
 
@@ -270,6 +276,75 @@ def _try_load_json(candidate: str) -> dict | list | None:
         return None
 
 
+# Matches an opening code fence (``` or ```json) at the very start of a reply.
+_LEADING_FENCE_RE = re.compile(r"^```(?:json)?\s*\n?", re.IGNORECASE)
+
+_BRACKET_CLOSERS = {"{": "}", "[": "]"}
+
+
+def _repair_truncated_json(text: str) -> dict | list | None:
+    """Best-effort recovery of a JSON reply that was cut off mid-generation.
+
+    Cloud models sometimes stop partway through a long response when they hit
+    an output-length limit, so the JSON never closes (a missing ``}``/``]`` or
+    a code fence, or a string cut in half). We scan the text tracking string
+    state and bracket depth, remember the position right after the last array
+    element that finished cleanly, then re-close any still-open brackets so the
+    salvaged prefix parses. Trailing (incomplete) items are dropped.
+    """
+    if not text:
+        return None
+
+    body = _LEADING_FENCE_RE.sub("", text.strip())
+    start = next((i for i, ch in enumerate(body) if ch in "{["), None)
+    if start is None:
+        return None
+    body = body[start:]
+
+    stack: list[str] = []
+    in_string = False
+    escape = False
+    last_element_end = -1
+    last_element_stack: list[str] = []
+
+    for i, ch in enumerate(body):
+        if in_string:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch in "{[":
+            stack.append(ch)
+        elif ch in "}]":
+            if not stack:
+                break
+            stack.pop()
+            # A value just closed; if an array is now on top, we finished a
+            # complete array element — a safe point to truncate back to.
+            if stack and stack[-1] == "[":
+                last_element_end = i + 1
+                last_element_stack = stack.copy()
+
+    # Prefer the full text (only a fence/closer was missing); fall back to the
+    # last clean array-element boundary (drops the half-written trailing item).
+    for end, remaining in (
+        (len(body), stack),
+        (last_element_end, last_element_stack),
+    ):
+        if end <= 0:
+            continue
+        closers = "".join(_BRACKET_CLOSERS[b] for b in reversed(remaining))
+        loaded = _try_load_json(body[:end] + closers)
+        if loaded is not None:
+            return loaded
+    return None
+
+
 def _score_parsed_candidate(
     parsed: dict | list,
     output_model: type[BaseModel] | None,
@@ -322,6 +397,16 @@ def _extract_json(
     if candidates:
         candidates.sort(key=lambda item: item[0], reverse=True)
         return candidates[0][1]
+
+    # Nothing parsed cleanly — the reply was likely truncated at an output
+    # limit. Salvage the complete items that did arrive rather than losing all.
+    repaired = _repair_truncated_json(text or "")
+    if repaired is not None:
+        logger.warning(
+            "Model response looked truncated; salvaged a partial JSON payload "
+            "(trailing item(s) may be missing)."
+        )
+        return repaired
 
     raise ValueError(
         f"Could not extract valid JSON from the model response. "

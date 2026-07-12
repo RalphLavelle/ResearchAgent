@@ -10,7 +10,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from agent import config
-from agent.workflow import run_once
+from agent.runner import LLMInvocationError, execute_run_once
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,10 @@ def serve() -> None:
         start = time.perf_counter()
         logger.info("Scheduled research pass starting.")
         try:
-            run_once(dry_run=False)
+            execute_run_once(dry_run=False)
+        except LLMInvocationError as exc:
+            # First LLM call failed — already logged; wait for next interval.
+            logger.error("Scheduled run aborted (LLM): %s", exc)
         except Exception:
             logger.exception("Scheduled run failed")
         finally:

@@ -23,6 +23,10 @@ export interface RunReport {
   changes: Record<string, number>;
   /** Why planner/search/crawl/normalize produced no output, when applicable. */
   diagnostics?: Record<string, string>;
+  /** LLM used for this run (e.g. OLLAMA_MODEL value from .env). */
+  llm_model?: string;
+  /** Randomised planner temperature sampled for this run (0–1 by default). */
+  planner_temperature?: number;
 }
 
 /** Root JSON shape from the reports API. */

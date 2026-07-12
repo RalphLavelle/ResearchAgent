@@ -21,17 +21,52 @@
         [showEmailSignup]="true"
         (emailSignupClick)="openEmailSignup()"
       />
+      <form class="event-search" role="search" (submit)="onSearchSubmit($event)">
+        <label class="event-search__label" for="event-search-input">
+          <span class="event-search__icon" aria-hidden="true">🤖</span>
+          <span class="sr-only">Search upcoming events with AI</span>
+        </label>
+        <input
+          id="event-search-input"
+          class="event-search__input"
+          type="search"
+          name="search"
+          [ngModel]="searchInput()"
+          (ngModelChange)="searchInput.set($event)"
+          placeholder="DJ sets on the Gold Coast, Brisbane classical music…"
+          autocomplete="off"
+          enterkeyhint="search"
+        />
+        @if (searchLoading()) {
+          <span class="event-search__status" role="status">Searching…</span>
+        }
+      </form>
+      @if (searchError(); as searchErr) {
+        <p class="status-msg error search-error" role="alert">{{ searchErr }}</p>
+      }
+      @if (activeSearchQuery()) {
+        <p class="filter-hint" role="status">
+          AI search: “{{ activeSearchQuery() }}”
+          @if (!searchLoading() && searchResults() !== null) {
+            — {{ visibleEvents().length }} match{{ visibleEvents().length === 1 ? '' : 'es' }}
+          }
+          —
+          <button type="button" class="filter-hint__clear" (click)="clearSearch()">
+            clear search
+          </button>
+        </p>
+      }
       @if (activeVenueFilterKey() || activeTagFilter()) {
         <p class="filter-hint" role="status">
           @if (activeVenueFilterKey() && activeTagFilter()) {
             Showing one venue and one tag —
-            <a routerLink="/" class="filter-hint__clear">show all gigs</a>.
+            <a routerLink="/" [queryParams]="{ search: null }" class="filter-hint__clear">show all gigs</a>.
           } @else if (activeVenueFilterKey()) {
             Showing one venue —
-            <a routerLink="/" class="filter-hint__clear">show all gigs</a>.
+            <a routerLink="/" [queryParams]="{ search: null }" class="filter-hint__clear">show all gigs</a>.
           } @else {
             Showing one tag —
-            <a routerLink="/" class="filter-hint__clear">show all gigs</a>.
+            <a routerLink="/" [queryParams]="{ search: null }" class="filter-hint__clear">show all gigs</a>.
           }
         </p>
       }
@@ -52,6 +87,14 @@
       }
       <div class="table-scroll">
         <div class="event-list" role="list" aria-label="Upcoming events">
+          @if (activeSearchQuery() && !searchLoading() && searchResults() !== null && visibleEvents().length === 0) {
+            <div class="empty-state empty-state--inline">
+              <p class="empty-title">No matches for that search</p>
+              <p class="empty-hint">
+                Try broader terms — e.g. a suburb, genre, or “free gigs”.
+              </p>
+            </div>
+          }
           @for (ev of visibleEvents(); track ev.id; let i = $index) {
             @let showDate = i === 0 || visibleEvents()[i - 1].date !== ev.date;
             @if (showDate) {

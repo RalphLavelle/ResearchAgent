@@ -71,6 +71,30 @@ def test_build_report_document_includes_memory_seed() -> None:
     assert doc["memory_seed"] == "https://venue.example/whats-on"
 
 
+def test_build_report_document_includes_llm_model() -> None:
+    """Each run report stores the active LLM id (OLLAMA_MODEL when using Ollama)."""
+    doc = build_report_document(
+        queries=["q"],
+        crawled_urls=[],
+        llm_model="gemma4:31b-cloud",
+    )
+    assert doc["llm_model"] == "gemma4:31b-cloud"
+
+
+def test_build_report_document_includes_planner_temperature() -> None:
+    doc = build_report_document(
+        queries=["q"],
+        crawled_urls=[],
+        planner_temperature=0.7421,
+    )
+    assert doc["planner_temperature"] == 0.742
+
+
+def test_build_report_document_omits_blank_llm_model() -> None:
+    doc = build_report_document(queries=[], crawled_urls=[], llm_model="  ")
+    assert "llm_model" not in doc
+
+
 def test_build_report_document_omits_empty_diagnostics() -> None:
     doc = build_report_document(
         queries=[],
@@ -89,6 +113,7 @@ def test_save_and_list_reports_roundtrip() -> None:
             "https://www.miamimarketta.com/",
         ],
         merge_stats=_SAMPLE_STATS,
+        llm_model="gemma4:31b-cloud",
         when=_FIXED_UTC,
     )
     assert report_id
@@ -100,3 +125,4 @@ def test_save_and_list_reports_roundtrip() -> None:
     assert row["searches"] == ["q1", "q2"]
     assert "www.star.com.au" in row["urls"]
     assert row["changes"]["skipped as duplicate"] == 0
+    assert row["llm_model"] == "gemma4:31b-cloud"

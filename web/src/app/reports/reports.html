@@ -74,6 +74,7 @@
           <thead>
             <tr>
               <th scope="col">datetime</th>
+              <th scope="col">model</th>
               <th scope="col">searches</th>
               <th scope="col">urls</th>
               <th scope="col">changes</th>
@@ -96,14 +97,42 @@
                     {{ report.datetime | date: 'medium' }}
                   </time>
                 </td>
+                <td class="report-cell report-cell--model">
+                  @if (report.llm_model; as model) {
+                    <code class="model-chip">{{ model }}</code>
+                  } @else {
+                    <span class="model-missing">—</span>
+                  }
+                </td>
                 <td class="report-cell">{{ searchesSummary(report) }}</td>
                 <td class="report-cell">{{ urlsSummary(report) }}</td>
                 <td class="report-cell">{{ changesSummary(report.changes) }}</td>
               </tr>
               @if (isExpanded(report.id)) {
                 <tr class="report-detail-row" [id]="'report-detail-' + report.id">
-                  <td colspan="4">
+                  <td colspan="5">
                     <div class="report-detail">
+                      @if (report.llm_model; as model) {
+                        <section class="detail-block" aria-label="LLM model detail">
+                          <h3 class="detail-block__title">llm model</h3>
+                          <p class="detail-model">
+                            <code>{{ model }}</code>
+                            @if (report.planner_temperature !== undefined && report.planner_temperature !== null) {
+                              <span class="detail-temp">
+                                planner temperature {{ report.planner_temperature }}
+                              </span>
+                            }
+                          </p>
+                        </section>
+                      } @else if (report.planner_temperature !== undefined && report.planner_temperature !== null) {
+                        <section class="detail-block" aria-label="Planner temperature detail">
+                          <h3 class="detail-block__title">planner temperature</h3>
+                          <p class="detail-model">
+                            <span class="detail-temp">{{ report.planner_temperature }}</span>
+                          </p>
+                        </section>
+                      }
+
                       <section class="detail-block" aria-label="Searches detail">
                         <h3 class="detail-block__title">searches</h3>
                         @if (report.searches.length) {

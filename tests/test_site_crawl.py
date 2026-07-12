@@ -222,6 +222,66 @@ def test_html_to_text_truncates_long_alt_text() -> None:
     assert "x" * 200 not in text
 
 
+def test_html_to_text_handles_nested_imgs_without_crashing() -> None:
+    """Invalid nested <img> (seen on AllEvents) must not abort text extraction.
+
+    BeautifulSoup models nesting as parent/child. Decomposing the outer tag used
+    to leave the inner tag with attrs=None, so the next .get() raised
+    AttributeError and the whole crawl step failed.
+    """
+    html = """
+    <html><body>
+      <h2>Friday gig</h2>
+      <img src="/uploads/event-banner-wide.jpg" alt="banner">
+        <img src="/p/real-poster.jpg" alt="The Beths live">
+      </img>
+      <p>Tickets at the door.</p>
+    </body></html>
+    """
+    text = _html_to_text(html, page_url="https://venue.example/whats-on")
+    assert "Friday gig" in text
+    assert "Tickets at the door" in text
+    # Outer banner is decoration; nested poster should still become a marker.
+    assert "event-banner-wide.jpg" not in text
+    assert '[IMG alt="The Beths live" src=https://venue.example/p/real-poster.jpg]' in text
+
+
+def test_crawl_continues_when_one_page_text_extract_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A single _html_to_text failure must not wipe the whole crawl run."""
+    calls = {"n": 0}
+
+    def fake_fetch(_client: object, url: str) -> str:
+        return f"<html><body><h1>{url}</h1></body></html>"
+
+    def flaky_text(html: str, page_url: str) -> str:
+        calls["n"] += 1
+        if "bad.example" in page_url:
+            raise AttributeError("'NoneType' object has no attribute 'get'")
+        return f"### Fetched: {page_url}\n\nok"
+
+    monkeypatch.setattr(site_crawl, "_fetch_html_page", fake_fetch)
+    monkeypatch.setattr(site_crawl, "_html_to_text", flaky_text)
+    monkeypatch.setattr("agent.config.CRAWL_DELAY_SEC", 0.0)
+    monkeypatch.setattr("agent.config.MAX_CRAWL_PAGES_TOTAL", 4)
+    monkeypatch.setattr("agent.config.MAX_CRAWL_PAGES_PER_SEED", 2)
+    monkeypatch.setattr("agent.config.MAX_CRAWL_DEPTH", 0)
+
+    text, fetched, note = deep_search_supplement(
+        "",
+        extra_seeds=[
+            "https://bad.example/whats-on",
+            "https://good.example/whats-on",
+        ],
+    )
+
+    assert note is None
+    assert "good.example" in text
+    assert fetched == ["https://good.example/whats-on"]
+    assert calls["n"] >= 2
+
+
 # ── Round-robin seed crawling (fair budget sharing) ───────────────────────────
 
 

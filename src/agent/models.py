@@ -72,6 +72,8 @@ class AgentState(TypedDict, total=False):
     dry_run: bool
     skip_doc_rewrite: bool
     pipeline_diagnostics: dict[str, str]
+    # Temperature used for the planner LLM call this run (randomised each pass).
+    planner_temperature: float
 
 
 def resource_from_dict(data: dict) -> Resource:

@@ -81,6 +81,36 @@ def load_recent_planner_queries(db_name: str, *, limit: int = 30) -> list[str]:
     return recent_search_queries(db_name, limit=limit)
 
 
+def _venue_weight_key(venue: Mapping[str, Any]) -> str:
+    """Stable lookup key for optional venue selection weights."""
+    venue_id = str(venue.get("_id") or venue.get("venue_id") or "").strip()
+    if venue_id:
+        return venue_id
+    return str(venue.get("name") or "").strip().lower()
+
+
+def _weighted_sample_without_replacement(
+    items: Sequence[Mapping[str, Any]],
+    weights: Sequence[float],
+    count: int,
+    rng: random.Random,
+) -> list[Mapping[str, Any]]:
+    """Pick *count* distinct items, favouring higher weights."""
+    pool = list(items)
+    pool_weights = [max(0.0, float(w)) for w in weights]
+    chosen: list[Mapping[str, Any]] = []
+    picks = min(max(0, count), len(pool))
+    for _ in range(picks):
+        total = sum(pool_weights)
+        if total <= 0:
+            idx = rng.randrange(len(pool))
+        else:
+            idx = rng.choices(range(len(pool)), weights=pool_weights, k=1)[0]
+        chosen.append(pool.pop(idx))
+        pool_weights.pop(idx)
+    return chosen
+
+
 def _render_venue_query(template: str, *, venue: str, location: str) -> str:
     """Fill a venue-query template, tidying gaps left by a blank location.
 
@@ -103,13 +133,15 @@ def build_targeted_venue_queries(
     guides: PromptGuides,
     *,
     rng: random.Random | None = None,
+    weights: Mapping[str, float] | None = None,
 ) -> list[str]:
     """Build a random handful of "What's on in <venue>" search queries.
 
     Picks between ``guides.venue_query_min`` and ``guides.venue_query_max``
-    venues at random and renders ``guides.venue_query_template`` for each. The
-    ``{location}`` slot uses the venue's own stored ``location`` when present,
-    otherwise a random fallback from ``guides.venue_query_locations``.
+    venues using optional *weights* (higher-yield or stale venues rank higher).
+    When *weights* is omitted, selection is uniform random. The ``{location}``
+    slot uses the venue's own stored ``location`` when present, otherwise a
+    random fallback from ``guides.venue_query_locations``.
     """
     template = (guides.venue_query_template or "").strip()
     if not template:
@@ -126,7 +158,11 @@ def build_targeted_venue_queries(
     if want <= 0:
         return []
 
-    chosen = r.sample(named, want)
+    if weights:
+        row_weights = [float(weights.get(_venue_weight_key(v), 1.0)) for v in named]
+        chosen = _weighted_sample_without_replacement(named, row_weights, want, r)
+    else:
+        chosen = r.sample(named, want)
     locations = [
         str(loc).strip()
         for loc in (guides.venue_query_locations or [])
@@ -155,14 +191,16 @@ def load_targeted_venue_queries(
     rng: random.Random | None = None,
 ) -> list[str]:
     """Load venues from MongoDB and build targeted "What's on" queries."""
+    from agent.strategy_scores import build_venue_query_weights
     from agent.venue_store import list_venues
 
     try:
         venues = list_venues(db_name)
+        weights = build_venue_query_weights(db_name, venues)
     except Exception:
         # Venue store unavailable (e.g. no Mongo) — skip targeted queries.
         return []
-    return build_targeted_venue_queries(venues, guides, rng=rng)
+    return build_targeted_venue_queries(venues, guides, rng=rng, weights=weights)
 
 
 def merge_queries(

@@ -1,5 +1,6 @@
 # Environment variables (never commit secrets)
 .env
+.env.live
 __pycache__/
 *.egg-info/
 .eggs/

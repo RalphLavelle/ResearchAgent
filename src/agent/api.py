@@ -13,11 +13,12 @@ from starlette.responses import JSONResponse, Response
 from starlette.routing import Route
 
 from agent import config
+from agent.event_search import load_search_api_payload
 from agent.event_store import load_events_api_payload, load_spotlight_api_payload
 from agent.image_store import fetch_image
 from agent.mongodb import get_database
 from agent.report_store import list_reports
-from agent.runner import LLMNotReadyError, execute_run_once
+from agent.runner import LLMInvocationError, LLMNotReadyError, execute_run_once
 from agent.topics import load_topics
 from agent import user_store, venue_store
 
@@ -55,6 +56,30 @@ def get_events(request: Request) -> JSONResponse:
         return JSONResponse(payload)
     except Exception as exc:
         logger.exception("API events error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+async def post_events_search(request: Request) -> JSONResponse:
+    """Natural-language search over the display-window events (LLM-filtered)."""
+    db_key = request.path_params["db"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
+        query = str(body.get("query") or "").strip()
+        if not query:
+            return JSONResponse({"error": "query is required"}, status_code=400)
+        payload = await run_in_threadpool(load_search_api_payload, db_name, query)
+        return JSONResponse(payload)
+    except LLMNotReadyError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except LLMInvocationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except Exception as exc:
+        logger.exception("API events search error for db=%s", db_name)
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
@@ -312,6 +337,9 @@ async def post_admin_run_once(request: Request) -> JSONResponse:
         return JSONResponse({"ok": True, "message": message})
     except LLMNotReadyError as exc:
         return JSONResponse({"error": str(exc)}, status_code=503)
+    except LLMInvocationError as exc:
+        # Planner (first) LLM call failed — pipeline aborted on purpose.
+        return JSONResponse({"error": str(exc)}, status_code=503)
     except Exception as exc:
         logger.exception("API admin run-once error")
         return JSONResponse({"error": str(exc)}, status_code=500)
@@ -359,6 +387,7 @@ def create_app() -> Starlette:
     return Starlette(
         routes=[
             Route("/api/{db}/events/spotlight", get_events_spotlight, methods=["GET"]),
+            Route("/api/{db}/events/search", post_events_search, methods=["POST"]),
             Route("/api/{db}/events", get_events, methods=["GET"]),
             Route("/api/{db}/reports", get_reports, methods=["GET"]),
             Route("/api/{db}/venues", get_venues, methods=["GET"]),

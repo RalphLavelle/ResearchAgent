@@ -24,7 +24,7 @@ from agent.event_window import (
     planner_date_instruction,
     sort_resources_by_event_date_asc,
 )
-from agent.llm_factory import build_chat_llm, build_planner_llm
+from agent.llm_factory import build_chat_llm, build_planner_llm, sample_planner_temperature
 from agent.pipeline_diagnostics import format_step_error
 from agent.query_planner import (
     build_planner_variation_block,
@@ -98,10 +98,13 @@ def _llm():
 def node_plan(state: AgentState) -> AgentState:
     """Ask the LLM to produce search queries for the active topic.
 
-    If the API key is missing or the LLM call fails, an error is logged and
-    the pipeline continues with an empty query list (which produces no results
-    and a log line). There are no fallback defaults (Task 8).
+    If the API key is missing, an error is logged and the pipeline continues
+    with an empty query list. If the LLM *call* itself fails (model not found,
+    auth, timeout, …), the run aborts immediately — later steps need the same
+    model, so there is no value in continuing with targeted venue queries only.
     """
+    from agent.runner import LLMInvocationError
+
     if not config.llm_inference_enabled():
         reason = (
             "Planner skipped — no LLM backend configured. "
@@ -126,7 +129,10 @@ def node_plan(state: AgentState) -> AgentState:
             "; ".join(targeted),
         )
 
-    llm = build_planner_llm()
+    # Sample temperature once for this run, then build the planner client with it
+    # so the value can also be stored on the run report.
+    planner_temp = sample_planner_temperature()
+    llm = build_planner_llm(temperature=planner_temp)
     recent = load_recent_planner_queries(
         config.ACTIVE_TOPIC.db,
         limit=config.PROMPT_GUIDES.planner_recent_queries_limit,
@@ -158,26 +164,24 @@ def node_plan(state: AgentState) -> AgentState:
             logger.error("Planner returned no queries — check the LLM response.")
             return {
                 "queries": [],
+                "planner_temperature": planner_temp,
                 **_merge_diagnostic(state, "planner", reason),
             }
-        return {"queries": qs, **_merge_diagnostic(state, "planner", None)}
-    except Exception as exc:
-        # Planner LLM failed, but targeted venue queries can still drive the run.
-        if targeted:
-            qs = merge_queries(targeted, [], limit=config.MAX_SEARCH_QUERIES)
-            logger.warning(
-                "Plan step failed (%s) — continuing with %d targeted venue query(ies).",
-                exc,
-                len(qs),
-            )
-            return {"queries": qs, **_merge_diagnostic(state, "planner", None)}
-        reason = format_step_error("Planner", exc)
-        logger.exception("Plan step failed: %s", exc)
         return {
-            "queries": [],
-            "run_log_message": f"Plan step failed: {exc}",
-            **_merge_diagnostic(state, "planner", reason),
+            "queries": qs,
+            "planner_temperature": planner_temp,
+            **_merge_diagnostic(state, "planner", None),
         }
+    except Exception as exc:
+        # First LLM invoke failed — stop the run. Targeted venue templates do not
+        # need the LLM, but search → crawl → curator does, so continuing just
+        # repeats the same model/auth error a few steps later.
+        reason = format_step_error("Planner", exc)
+        logger.error(
+            "Plan step failed (%s) — aborting run (LLM is required for later steps).",
+            exc,
+        )
+        raise LLMInvocationError(reason) from exc
 
 
 def node_search(state: AgentState) -> AgentState:
@@ -440,6 +444,9 @@ def node_local_output(state: AgentState) -> AgentState:
                 merge_stats=merge_stats,
                 diagnostics=dict(state.get("pipeline_diagnostics") or {}),
                 memory_seed=memory_seed,
+                # OLLAMA_MODEL when Ollama is enabled; OPENAI_MODEL for OpenAI.
+                llm_model=config.active_llm_model_label(),
+                planner_temperature=state.get("planner_temperature"),
             )
             logger.info("Run report saved (id=%s)", report_id)
         except Exception as report_exc:

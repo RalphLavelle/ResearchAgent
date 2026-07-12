@@ -56,6 +56,8 @@ logger = logging.getLogger(__name__)
 # Legacy filename — kept for migration tooling only.
 RESEARCH_FILENAME = "agent_research.xlsx"
 
+VenueOutcome = dict[str, str | int]
+
 
 def active_db_name() -> str:
     """MongoDB database name for the active topic."""
@@ -81,6 +83,7 @@ class MergeStats:
         total_after:       Final spreadsheet row count after all merging is done.
         url_outcomes:              Per-URL (events_added, events_seen) tallies from this run's merge.
         url_distinct_event_counts: Distinct (act, date) events per URL in this run's merge.
+        venue_outcomes:            Per-venue event and duplicate counts from this run's merge.
     """
 
     added: int
@@ -92,6 +95,26 @@ class MergeStats:
     total_after: int
     url_outcomes: dict[str, UrlOutcome] = field(default_factory=dict)
     url_distinct_event_counts: dict[str, int] = field(default_factory=dict)
+    venue_outcomes: dict[str, VenueOutcome] = field(default_factory=dict)
+
+
+@dataclass(frozen=True)
+class MergeAndWriteResult:
+    """Result of ``merge_and_write`` that preserves legacy tuple unpacking."""
+
+    added: int
+    skipped: int
+    removed_past: int
+    url_outcomes: dict[str, UrlOutcome]
+    url_distinct_event_counts: dict[str, int]
+    venue_outcomes: dict[str, VenueOutcome] = field(default_factory=dict)
+
+    def __iter__(self):
+        yield self.added
+        yield self.skipped
+        yield self.removed_past
+        yield self.url_outcomes
+        yield self.url_distinct_event_counts
 
 # ── Schema ────────────────────────────────────────────────────────────────────
 # Column names in display order.  The Date cell stores a Python date object
@@ -248,6 +271,37 @@ def _resolve_venue_for_row(db_name: str, row: list) -> None:
         row.append(venue_id)
     else:
         row[_IDX_VENUE_ID] = venue_id
+
+
+def _note_venue_event(
+    outcomes: dict[str, VenueOutcome],
+    venue_id: str,
+    venue_name: str,
+    *,
+    added: bool,
+) -> None:
+    """Record per-run venue yield for deterministic strategy scoring."""
+    name = (venue_name or "").strip()
+    key = (venue_id or name.lower()).strip()
+    if not key:
+        return
+    entry = outcomes.setdefault(
+        key,
+        {
+            "venue_id": venue_id,
+            "name": name,
+            "events_added": 0,
+            "events_seen": 0,
+            "duplicates": 0,
+        },
+    )
+    entry["venue_id"] = str(entry.get("venue_id") or venue_id)
+    entry["name"] = str(entry.get("name") or name)
+    entry["events_seen"] = int(entry.get("events_seen") or 0) + 1
+    if added:
+        entry["events_added"] = int(entry.get("events_added") or 0) + 1
+    else:
+        entry["duplicates"] = int(entry.get("duplicates") or 0) + 1
 
 
 def _venues_match_for_dedup(row: list, venue_id: str, venue_name: str) -> bool:
@@ -538,13 +592,14 @@ def merge_and_write(
     4. Sort soonest-first and save.
 
     Returns:
-        (added, skipped_duplicate, removed_past, url_outcomes, url_distinct_counts)
-        counts and per-URL tallies.
+        A result object that unpacks as
+        ``(added, skipped_duplicate, removed_past, url_outcomes, url_distinct_counts)``.
     """
     db_name = active_db_name()
     today = local_today()
     url_outcomes: dict[str, UrlOutcome] = {}
     url_distinct_keys: dict[str, set[DistinctEventKey]] = {}
+    venue_outcomes: dict[str, VenueOutcome] = {}
 
     existing = _load_existing_rows(db_name)
     for row in existing.values():
@@ -598,6 +653,7 @@ def merge_and_write(
                         )
                     break
             note_url_event(url_outcomes, url_distinct_keys, url, dk, added=False)
+            _note_venue_event(venue_outcomes, venue_id, canonical_venue, added=False)
             skipped += 1
             continue
 
@@ -615,6 +671,7 @@ def merge_and_write(
                     "Exact-name duplicate for '%s' — upgraded Poster URL.", r.title,
                 )
             note_url_event(url_outcomes, url_distinct_keys, url, dk, added=False)
+            _note_venue_event(venue_outcomes, venue_id, canonical_venue, added=False)
             skipped += 1
             continue
 
@@ -646,6 +703,7 @@ def merge_and_write(
                         r.title,
                     )
                 note_url_event(url_outcomes, url_distinct_keys, url, dk, added=False)
+                _note_venue_event(venue_outcomes, venue_id, canonical_venue, added=False)
                 skipped += 1
                 continue
 
@@ -662,6 +720,7 @@ def merge_and_write(
         if dk:
             dedup_index[dk] = sid
         note_url_event(url_outcomes, url_distinct_keys, url, dk, added=True)
+        _note_venue_event(venue_outcomes, venue_id, canonical_venue, added=True)
         added += 1
 
     _write_workbook(db_name, existing)
@@ -669,7 +728,14 @@ def merge_and_write(
         "Events DB: +%d added, %d duplicate/skipped, %d expired removed → %d total",
         added, skipped, removed_past, len(existing),
     )
-    return added, skipped, removed_past, url_outcomes, distinct_event_counts(url_distinct_keys)
+    return MergeAndWriteResult(
+        added=added,
+        skipped=skipped,
+        removed_past=removed_past,
+        url_outcomes=url_outcomes,
+        url_distinct_event_counts=distinct_event_counts(url_distinct_keys),
+        venue_outcomes=venue_outcomes,
+    )
 
 
 # ── Public API (called from graph_nodes) ─────────────────────────────────────
@@ -695,7 +761,13 @@ def write_output(resources: list[Resource]) -> MergeStats:
 
     db_name = active_db_name()
 
-    added, skipped, removed_past, url_outcomes, url_distinct_counts = merge_and_write(resources)
+    merge_result = merge_and_write(resources)
+    added = merge_result.added
+    skipped = merge_result.skipped
+    removed_past = merge_result.removed_past
+    url_outcomes = merge_result.url_outcomes
+    url_distinct_counts = merge_result.url_distinct_event_counts
+    venue_outcomes = merge_result.venue_outcomes
 
     removed_exclusion = 0
     try:
@@ -765,4 +837,5 @@ def write_output(resources: list[Resource]) -> MergeStats:
         total_after=total_after,
         url_outcomes=url_outcomes,
         url_distinct_event_counts=url_distinct_counts,
+        venue_outcomes=venue_outcomes,
     )

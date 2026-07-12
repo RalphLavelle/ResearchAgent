@@ -1,0 +1,275 @@
+# Recursive self-improvement for the research pipeline
+
+## Goal
+
+Make each scheduled run improve the next one. In practical terms, the agent should learn which search queries, venues, hosts, and crawl paths tend to produce real future events, then spend more of its limited search and crawl budget there while still keeping enough exploration to discover new sources.
+
+The app already has the start of this idea: it stores run reports, remembers fruitful URLs, rotates venue mining, and avoids repeating recent planner queries. The missing piece is a stronger feedback loop: most historical signals are saved for humans, but only a few are read back into the next run.
+
+## Current learning already in the app
+
+### 1. Recent query avoidance
+
+`query_planner.load_recent_planner_queries()` reads recent `reports.searches` from MongoDB. `build_planner_variation_block()` injects those into the planner prompt as "do not repeat recent searches", alongside fresh query angles from `prompt_guides.yaml`.
+
+This is useful diversity, but it is not yet performance learning. A query that found ten events and a query that found none are both just treated as "recent".
+
+### 2. Targeted venue queries
+
+`node_plan()` asks `query_planner.load_targeted_venue_queries()` for random "What's on at/in {venue}" searches from the `venues` collection, then gives those priority over LLM-planned queries.
+
+This means the app already exploits known venues. However, venue choice is still mostly random and alphabetical/list-order dependent at the store level. It does not yet rank venues by stale coverage, historical yield, or missing future events.
+
+### 3. Venue mining memory
+
+`venue_crawl.gather_venue_seed_urls()` stores a venue's own `website`, `events_link`, `events_link_checked`, and `last_mined` fields. Later runs reuse fresh `events_link` values and rotate by least-recently-mined first.
+
+This is a genuine learning loop: once the agent finds a venue's "What's On" page, it can go straight back there. The next step is to use `last_event_date`, not only `last_mined`, so venues with weak future coverage are boosted and venues already mined months ahead can cool down.
+
+### 4. Fruitful URL memory
+
+After merge, `source_store.record_url_outcomes()` records multi-event listing URLs in the `sources` collection. It tracks `events_added`, `events_seen`, `runs_contributed`, `first_seen`, and `last_seen`. The crawl then calls `pick_weighted_seed_url()` to select one remembered URL, weighted by past yield.
+
+This is another real learning loop. It favours sources that previously produced events, and prunes stale source entries when revisits stop paying off. The current limitation is scale: it picks one memory URL per run, and source memory does not yet influence query planning or host prioritisation.
+
+### 5. Accumulating event store and self-healing
+
+`local_output.merge_and_write()` accumulates future events in MongoDB. It removes past events, skips duplicate re-ingests, appends new source URLs to existing events, and can upgrade poster URLs when a better event-specific image appears later.
+
+This is "learning" in the sense that the database gets richer over time. It is not yet strategic learning, because the merge results are not broken down enough to tell the planner which exact query, venue, or crawl host caused the improvement.
+
+### 6. Run reports
+
+Each run saves `searches`, crawled `urls` grouped by host, merge `changes`, optional `diagnostics`, and the chosen `memory_seed`. These reports are a strong foundation for self-improvement.
+
+At the moment, reports are mostly used by the admin UI and by recent-query avoidance. They should become the main training signal for future scheduling decisions.
+
+## Main gaps
+
+### Query yield is not measured
+
+The app knows the list of searches used in a run and the number of rows added in that run, but it does not know which query was responsible. Without query-level attribution, the planner cannot learn that "venue what's on" searches are outperforming broad suburb searches, or vice versa.
+
+### Venue priority is not yield-aware
+
+Venues store useful fields (`events_link`, `last_mined`, `last_event_date`), but targeted venue queries are random. A venue with no future events and an old `last_mined` date should usually outrank a venue already covered three months ahead.
+
+### Crawl hosts are logged but not scored
+
+Reports record crawled hosts, and `sources` records fruitful URLs, but the crawler does not yet maintain negative memory for hosts/pages that repeatedly consume budget without producing new rows.
+
+### Planner angles are static
+
+`prompt_guides.yaml` can define planner query angles, but those angles are sampled randomly. The app does not persist which angles were used in a run, so it cannot learn whether "RSL/bowls clubs", "DJ nights", or "ticketed venue pages" are paying off.
+
+### Diagnostics do not feed strategy
+
+Pipeline diagnostics explain failures (no planner output, no crawl output, etc.), but future runs do not use those diagnostics to adapt. Repeated "crawl produced no output" for a host should lower that host's priority.
+
+### The app lacks an explicit strategy state
+
+Today, learning is spread across `reports`, `sources`, and `venues`. A dedicated `strategy` or `scores` collection could keep compact, queryable memory that the next run can read quickly.
+
+## Recommended design: scorecards, not autonomous rewrites
+
+The safest version of recursive self-improvement is not "let the LLM rewrite config". It is deterministic scorekeeping:
+
+1. Record outcomes from each run.
+2. Convert outcomes into simple scores.
+3. Feed the scores into the planner, venue selector, and crawler.
+4. Keep exploration so the system does not get stuck on yesterday's winners.
+
+This keeps the system understandable and testable. An LLM can help summarise patterns, but it should not silently mutate `.env`, YAML prompts, or code.
+
+## Proposed improvements
+
+### Phase 1: Add better telemetry
+
+Store more attribution in run reports:
+
+- `query_results`: each query with result count, top hosts, and whether it led to crawled pages.
+- `curated_sources`: event URL, primary host, query/crawl source if known, and whether the row was added or skipped.
+- `angle_ids`: which planner guide angles were injected into the planner prompt.
+- `venue_seed_ids`: which venues were mined or queried that run.
+
+This phase is mostly instrumentation. It should not change behaviour yet, which makes it low risk.
+
+### Phase 2: Query and angle scoring
+
+Create a small score model for search behaviour:
+
+- Reward queries/angles that lead to new future events.
+- Give partial credit for skipped duplicates, because duplicates still confirm active sources.
+- Penalise repeated zero-yield queries after a grace period.
+- Decay old scores so the system adapts when venues and seasons change.
+
+Use the scores in `build_planner_variation_block()`:
+
+- Show the LLM high-performing angles to lean into.
+- Show low-yield phrases/hosts to avoid.
+- Keep a fixed exploration percentage, for example 30%, where the planner must try fresh areas.
+
+Beginner-friendly way to think about this: scores are like a playlist recommendation system. Songs you keep playing get recommended more often, but the app still tries a few new songs so it can discover new favourites.
+
+### Phase 3: Venue priority scoring
+
+Replace random venue selection with a priority function. A venue should rank higher when:
+
+- It has no `events_link` yet.
+- It has never been mined.
+- `last_mined` is old.
+- `last_event_date` is empty or soon.
+- It historically added events.
+- It has recently appeared in search results.
+
+It should rank lower when:
+
+- Its future calendar is already well-covered.
+- Its events link has repeatedly produced no new rows.
+- It mostly produces duplicates and no new dates.
+
+This should feed both targeted venue queries and venue-first crawl seeds.
+
+### Phase 4: Source and host memory
+
+Expand the current `sources` collection into a fuller crawl scorecard:
+
+- Pick top-K memory seeds per run, not just one.
+- Track host-level yield, not only URL-level yield.
+- Add negative memory for hosts that are repeatedly crawled but produce no events.
+- Boost known multi-event listing pages, but keep caps so one successful venue does not consume the whole crawl budget.
+
+The crawler already has round-robin fairness, which is a good base. Better seed selection would make that fairness more useful.
+
+### Phase 5: Missing image scout
+
+The related missing-images idea fits the same pattern:
+
+- Mark events with missing or placeholder images explicitly.
+- Store an `image_status` field such as `ok`, `missing`, `placeholder`, or `failed`.
+- On each schedule, run a small scout budget for missing images.
+- Use act name, venue, date, and trusted image sources.
+- Record which image search strategies succeeded.
+
+This turns image fixing into another learning loop rather than a one-off best effort.
+
+### Phase 6: Optional reflection report
+
+Add a non-mutating "strategy reflection" report every N runs:
+
+- Input: last 5-20 run reports, source scores, venue scores, diagnostics.
+- Output: a human-readable summary and structured suggestions.
+- Store it in MongoDB, maybe under a `strategy_reports` collection.
+
+The important guardrail: the LLM may recommend changes, but deterministic code decides scores and the app does not automatically rewrite prompts or config without review.
+
+## Suggested score fields
+
+### `query_scores`
+
+- `query_key`
+- `query_text_examples`
+- `runs`
+- `events_added`
+- `events_seen`
+- `duplicate_hits`
+- `zero_yield_runs`
+- `last_used`
+- `score`
+
+### `venue_scores`
+
+- `venue_id`
+- `runs_queried`
+- `runs_mined`
+- `events_added`
+- `duplicates_seen`
+- `last_mined`
+- `last_event_date`
+- `events_link_health`
+- `score`
+
+### `host_scores`
+
+- `host`
+- `urls_crawled`
+- `events_added`
+- `events_seen`
+- `zero_yield_crawls`
+- `last_crawled`
+- `score`
+
+## Scoring formula sketch
+
+Keep it simple at first:
+
+```text
+score =
+  3.0 * events_added
++ 0.5 * duplicate_hits
++ 1.0 * distinct_future_dates_seen
+- 1.5 * zero_yield_runs
++ freshness_bonus
++ exploration_bonus
+```
+
+Use decay so old data matters less:
+
+```text
+effective_score = score * 0.85^(weeks_since_seen)
+```
+
+This avoids overfitting to one lucky week.
+
+## Implementation roadmap
+
+### Step 1: Read-only diagnostics
+
+Create a script like `scripts/diag_strategy.py` that reads `reports`, `sources`, and `venues`, then prints:
+
+- Best remembered source URLs.
+- Venues with stale or missing future coverage.
+- Hosts crawled recently with low yield.
+- Recent search phrases that repeat too much.
+
+No pipeline behaviour changes yet.
+
+### Step 2: Persist scorecards
+
+Add deterministic score updates after `node_local_output()` saves reports and source outcomes. This could live in a new `strategy_store.py`.
+
+### Step 3: Use venue scores first
+
+Venue scoring is the safest first behavioural change because the app already has venue memory. Replace random targeted venue sampling with weighted venue selection while preserving exploration.
+
+### Step 4: Use source scores in crawl seeds
+
+Let `pick_weighted_seed_url()` return multiple seeds and include a cap per host.
+
+### Step 5: Use query/angle scores in the planner prompt
+
+Pass high-yield and low-yield summaries into `build_planner_variation_block()`. Keep the prompt short: a few positive examples, a few avoid examples, and an explicit exploration requirement.
+
+### Step 6: Add admin visibility
+
+Show strategy scorecards in the admin area so the learning is inspectable. That matters because self-improving systems are much easier to trust when their memory is visible.
+
+## Risks and guardrails
+
+- **Overfitting:** if the app only exploits old winners, it may miss new venues. Keep exploration.
+- **Bad attribution:** query-to-event attribution can be noisy because multiple queries may find the same page. Start with approximate scoring and improve later.
+- **Seasonality:** music listings change by month and holiday period. Decay old scores.
+- **Source monopolies:** large ticketing sites can dominate. Cap per-host seeds.
+- **LLM drift:** do not let the LLM mutate config automatically. Use it for suggestions or structured summaries, not silent control.
+- **Data growth:** reports and scorecards should have indexes and retention limits.
+
+## Best next step
+
+Start with a read-only `diag_strategy.py` or admin report that ranks:
+
+1. Top fruitful source URLs.
+2. Venues with stale `last_event_date`.
+3. Crawled hosts with repeated zero yield.
+4. Recent query patterns with no additions.
+
+That gives immediate insight without changing the pipeline. Once those rankings look sensible, wire the venue priority score into targeted venue queries, because that is the most direct and lowest-risk improvement path.

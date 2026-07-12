@@ -356,6 +356,27 @@ def test_post_admin_run_once_llm_not_ready(monkeypatch: pytest.MonkeyPatch) -> N
     assert "LLM backend" in response.json()["error"]
 
 
+def test_post_admin_run_once_llm_invocation_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from agent.runner import LLMInvocationError
+
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    def raise_invocation(*, dry_run: bool = False):
+        raise LLMInvocationError(
+            'Planner failed (RuntimeError): model "qwen3" not found'
+        )
+
+    monkeypatch.setattr("agent.api.execute_run_once", raise_invocation)
+
+    client = TestClient(create_app())
+    response = client.post("/api/admin/run-once", json={"password": "secret-admin"})
+
+    assert response.status_code == 503
+    assert "qwen3" in response.json()["error"]
+
+
 def test_post_admin_verify_password_accepts_correct_value(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
 

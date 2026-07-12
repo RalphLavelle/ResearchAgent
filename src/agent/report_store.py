@@ -50,6 +50,8 @@ def build_report_document(
     merge_stats: MergeStats | None = None,
     diagnostics: dict[str, str] | None = None,
     memory_seed: str | None = None,
+    llm_model: str | None = None,
+    planner_temperature: float | None = None,
     when: datetime | None = None,
 ) -> dict[str, Any]:
     """Shape one report row before insert."""
@@ -74,6 +76,15 @@ def build_report_document(
     seed = (memory_seed or "").strip()
     if seed:
         doc["memory_seed"] = seed
+    # Typically OLLAMA_MODEL (or OPENAI_MODEL) — whatever the run actually used.
+    model = (llm_model or "").strip()
+    if model:
+        doc["llm_model"] = model
+    if planner_temperature is not None:
+        try:
+            doc["planner_temperature"] = round(float(planner_temperature), 3)
+        except (TypeError, ValueError):
+            pass
     return doc
 
 
@@ -85,6 +96,8 @@ def save_run_report(
     merge_stats: MergeStats | None = None,
     diagnostics: dict[str, str] | None = None,
     memory_seed: str | None = None,
+    llm_model: str | None = None,
+    planner_temperature: float | None = None,
     when: datetime | None = None,
 ) -> str:
     """Insert a report into the topic's ``reports`` collection."""
@@ -94,11 +107,26 @@ def save_run_report(
         merge_stats=merge_stats,
         diagnostics=diagnostics,
         memory_seed=memory_seed,
+        llm_model=llm_model,
+        planner_temperature=planner_temperature,
         when=when,
     )
     coll = get_database(db_name)[REPORTS_COLLECTION]
     result = coll.insert_one(doc)
     report_id = str(result.inserted_id)
+    try:
+        from agent.strategy_scores import apply_strategy_scores_for_report
+
+        touched = apply_strategy_scores_for_report(
+            db_name,
+            report_id=report_id,
+            report_doc=doc,
+            merge_stats=merge_stats,
+        )
+        if touched:
+            logger.info("Strategy scorecards updated: %d document(s)", touched)
+    except Exception as score_exc:
+        logger.warning("Strategy scorecard update failed (continuing): %s", score_exc)
     logger.info(
         "Run report saved to MongoDB: db=%s collection=%s id=%s",
         db_name,

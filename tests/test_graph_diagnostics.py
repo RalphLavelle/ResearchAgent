@@ -3,6 +3,7 @@
 import pytest
 
 from agent.graph_nodes import _merge_diagnostic, node_plan, node_search
+from agent.runner import LLMInvocationError
 
 
 def test_merge_diagnostic_sets_and_clears_step_note() -> None:
@@ -23,6 +24,37 @@ def test_node_plan_records_llm_unavailable(monkeypatch: pytest.MonkeyPatch) -> N
     assert out["queries"] == []
     assert "planner" in out["pipeline_diagnostics"]
     assert "LLM backend" in out["pipeline_diagnostics"]["planner"]
+
+
+def test_node_plan_aborts_when_llm_call_fails(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """First LLM failure must stop the run even if targeted venue queries exist."""
+    monkeypatch.setattr("agent.graph_nodes.config.llm_inference_enabled", lambda: True)
+    monkeypatch.setattr(
+        "agent.graph_nodes.load_targeted_venue_queries",
+        lambda *_a, **_k: ["What's on in The Triffid in Brisbane, Australia"],
+    )
+    monkeypatch.setattr(
+        "agent.graph_nodes.load_recent_planner_queries",
+        lambda *_a, **_k: [],
+    )
+    monkeypatch.setattr(
+        "agent.graph_nodes.build_planner_variation_block",
+        lambda *_a, **_k: "vary it",
+    )
+    monkeypatch.setattr("agent.graph_nodes.build_planner_llm", lambda **_k: object())
+
+    def boom(*_a, **_k):
+        raise RuntimeError('model "qwen3" not found')
+
+    monkeypatch.setattr("agent.graph_nodes.invoke_structured", boom)
+
+    with pytest.raises(LLMInvocationError) as caught:
+        node_plan({})
+
+    assert "Planner" in str(caught.value)
+    assert "qwen3" in str(caught.value)
 
 
 def test_node_search_skips_without_queries() -> None:

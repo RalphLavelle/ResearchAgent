@@ -6,7 +6,7 @@ import argparse
 import logging
 import sys
 
-from agent.runner import LLMNotReadyError, execute_run_once
+from agent.runner import LLMInvocationError, LLMNotReadyError, execute_run_once
 from agent.scheduler import serve
 
 logging.basicConfig(
@@ -66,6 +66,10 @@ def main(argv: list[str] | None = None) -> int:
         except LLMNotReadyError as exc:
             logger.error("%s", exc)
             return 3
+        except LLMInvocationError as exc:
+            # First LLM call failed (bad model name, auth, etc.) — stop cleanly.
+            logger.error("%s", exc)
+            return 4
         msg = result.get("run_log_message", "")
         print(msg)
         return 0

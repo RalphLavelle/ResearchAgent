@@ -161,7 +161,46 @@ MONGODB_URI = (os.environ.get("MONGODB_URI") or "").strip()
 ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or "").strip()
 
 MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
-PLANNER_TEMPERATURE = float(os.environ.get("PLANNER_TEMPERATURE", "0.85"))
+
+
+def _planner_temperature_bounds() -> tuple[float, float]:
+    """Return ``(min, max)`` for the planner's per-run randomised temperature.
+
+    Defaults to the usual creative range ``[0.0, 1.0]``. Set both
+    ``PLANNER_TEMPERATURE_MIN`` and ``PLANNER_TEMPERATURE_MAX`` to the same
+    value for a fixed temperature. Legacy ``PLANNER_TEMPERATURE`` still works
+    as a fixed value when the min/max env vars are unset.
+    """
+
+    def _read(name: str) -> float | None:
+        raw = os.environ.get(name)
+        if raw is None or not str(raw).strip():
+            return None
+        try:
+            return float(str(raw).strip())
+        except ValueError:
+            return None
+
+    lo = _read("PLANNER_TEMPERATURE_MIN")
+    hi = _read("PLANNER_TEMPERATURE_MAX")
+    fixed = _read("PLANNER_TEMPERATURE")
+    if lo is None and hi is None and fixed is not None:
+        lo = hi = fixed
+    if lo is None:
+        lo = 0.0
+    if hi is None:
+        hi = 1.0
+    # OpenAI/Ollama accept roughly 0–2; clamp so a typo cannot blow up sampling.
+    lo = max(0.0, min(2.0, lo))
+    hi = max(0.0, min(2.0, hi))
+    if lo > hi:
+        lo, hi = hi, lo
+    return lo, hi
+
+
+PLANNER_TEMPERATURE_MIN, PLANNER_TEMPERATURE_MAX = _planner_temperature_bounds()
+# Back-compat alias: midpoint of the configured range (used only in docs/tests).
+PLANNER_TEMPERATURE = (PLANNER_TEMPERATURE_MIN + PLANNER_TEMPERATURE_MAX) / 2.0
 SEARCH_DELAY_SEC = float(os.environ.get("SEARCH_DELAY_SEC", "1.5"))
 # Higher default = more snippets per query for the curator to mine individual gigs from.
 MAX_DDG_RESULTS_PER_QUERY = int(os.environ.get("MAX_DDG_RESULTS_PER_QUERY", "10"))
@@ -201,4 +240,6 @@ VENUE_EVENTS_LINK_TTL_DAYS = int(os.environ.get("VENUE_EVENTS_LINK_TTL_DAYS", "3
 CRAWL_MAX_TEXT_PER_PAGE = int(os.environ.get("CRAWL_MAX_TEXT_PER_PAGE", "38000"))
 
 # Characters from search+crawl forwarded to curator (preserve crawl suffix when trimming).
-CURATOR_INPUT_MAX_CHARS = int(os.environ.get("CURATOR_INPUT_MAX_CHARS", "260000"))
+# Lower default (was 260000): very large inputs make the curator emit a huge
+# JSON list that can overflow a cloud model's output limit and get truncated.
+CURATOR_INPUT_MAX_CHARS = int(os.environ.get("CURATOR_INPUT_MAX_CHARS", "180000"))

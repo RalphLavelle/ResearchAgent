@@ -1,7 +1,9 @@
 """Tests for planner query diversity helpers."""
 
 import random
+from datetime import datetime, timezone
 
+from agent.mongodb import STRATEGY_SCORES_COLLECTION, get_database
 from agent.prompt_guides import PromptGuides
 from agent.query_planner import (
     build_planner_variation_block,
@@ -12,6 +14,7 @@ from agent.query_planner import (
 )
 from agent.report_store import recent_search_queries, save_run_report
 from agent.local_output import MergeStats
+from agent.strategy_scores import EXPLORATION_FLOOR
 from agent.venue_store import create_venue, set_location
 
 
@@ -149,3 +152,129 @@ def test_load_targeted_venue_queries_reads_from_mongo() -> None:
     set_location(db, venue["_id"], "Fortitude Valley")
     out = load_targeted_venue_queries(db, _venue_guides(), rng=random.Random(3))
     assert out == ["What's on in The Zoo in Fortitude Valley, Australia"]
+
+
+def test_build_targeted_venue_queries_prefers_high_weight_venues() -> None:
+    guides = PromptGuides(
+        venue_query_template="What's on in {venue} in {location}, Australia",
+        venue_query_locations=["Brisbane"],
+        venue_query_min=1,
+        venue_query_max=1,
+    )
+    venues = [
+        {"_id": "high", "name": "High Yield", "location": "Brisbane"},
+        {"_id": "low", "name": "Low Yield", "location": "Brisbane"},
+    ]
+    weights = {"high": 50.0, "low": EXPLORATION_FLOOR}
+
+    high_hits = 0
+    for seed in range(200):
+        out = build_targeted_venue_queries(
+            venues,
+            guides,
+            rng=random.Random(seed),
+            weights=weights,
+        )
+        assert len(out) == 1
+        if "High Yield" in out[0]:
+            high_hits += 1
+
+    assert high_hits > 120
+
+
+def test_build_targeted_venue_queries_still_samples_low_weight_venues() -> None:
+    guides = PromptGuides(
+        venue_query_template="What's on in {venue} in {location}, Australia",
+        venue_query_locations=["Brisbane"],
+        venue_query_min=1,
+        venue_query_max=1,
+    )
+    venues = [
+        {"_id": "high", "name": "High Yield", "location": "Brisbane"},
+        {"_id": "low", "name": "Low Yield", "location": "Brisbane"},
+    ]
+    weights = {"high": 10.0, "low": EXPLORATION_FLOOR}
+
+    low_hits = 0
+    for seed in range(2000):
+        out = build_targeted_venue_queries(
+            venues,
+            guides,
+            rng=random.Random(seed),
+            weights=weights,
+        )
+        if "Low Yield" in out[0]:
+            low_hits += 1
+
+    assert low_hits > 0
+
+
+def test_build_targeted_venue_queries_without_weights_matches_uniform_sampling() -> None:
+    guides = PromptGuides(
+        venue_query_template="What's on in {venue} in {location}, Australia",
+        venue_query_locations=["Brisbane"],
+        venue_query_min=1,
+        venue_query_max=1,
+    )
+    venues = [
+        {"name": "Venue A", "location": "Brisbane"},
+        {"name": "Venue B", "location": "Brisbane"},
+    ]
+    unweighted = build_targeted_venue_queries(venues, guides, rng=random.Random(42))
+    equal_weights = build_targeted_venue_queries(
+        venues,
+        guides,
+        rng=random.Random(42),
+        weights={"venue a": 1.0, "venue b": 1.0},
+    )
+
+    assert unweighted == equal_weights
+
+
+def test_load_targeted_venue_queries_uses_strategy_scores() -> None:
+    db = "test-db"
+    strong = create_venue(db, "Strong Room")
+    weak = create_venue(db, "Weak Room")
+    set_location(db, strong["_id"], "Brisbane")
+    set_location(db, weak["_id"], "Brisbane")
+
+    fixed = datetime(2026, 6, 18, 8, 30, 0, tzinfo=timezone.utc)
+    save_run_report(
+        db,
+        queries=["Strong venue query"],
+        crawled_urls=[],
+        merge_stats=MergeStats(
+            added=5,
+            skipped=0,
+            removed_past=0,
+            removed_exclusion=0,
+            removed_dedupe=0,
+            removed_orphan_venues=0,
+            total_after=5,
+            venue_outcomes={
+                str(strong["_id"]): {
+                    "venue_id": str(strong["_id"]),
+                    "name": "Strong Room",
+                    "events_added": 5,
+                    "events_seen": 5,
+                    "duplicates": 0,
+                }
+            },
+        ),
+        when=fixed,
+    )
+
+    guides = PromptGuides(
+        venue_query_template="What's on in {venue} in {location}, Australia",
+        venue_query_locations=["Brisbane"],
+        venue_query_min=1,
+        venue_query_max=1,
+    )
+    strong_hits = 0
+    for seed in range(200):
+        out = load_targeted_venue_queries(db, guides, rng=random.Random(seed))
+        if out and "Strong Room" in out[0]:
+            strong_hits += 1
+
+    assert strong_hits > 120
+    assert get_database(db)[STRATEGY_SCORES_COLLECTION].count_documents({"kind": "venue"}) >= 1
