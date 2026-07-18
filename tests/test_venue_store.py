@@ -169,6 +169,57 @@ def test_admin_round_trip_preserves_mining_fields() -> None:
     assert after["last_event_date"] == "2026-09-30"
 
 
+def test_count_events_for_venue() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    created = venue_store.create_venue(db, "Busy Room")
+    venue_id = str(created["_id"])
+    get_database(db)[EVENTS_COLLECTION].insert_one(
+        {
+            "_id": "evt-busy",
+            "event": "Band",
+            "venue": venue_to_mongo("Busy Room", venue_id),
+            "url": "https://example.com/gig",
+            "date": "2026-08-01",
+        }
+    )
+
+    assert venue_store.count_events_for_venue(db, venue_id) == 1
+
+
+def test_list_events_for_venue_sorted_by_date() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    created = venue_store.create_venue(db, "The Triffid")
+    venue_id = str(created["_id"])
+    get_database(db)[EVENTS_COLLECTION].insert_many(
+        [
+            {
+                "_id": "evt-b",
+                "event": "Band B",
+                "venue": venue_to_mongo("The Triffid", venue_id),
+                "url": "https://example.com/b",
+                "date": "2026-09-01",
+            },
+            {
+                "_id": "evt-a",
+                "event": "Band A",
+                "venue": venue_to_mongo("The Triffid", venue_id),
+                "url": "https://example.com/a",
+                "date": "2026-07-01",
+            },
+        ]
+    )
+
+    events = venue_store.list_events_for_venue(db, venue_id)
+    assert [event["eventName"] for event in events] == ["Band A", "Band B"]
+    assert events[0]["url"] == "https://example.com/a"
+
+
 def test_delete_venues_without_events() -> None:
     from agent.event_store import venue_to_mongo
     from agent.mongodb import EVENTS_COLLECTION, get_database
@@ -241,6 +292,29 @@ def test_list_venues_page_returns_slice_and_total() -> None:
     page_two, _ = venue_store.list_venues_page(db, limit=2, skip=2)
     assert len(page_two) == 1
     assert page_two[0]["name"] == "Gamma Stage"
+
+
+def test_list_venues_page_ignores_leading_the_for_sort() -> None:
+    """``The Cooly Hotel`` sorts under C, not T — display name unchanged."""
+    db = "test-db"
+    venue_store.create_venue(db, "Zulu Bar")
+    venue_store.create_venue(db, "The Cooly Hotel")
+    venue_store.create_venue(db, "Bakehouse")
+    venue_store.create_venue(db, "Alpha Hall")
+
+    page, total = venue_store.list_venues_page(db, limit=10, skip=0)
+    assert total == 4
+    names = [doc["name"] for doc in page]
+    assert names == ["Alpha Hall", "Bakehouse", "The Cooly Hotel", "Zulu Bar"]
+
+
+def test_list_venues_all_uses_same_sort() -> None:
+    db = "test-db"
+    venue_store.create_venue(db, "The Triffid")
+    venue_store.create_venue(db, "Miami Marketta")
+
+    names = [doc["name"] for doc in venue_store.list_venues(db)]
+    assert names == ["Miami Marketta", "The Triffid"]
 
 
 def test_update_venue_replaces_document() -> None:

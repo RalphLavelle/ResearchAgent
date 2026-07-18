@@ -28,6 +28,22 @@ def without_leading_the(key: str) -> str:
     return key
 
 
+def sort_name_key(name: str) -> str:
+    """Alphabetical sort key for venue lists — ignores a leading ``The ``."""
+    return without_leading_the(normalize_venue_key(name))
+
+
+def _sort_venues_by_name(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Return *docs* sorted A–Z by ``sort_name_key(name)`` (stable tie-break on name)."""
+    return sorted(
+        docs,
+        key=lambda doc: (
+            sort_name_key(str(doc.get("name") or "")),
+            normalize_venue_key(str(doc.get("name") or "")),
+        ),
+    )
+
+
 def venue_keys_match(left: str, right: str) -> bool:
     """True when two normalized keys are equal, with or without a leading ``the ``."""
     if left == right:
@@ -96,9 +112,9 @@ def resolve_or_create(db_name: str, raw_text: str) -> tuple[str, str]:
 
 
 def list_venues(db_name: str) -> list[dict[str, Any]]:
-    """Return all venue documents sorted by canonical name."""
+    """Return all venue documents sorted by canonical name (``The `` ignored)."""
     coll = get_database(db_name)[VENUES_COLLECTION]
-    return list(coll.find().sort("name", 1))
+    return _sort_venues_by_name(list(coll.find()))
 
 
 def set_location(db_name: str, venue_id: str, location: str) -> None:
@@ -125,11 +141,12 @@ def list_venues_page(
     limit: int = 50,
     skip: int = 0,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Return one page of venues (sorted by name) and the total count."""
+    """Return one page of venues (sorted by name, ``The `` ignored) and the total count."""
     coll = get_database(db_name)[VENUES_COLLECTION]
-    total = coll.count_documents({})
-    docs = list(coll.find().sort("name", 1).skip(skip).limit(limit))
-    return docs, total
+    docs = _sort_venues_by_name(list(coll.find()))
+    total = len(docs)
+    page = docs[skip : skip + limit]
+    return page, total
 
 
 def get_venue(db_name: str, venue_id: str) -> dict[str, Any] | None:
@@ -218,6 +235,31 @@ def count_events_for_venue(db_name: str, venue_id: str) -> int:
     """Count events linked to a venues-collection id."""
     coll = get_database(db_name)[EVENTS_COLLECTION]
     return coll.count_documents(_events_for_venue_filter(venue_id))
+
+
+def list_events_for_venue(db_name: str, venue_id: str) -> list[dict[str, Any]]:
+    """Return linked events for admin venue drill-down, sorted by date ascending."""
+    from agent.event_store import IDX_EVENT, IDX_EVENT_ID, IDX_URL, doc_to_row
+    from agent.event_window import format_event_weekday_date
+    from agent.local_output import _row_date
+
+    coll = get_database(db_name)[EVENTS_COLLECTION]
+    items: list[dict[str, Any]] = []
+    for doc in coll.find(_events_for_venue_filter(venue_id)):
+        row = doc_to_row(doc)
+        raw_date = _row_date(row)
+        iso_date = raw_date.isoformat() if raw_date else None
+        items.append(
+            {
+                "id": str(row[IDX_EVENT_ID] or "").strip(),
+                "eventName": str(row[IDX_EVENT] or "").strip() or "—",
+                "date": format_event_weekday_date(iso_date or ""),
+                "isoDate": iso_date,
+                "url": str(row[IDX_URL] or "").strip(),
+            }
+        )
+    items.sort(key=lambda item: (item["isoDate"] is None, item["isoDate"] or ""))
+    return items
 
 
 def linked_event_ids(db_name: str, venue_id: str) -> list[str]:

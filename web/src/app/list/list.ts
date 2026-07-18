@@ -15,8 +15,10 @@ import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 
 import { ResearchEvent, normalizeResearchEvent, posterSrc } from '../events/research-event.model';
 import { EventsStore } from '../events/events-store.service';
+import { SeoService } from '../seo/seo.service';
 import { TopicService } from '../topic/topic.service';
 import { EmailSignupModalComponent } from './email-signup-modal/email-signup-modal';
+import { YouTubeModalComponent } from './youtube-modal/youtube-modal';
 import {
   slugify,
   venueFilterKey,
@@ -38,6 +40,7 @@ interface SearchPayload {
     RouterLink,
     FormsModule,
     EmailSignupModalComponent,
+    YouTubeModalComponent,
     SpotlightCarouselComponent,
   ],
   templateUrl: './list.html',
@@ -54,6 +57,7 @@ export class ListComponent {
   readonly #route = inject(ActivatedRoute);
   readonly #router = inject(Router);
   readonly #http = inject(HttpClient);
+  readonly #seo = inject(SeoService);
 
   /** Cached events snapshot — shared across route remounts (see EventsStore). */
   protected readonly payload = this.#events.payload;
@@ -72,17 +76,24 @@ export class ListComponent {
   protected readonly activeTagFilter = signal<string | null>(null);
   /** When true, the weekly email signup modal is open. */
   protected readonly emailSignupOpen = signal(false);
-  /** Bound to the AI search input — updated as the user types. */
+  /** Event currently playing in the YouTube modal, if any. */
+  protected readonly youtubeTarget = signal<ResearchEvent | null>(null);
+  /** Bound to the search input — updated as the user types. */
   protected readonly searchInput = signal('');
   /** Active search term after the user presses Enter (synced to ``?search=``). */
   protected readonly activeSearchQuery = signal<string | null>(null);
-  /** LLM-filtered events when a search is active; null before the first search. */
+  /** Filtered events when a search is active; null before the first search. */
   protected readonly searchResults = signal<ResearchEvent[] | null>(null);
   protected readonly searchLoading = signal(false);
   protected readonly searchError = signal<string | null>(null);
 
   /** Active topic MongoDB name — passed to the signup modal API call. */
   protected readonly activeDb = computed(() => this.#topic.active().db);
+
+  /** Topic headline rendered as the page <h1> (SEO). */
+  protected readonly headline = computed(
+    () => this.#topic.active().tagline?.trim() || 'Upcoming gigs',
+  );
 
   /** Venue slug from the URL until events load and we can resolve the filter key. */
   readonly #pendingVenueSlug = signal<string | null>(null);
@@ -107,7 +118,7 @@ export class ListComponent {
     return [...found].sort();
   });
 
-  /** Events after optional venue, tag, and AI search filters are applied. */
+  /** Events after optional venue, tag, and text search filters are applied. */
   protected readonly visibleEvents = computed(() => {
     const searchActive = this.activeSearchQuery();
     const searchRows = this.searchResults();
@@ -192,6 +203,14 @@ export class ListComponent {
       }
       this.activeVenueFilterKey.set(venueFilterKeyForSlug(data.events, slug));
     });
+
+    // SEO: publish schema.org MusicEvent markup for the loaded events, and
+    // refine the generic route title for tag/venue filter pages.
+    effect(() => {
+      this.#seo.setEventsJsonLd(this.payload()?.events ?? []);
+    });
+    effect(() => this.#applyFilterSeo());
+    this.#destroyRef.onDestroy(() => this.#seo.clearEventsJsonLd());
   }
 
   protected posterSrc(url: string | null): string | null {
@@ -240,7 +259,15 @@ export class ListComponent {
     this.emailSignupOpen.set(false);
   }
 
-  /** Run AI search when the user presses Enter in the search bar. */
+  protected openYouTube(ev: ResearchEvent): void {
+    this.youtubeTarget.set(ev);
+  }
+
+  protected closeYouTube(): void {
+    this.youtubeTarget.set(null);
+  }
+
+  /** Run search when the user presses Enter in the search bar. */
   protected onSearchSubmit(event: Event): void {
     event.preventDefault();
     const term = this.searchInput().trim();
@@ -256,7 +283,7 @@ export class ListComponent {
     });
   }
 
-  /** Clear the active AI search and remove ``?search`` from the URL. */
+  /** Clear the active search and remove ``?search`` from the URL. */
   protected clearSearch(): void {
     this.searchInput.set('');
     void this.#router.navigate([], {
@@ -275,6 +302,31 @@ export class ListComponent {
       next.add(eventId);
       return next;
     });
+  }
+
+  /** Slug-specific title + description for tag/venue filter routes (SEO). */
+  #applyFilterSeo(): void {
+    const site = this.#topic.active().site_title;
+    const tag = this.activeTagFilter();
+    if (tag) {
+      this.#seo.setListingTitle(`${tag} gigs — ${site}`);
+      this.#seo.setDescription(
+        `Upcoming ${tag} gigs — dates, venues and ticket links, updated daily.`,
+      );
+      return;
+    }
+    const venueKey = this.activeVenueFilterKey();
+    if (venueKey) {
+      const venueName = this.payload()
+        ?.events.find((ev) => venueFilterKey(ev) === venueKey)
+        ?.venue?.trim();
+      if (venueName) {
+        this.#seo.setListingTitle(`${venueName} gigs — ${site}`);
+        this.#seo.setDescription(
+          `What's on at ${venueName} — upcoming live music dates and ticket links.`,
+        );
+      }
+    }
   }
 
   /** Apply tag or venue filter from the current route (bookmarkable URLs). */
@@ -338,7 +390,7 @@ export class ListComponent {
         },
         error: (err) => {
           this.searchError.set(
-            String(err?.error?.error ?? 'AI search could not complete — try again shortly.'),
+            String(err?.error?.error ?? 'Search could not complete — try again shortly.'),
           );
           this.searchLoading.set(false);
         },

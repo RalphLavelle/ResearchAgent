@@ -155,6 +155,10 @@ OUTPUT_DIR = resolve_output_dir(
     env_override=_output_raw or None,
 )
 
+# YouTube Data API v3 — server-side only (Task 6). Enable the API in Google Cloud
+# and restrict the key to your API host. See docs/features/youtube.md.
+YOUTUBE_API_KEY = (os.environ.get("YOUTUBE_API_KEY") or "").strip()
+
 MONGODB_URI = (os.environ.get("MONGODB_URI") or "").strip()
 
 # Password required to access the Angular admin section (checked via ``POST /api/admin/verify-password``).

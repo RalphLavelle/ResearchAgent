@@ -41,6 +41,7 @@
   min-width: 0;
   max-width: 100%;
   overflow-x: clip;
+  background-color: var(--page-bg);
 }
 
 .shell {
@@ -57,6 +58,7 @@
 
 .masthead {
   margin-bottom: var(--space-6);
+  background-color: var(--page-bg);
 }
 
 .masthead-top {
@@ -90,6 +92,8 @@
   max-width: var(--logotype-max-width);
   height: auto;
   min-width: 0;
+  /* Same cream baked into logotype.webp — removes the visible edge on the home masthead. */
+  background-color: var(--color-cream-logo);
 }
 
 .site-brand:hover .site-brand__logotype,
@@ -101,10 +105,6 @@
   outline: var(--border-medium) solid var(--nav-accent);
   outline-offset: var(--outline-offset-sm);
   border-radius: var(--radius-xs);
-}
-
-.site-brand--active .site-brand__logotype {
-  filter: drop-shadow(var(--shadow-brand-active));
 }
 
 .site-footer {

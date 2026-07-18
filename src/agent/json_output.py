@@ -52,6 +52,7 @@ from agent.event_window import (
 )
 from agent.models import Resource
 from agent.local_output import _row_date
+from agent.youtube import youtube_eligible
 
 logger = logging.getLogger(__name__)
 
@@ -76,11 +77,14 @@ def _event_item_from_row(
         "venue": venue_name,
         "location": location,
         "date": date_label,
+        # Machine-readable date for the client's schema.org MusicEvent markup.
+        "isoDate": raw_date.isoformat() if raw_date else None,
         "url": str(row[IDX_URL] or "").strip(),
         "summary": str(row[IDX_SUMMARY] or "").strip(),
         "thumbnailUrl": thumb if thumb else None,
         "venueId": venue_id or None,
         "tags": tags_from_row(row),
+        "youtubeEligible": youtube_eligible(act, tags_from_row(row)),
         "id": eid,
     }
 
@@ -119,6 +123,7 @@ def build_events_payload(resources: list[Resource]) -> dict[str, Any]:
                 "venue": venue,
                 "location": location,
                 "date": format_event_weekday_date(r.date),
+                "isoDate": (r.date or "").strip() or None,
                 "url": (r.url or "").strip(),
                 "summary": (r.summary or "").strip(),
                 "thumbnailUrl": thumb if (thumb := (r.thumbnail_url or "").strip()) else None,

@@ -9,18 +9,20 @@ from typing import Any
 from starlette.applications import Starlette
 from starlette.concurrency import run_in_threadpool
 from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+from starlette.responses import JSONResponse, PlainTextResponse, Response
 from starlette.routing import Route
 
-from agent import config
+from agent import config, seo
 from agent.event_search import load_search_api_payload
 from agent.event_store import load_events_api_payload, load_spotlight_api_payload
 from agent.image_store import fetch_image
+from agent.local_output import run_dedupe_remediation
 from agent.mongodb import get_database
 from agent.report_store import list_reports
 from agent.runner import LLMInvocationError, LLMNotReadyError, execute_run_once
 from agent.topics import load_topics
 from agent import user_store, venue_store
+from agent.youtube import resolve_event_youtube
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +62,7 @@ def get_events(request: Request) -> JSONResponse:
 
 
 async def post_events_search(request: Request) -> JSONResponse:
-    """Natural-language search over the display-window events (LLM-filtered)."""
+    """Text search over the display-window events (MongoDB only, no LLM)."""
     db_key = request.path_params["db"]
     db_name = _resolve_db(db_key)
     if not db_name:
@@ -74,12 +76,34 @@ async def post_events_search(request: Request) -> JSONResponse:
             return JSONResponse({"error": "query is required"}, status_code=400)
         payload = await run_in_threadpool(load_search_api_payload, db_name, query)
         return JSONResponse(payload)
-    except LLMNotReadyError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=503)
-    except LLMInvocationError as exc:
-        return JSONResponse({"error": str(exc)}, status_code=503)
     except Exception as exc:
         logger.exception("API events search error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+def get_event_youtube(request: Request) -> JSONResponse:
+    """Lazy YouTube lookup for one event — caches video id on the event document."""
+    db_key = request.path_params["db"]
+    event_id = str(request.path_params.get("event_id") or "").strip()
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    if not event_id:
+        return JSONResponse({"error": "Event id is required"}, status_code=400)
+    try:
+        payload, error_code = resolve_event_youtube(db_name, event_id)
+        if payload:
+            return JSONResponse(payload)
+        messages = {
+            "not_found": ("Event not found", 404),
+            "not_eligible": ("YouTube lookup is not offered for this event", 404),
+            "not_configured": ("YouTube integration is not configured on the server", 503),
+            "no_video": ("No matching YouTube video was found", 404),
+        }
+        message, status = messages.get(error_code or "", ("YouTube lookup failed", 500))
+        return JSONResponse({"error": message}, status_code=status)
+    except Exception as exc:
+        logger.exception("API YouTube error db=%s event=%s", db_name, event_id)
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
@@ -119,9 +143,10 @@ def get_reports(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-def _venue_to_api(doc: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "id": str(doc.get("_id") or ""),
+def _venue_to_api(doc: dict[str, Any], *, db_name: str | None = None) -> dict[str, Any]:
+    venue_id = str(doc.get("_id") or "")
+    payload = {
+        "id": venue_id,
         "name": str(doc.get("name") or ""),
         "aliases": [str(alias) for alias in (doc.get("aliases") or [])],
         "location": str(doc.get("location") or ""),
@@ -129,6 +154,9 @@ def _venue_to_api(doc: dict[str, Any]) -> dict[str, Any]:
         "events_link": str(doc.get("events_link") or ""),
         "last_event_date": str(doc.get("last_event_date") or ""),
     }
+    if db_name and venue_id:
+        payload["linkedEventCount"] = venue_store.count_events_for_venue(db_name, venue_id)
+    return payload
 
 
 def get_venues(request: Request) -> JSONResponse:
@@ -141,7 +169,7 @@ def get_venues(request: Request) -> JSONResponse:
             docs = venue_store.list_venues(db_name)
             return JSONResponse(
                 {
-                    "venues": [_venue_to_api(doc) for doc in docs],
+                    "venues": [_venue_to_api(doc, db_name=db_name) for doc in docs],
                     "total": len(docs),
                     "limit": len(docs),
                     "skip": 0,
@@ -154,7 +182,7 @@ def get_venues(request: Request) -> JSONResponse:
         docs, total = venue_store.list_venues_page(db_name, limit=limit, skip=skip)
         return JSONResponse(
             {
-                "venues": [_venue_to_api(doc) for doc in docs],
+                "venues": [_venue_to_api(doc, db_name=db_name) for doc in docs],
                 "total": total,
                 "limit": limit,
                 "skip": skip,
@@ -182,6 +210,23 @@ def get_venue(request: Request) -> JSONResponse:
         return JSONResponse(payload)
     except Exception as exc:
         logger.exception("API venue read error for db=%s id=%s", db_name, venue_id)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+def get_venue_events(request: Request) -> JSONResponse:
+    """Return events linked to one venue (admin venues table expand row)."""
+    db_key = request.path_params["db"]
+    venue_id = request.path_params["venue_id"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        if not venue_store.get_venue(db_name, venue_id):
+            return JSONResponse({"error": "Venue not found"}, status_code=404)
+        events = venue_store.list_events_for_venue(db_name, venue_id)
+        return JSONResponse({"events": events, "venueId": venue_id, "total": len(events)})
+    except Exception as exc:
+        logger.exception("API venue events error for db=%s id=%s", db_name, venue_id)
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
@@ -345,6 +390,83 @@ async def post_admin_run_once(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+async def post_admin_run_targeted(request: Request) -> JSONResponse:
+    """Run a full pipeline pass using a single admin-supplied search phrase."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
+        password = str(body.get("password") or "")
+        query = str(body.get("query") or "").strip()
+        if not query:
+            return JSONResponse({"error": "query is required"}, status_code=400)
+        expected = config.ADMIN_PASSWORD
+        if not expected:
+            return JSONResponse(
+                {"error": "Admin password is not configured on the server"},
+                status_code=503,
+            )
+        if not secrets.compare_digest(password, expected):
+            return JSONResponse({"error": "Incorrect password"}, status_code=401)
+
+        def _run() -> str:
+            result = execute_run_once(dry_run=False, targeted_query=query)
+            return str(result.get("run_log_message") or "")
+
+        message = await run_in_threadpool(_run)
+        return JSONResponse({"ok": True, "message": message, "query": query})
+    except LLMNotReadyError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except LLMInvocationError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=503)
+    except Exception as exc:
+        logger.exception("API admin run-targeted error")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+async def post_admin_dedupe_events(request: Request) -> JSONResponse:
+    """Re-scan the active topic's events collection for duplicates (admin remediation)."""
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
+        password = str(body.get("password") or "")
+        expected = config.ADMIN_PASSWORD
+        if not expected:
+            return JSONResponse(
+                {"error": "Admin password is not configured on the server"},
+                status_code=503,
+            )
+        if not secrets.compare_digest(password, expected):
+            return JSONResponse({"error": "Incorrect password"}, status_code=401)
+
+        db_name = _active_db_name()
+
+        def _run() -> dict[str, int]:
+            result = run_dedupe_remediation(db_name)
+            return {
+                "removed_deterministic": result.removed_deterministic,
+                "removed_semantic": result.removed_semantic,
+                "total_removed": result.total_removed,
+            }
+
+        stats = await run_in_threadpool(_run)
+        total = int(stats["total_removed"])
+        if total == 0:
+            message = "No duplicate events found."
+        else:
+            det = int(stats["removed_deterministic"])
+            sem = int(stats["removed_semantic"])
+            parts = [f"{det} deterministic"]
+            if sem:
+                parts.append(f"{sem} semantic (LLM)")
+            message = f"Removed {total} duplicate event row(s) ({', '.join(parts)})."
+        return JSONResponse({"ok": True, "message": message, **stats})
+    except Exception as exc:
+        logger.exception("API admin dedupe-events error")
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 async def post_admin_verify_password(request: Request) -> JSONResponse:
     """Check the admin password from ``ADMIN_PASSWORD`` in ``.env``."""
     try:
@@ -364,6 +486,40 @@ async def post_admin_verify_password(request: Request) -> JSONResponse:
     except Exception as exc:
         logger.exception("API admin verify-password error")
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+def _request_base_url(request: Request) -> str:
+    """Origin for absolute sitemap/robots URLs, honouring the proxy's forwarded scheme."""
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme
+    host = request.headers.get("host") or request.url.netloc
+    return f"{scheme}://{host}"
+
+
+def _active_db_name() -> str:
+    """MongoDB database of the active topic (the one the public site shows)."""
+    reg = load_topics(config.TOPICS_CONFIG_PATH)
+    return reg.topics[reg.active].db
+
+
+def get_robots_txt(request: Request) -> PlainTextResponse:
+    """robots.txt — nginx proxies the site-root path here (SEO)."""
+    body = seo.build_robots_txt(_request_base_url(request))
+    return PlainTextResponse(body, headers={"Cache-Control": "public, max-age=3600"})
+
+
+def get_sitemap_xml(request: Request) -> Response:
+    """sitemap.xml built from the active topic's display-window events (SEO)."""
+    try:
+        events = load_events_api_payload(_active_db_name()).get("events", [])
+    except Exception:
+        logger.exception("Sitemap: could not load events; serving static pages only")
+        events = []
+    body = seo.build_sitemap_xml(_request_base_url(request), events)
+    return Response(
+        content=body,
+        media_type="application/xml",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 def get_image(request: Request) -> Response:
@@ -388,9 +544,11 @@ def create_app() -> Starlette:
         routes=[
             Route("/api/{db}/events/spotlight", get_events_spotlight, methods=["GET"]),
             Route("/api/{db}/events/search", post_events_search, methods=["POST"]),
+            Route("/api/{db}/events/{event_id}/youtube", get_event_youtube, methods=["GET"]),
             Route("/api/{db}/events", get_events, methods=["GET"]),
             Route("/api/{db}/reports", get_reports, methods=["GET"]),
             Route("/api/{db}/venues", get_venues, methods=["GET"]),
+            Route("/api/{db}/venues/{venue_id}/events", get_venue_events, methods=["GET"]),
             Route("/api/{db}/venues/{venue_id}", get_venue, methods=["GET"]),
             Route("/api/{db}/venues/{venue_id}", put_venue, methods=["PUT"]),
             Route("/api/{db}/venues/{venue_id}", delete_venue, methods=["DELETE"]),
@@ -398,7 +556,13 @@ def create_app() -> Starlette:
             Route("/api/{db}/users/subscribe", post_user_subscribe, methods=["POST"]),
             Route("/api/{db}/images/{image_id}", get_image, methods=["GET"]),
             Route("/api/admin/run-once", post_admin_run_once, methods=["POST"]),
+            Route("/api/admin/run-targeted", post_admin_run_targeted, methods=["POST"]),
+            Route("/api/admin/dedupe-events", post_admin_dedupe_events, methods=["POST"]),
             Route("/api/admin/verify-password", post_admin_verify_password, methods=["POST"]),
+            # SEO: nginx proxies these site-root files here so they stay in
+            # sync with the live event data and the deployment's real domain.
+            Route("/robots.txt", get_robots_txt, methods=["GET"]),
+            Route("/sitemap.xml", get_sitemap_xml, methods=["GET"]),
             Route("/health", lambda r: JSONResponse({"ok": True}), methods=["GET"]),
         ],
     )

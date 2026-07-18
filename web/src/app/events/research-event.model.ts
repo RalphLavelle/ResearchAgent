@@ -9,12 +9,17 @@ export interface ResearchEvent {
   location: string;
   /** Venues-collection id — used for filtering; not shown in the UI. */
   venueId: string | null;
+  /** Display label, e.g. "Sat 18 Jul" — grouping rows in the list. */
   date: string;
+  /** Machine-readable ISO date (YYYY-MM-DD) for structured data; null when undated. */
+  isoDate: string | null;
   url: string;
   summary: string;
   thumbnailUrl: string | null;
   /** Filter tags assigned by the pipeline (max 3). */
   tags: string[];
+  /** True when a YouTube preview button should appear (non-tribute named act). */
+  youtubeEligible: boolean;
 }
 
 /** Root JSON shape from ``GET /api/<db>/events``. */
@@ -59,9 +64,12 @@ export function normalizeResearchEvent(
     venue: name || String(nestedVenue?.name ?? '').trim(),
     location: String(raw.location ?? '').trim(),
     venueId,
+    isoDate:
+      typeof raw.isoDate === 'string' && raw.isoDate.trim() ? raw.isoDate.trim() : null,
     tags: Array.isArray(raw.tags)
       ? raw.tags.map((tag) => String(tag).trim().toLowerCase()).filter(Boolean).slice(0, 3)
       : [],
+    youtubeEligible: raw.youtubeEligible === true,
   };
 }
 

@@ -98,12 +98,27 @@ def _llm():
 def node_plan(state: AgentState) -> AgentState:
     """Ask the LLM to produce search queries for the active topic.
 
+    When ``targeted_query`` is set in state (admin targeted search), skip the
+    planner LLM and venue templates — run DuckDuckGo with that phrase only.
+
     If the API key is missing, an error is logged and the pipeline continues
     with an empty query list. If the LLM *call* itself fails (model not found,
     auth, timeout, …), the run aborts immediately — later steps need the same
     model, so there is no value in continuing with targeted venue queries only.
     """
     from agent.runner import LLMInvocationError
+
+    targeted_admin = (state.get("targeted_query") or "").strip()
+    if targeted_admin:
+        logger.info("Planner: admin targeted search — single query: %s", targeted_admin)
+        return {
+            "queries": [targeted_admin],
+            **_merge_diagnostic(
+                state,
+                "planner",
+                f"Targeted admin search (single query): {targeted_admin}",
+            ),
+        }
 
     if not config.llm_inference_enabled():
         reason = (

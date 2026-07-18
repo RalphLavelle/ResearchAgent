@@ -39,11 +39,19 @@ def build_graph():
     return g.compile()
 
 
-def run_once(*, dry_run: bool = False) -> AgentState:
-    """Execute one full pass."""
+def run_once(*, dry_run: bool = False, targeted_query: str | None = None) -> AgentState:
+    """Execute one full pass.
+
+    When *targeted_query* is set, the planner uses that single search phrase
+    instead of LLM-generated queries (admin targeted search, Task 3).
+    """
     from agent.migrations_runner import run_pending_migrations
 
     run_pending_migrations()
     graph = build_graph()
-    result = graph.invoke({"dry_run": dry_run})
+    initial: AgentState = {"dry_run": dry_run}
+    cleaned = (targeted_query or "").strip()
+    if cleaned:
+        initial["targeted_query"] = cleaned
+    result = graph.invoke(initial)
     return result

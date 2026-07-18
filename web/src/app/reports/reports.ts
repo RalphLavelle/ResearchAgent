@@ -40,6 +40,15 @@ interface RunOnceResponse {
   message?: string;
 }
 
+/** Response from ``POST /api/admin/dedupe-events``. */
+interface DedupeResponse {
+  ok: boolean;
+  message?: string;
+  removed_deterministic?: number;
+  removed_semantic?: number;
+  total_removed?: number;
+}
+
 /** UI state for the manual pipeline trigger on this page. */
 type RunTriggerStatus = 'idle' | 'running' | 'completed' | 'error';
 
@@ -59,6 +68,9 @@ export class ReportsComponent {
   /** Manual pipeline run triggered from the admin reports page. */
   protected readonly runStatus = signal<RunTriggerStatus>('idle');
   protected readonly runMessage = signal<string | null>(null);
+  /** Manual dedupe remediation — re-scan MongoDB without a full pipeline run. */
+  protected readonly dedupeStatus = signal<RunTriggerStatus>('idle');
+  protected readonly dedupeMessage = signal<string | null>(null);
 
   readonly #http = inject(HttpClient);
   readonly #destroyRef = inject(DestroyRef);
@@ -162,7 +174,12 @@ export class ReportsComponent {
 
   /** True while the pipeline run button should stay disabled. */
   protected isRunBusy(): boolean {
-    return this.runStatus() === 'running';
+    return this.runStatus() === 'running' || this.dedupeStatus() === 'running';
+  }
+
+  /** True while the dedupe button should stay disabled. */
+  protected isDedupeBusy(): boolean {
+    return this.dedupeStatus() === 'running' || this.runStatus() === 'running';
   }
 
   /** Start a single research pipeline pass via the admin API. */
@@ -194,6 +211,39 @@ export class ReportsComponent {
           this.runStatus.set('error');
           this.runMessage.set(
             String(err?.error?.error ?? 'Could not run the research pipeline.')
+          );
+        },
+      });
+  }
+
+  /** Re-scan the events collection for duplicates (deterministic + LLM when available). */
+  protected triggerDedupe(): void {
+    if (this.isDedupeBusy()) {
+      return;
+    }
+
+    const password = this.#adminAuth.getStoredPassword();
+    if (!password) {
+      this.dedupeStatus.set('error');
+      this.dedupeMessage.set('Admin session expired — sign in again from Admin.');
+      return;
+    }
+
+    this.dedupeStatus.set('running');
+    this.dedupeMessage.set(null);
+
+    this.#http
+      .post<DedupeResponse>('/api/admin/dedupe-events', { password })
+      .pipe(takeUntilDestroyed(this.#destroyRef))
+      .subscribe({
+        next: (data) => {
+          this.dedupeStatus.set('completed');
+          this.dedupeMessage.set(data.message?.trim() || 'Dedupe scan completed.');
+        },
+        error: (err) => {
+          this.dedupeStatus.set('error');
+          this.dedupeMessage.set(
+            String(err?.error?.error ?? 'Could not run duplicate removal.')
           );
         },
       });

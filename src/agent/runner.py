@@ -50,9 +50,16 @@ def _unwrap_llm_invocation_error(exc: BaseException) -> LLMInvocationError | Non
     return None
 
 
-def execute_run_once(*, dry_run: bool = False) -> AgentState:
+def execute_run_once(
+    *,
+    dry_run: bool = False,
+    targeted_query: str | None = None,
+) -> AgentState:
     """
     Run one research + save pass — same behaviour as ``python -m agent run-once``.
+
+    When *targeted_query* is provided, only that DuckDuckGo phrase is searched
+    (admin targeted search); the rest of the pipeline is unchanged.
 
     Raises ``LLMNotReadyError`` when the LLM backend is not configured or reachable.
     Raises ``LLMInvocationError`` when the first LLM call fails (e.g. model not found).
@@ -63,7 +70,7 @@ def execute_run_once(*, dry_run: bool = False) -> AgentState:
             "LLM backend is not reachable or misconfigured — fix .env then retry."
         )
     try:
-        return run_once(dry_run=dry_run)
+        return run_once(dry_run=dry_run, targeted_query=targeted_query)
     except Exception as exc:
         # Already logged in the graph node that hit the bad model / API response.
         llm_exc = _unwrap_llm_invocation_error(exc)

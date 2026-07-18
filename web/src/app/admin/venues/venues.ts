@@ -28,6 +28,23 @@ export interface VenueRecord {
   events_link?: string;
   /** ISO date of the latest event seen for this venue. */
   last_event_date?: string;
+  /** How many events in MongoDB reference this venue id. */
+  linkedEventCount?: number;
+}
+
+/** One linked event from ``GET /api/<db>/venues/<id>/events``. */
+export interface VenueLinkedEvent {
+  id: string;
+  eventName: string;
+  date: string;
+  url: string;
+}
+
+/** Response from the venue events drill-down endpoint. */
+interface VenueEventsPayload {
+  events: VenueLinkedEvent[];
+  venueId: string;
+  total: number;
 }
 
 /** Root JSON shape from the venues API. */
@@ -57,6 +74,12 @@ export class AdminVenuesComponent {
   protected readonly actionMessage = signal<string | null>(null);
   protected readonly editVenue = signal<VenueRecord | null>(null);
   protected readonly deleteVenue = signal<VenueRecord | null>(null);
+  /** Venue id whose linked-events row is open (one at a time). */
+  protected readonly expandedVenueId = signal<string | null>(null);
+  /** Cached linked events per venue id after the first expand fetch. */
+  protected readonly venueEventsById = signal<Record<string, VenueLinkedEvent[]>>({});
+  protected readonly venueEventsLoadingId = signal<string | null>(null);
+  protected readonly venueEventsError = signal<string | null>(null);
 
   protected readonly pageSize = PAGE_SIZE;
 
@@ -107,6 +130,42 @@ export class AdminVenuesComponent {
     }
   }
 
+  /** Linked event count for the table button (defaults to 0). */
+  protected eventCount(venue: VenueRecord): number {
+    return venue.linkedEventCount ?? 0;
+  }
+
+  protected isVenueExpanded(venueId: string): boolean {
+    return this.expandedVenueId() === venueId;
+  }
+
+  protected isVenueEventsLoading(venueId: string): boolean {
+    return this.venueEventsLoadingId() === venueId;
+  }
+
+  protected linkedEventsFor(venueId: string): VenueLinkedEvent[] | null {
+    const cached = this.venueEventsById()[venueId];
+    return cached ?? null;
+  }
+
+  /** Expand or collapse the linked-events row for one venue. */
+  protected toggleVenueEvents(venue: VenueRecord): void {
+    if (this.isVenueExpanded(venue.id)) {
+      this.expandedVenueId.set(null);
+      this.venueEventsError.set(null);
+      return;
+    }
+
+    this.expandedVenueId.set(venue.id);
+    this.venueEventsError.set(null);
+
+    if (this.venueEventsById()[venue.id]) {
+      return;
+    }
+
+    this.#loadVenueEvents(venue.id);
+  }
+
   protected openEdit(venue: VenueRecord): void {
     this.actionMessage.set(null);
     this.editVenue.set(venue);
@@ -146,6 +205,7 @@ export class AdminVenuesComponent {
     if (!this.hasPrevious()) {
       return;
     }
+    this.#clearVenueEventsPanel();
     this.skip.update((current) => Math.max(0, current - PAGE_SIZE));
   }
 
@@ -153,11 +213,42 @@ export class AdminVenuesComponent {
     if (!this.hasNext()) {
       return;
     }
+    this.#clearVenueEventsPanel();
     this.skip.update((current) => current + PAGE_SIZE);
   }
 
+  #clearVenueEventsPanel(): void {
+    this.expandedVenueId.set(null);
+    this.venueEventsError.set(null);
+  }
+
   #refreshList(): void {
+    this.#clearVenueEventsPanel();
+    this.venueEventsById.set({});
     this.#reloadTick.update((count) => count + 1);
+  }
+
+  #loadVenueEvents(venueId: string): void {
+    const db = this.topic.active().db;
+    this.venueEventsLoadingId.set(venueId);
+    const url = `/api/${db}/venues/${venueId}/events?t=${Date.now()}`;
+
+    this.#http
+      .get<VenueEventsPayload>(url)
+      .pipe(takeUntilDestroyed(this.#destroyRef))
+      .subscribe({
+        next: (data) => {
+          this.venueEventsById.update((current) => ({
+            ...current,
+            [venueId]: data.events ?? [],
+          }));
+          this.venueEventsLoadingId.set(null);
+        },
+        error: () => {
+          this.venueEventsLoadingId.set(null);
+          this.venueEventsError.set('Could not load linked events for this venue.');
+        },
+      });
   }
 
   #loadVenues(db: string, skip: number): void {

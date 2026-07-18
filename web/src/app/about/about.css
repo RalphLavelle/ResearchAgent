@@ -47,31 +47,14 @@
   color: var(--color-burnt-orange);
 }
 
-.about__overview {
-  margin-bottom: var(--space-7);
-  padding: var(--space-5);
-  border-radius: var(--radius-lg);
-  background: var(--panel-surface);
-  border: var(--border-thin) solid var(--panel-border);
-  box-shadow: var(--shadow-panel);
+.about__pitch {
+  margin-bottom: var(--space-5);
 }
 
-.about__overview-lead,
-.about__steps-lead {
+.about__pitch-lead {
   margin: 0 0 var(--space-4);
   line-height: 1.55;
   color: var(--color-muted);
-}
-
-.about__ai-tag {
-  display: inline-block;
-  padding: 0.1rem 0.45rem;
-  border-radius: var(--radius-xs);
-  background: var(--color-burnt-orange);
-  color: var(--color-cream);
-  font-size: var(--text-xs);
-  font-weight: 700;
-  vertical-align: middle;
 }
 
 .about__figure {
@@ -88,13 +71,6 @@
   height: auto;
   border-radius: var(--radius-md);
   border: var(--border-thin) solid rgba(31, 27, 24, 0.12);
-}
-
-.about__figcaption {
-  margin-top: var(--space-3);
-  font-size: var(--text-sm);
-  color: var(--color-muted);
-  text-align: center;
 }
 
 .about__steps {
@@ -232,19 +208,20 @@
   margin-top: var(--space-4);
 }
 
-.about__myth {
+.about__outro {
   margin-bottom: var(--space-6);
   padding: var(--space-5);
   border-radius: var(--radius-lg);
   background: linear-gradient(
     120deg,
-    rgba(45, 127, 122, 0.12) 0%,
-    rgba(219, 169, 40, 0.1) 100%
+    rgba(217, 108, 45, 0.1) 0%,
+    rgba(219, 169, 40, 0.12) 50%,
+    rgba(45, 127, 122, 0.1) 100%
   );
-  border: var(--border-thin) solid rgba(45, 127, 122, 0.25);
+  border: var(--border-thin) solid rgba(217, 108, 45, 0.22);
 }
 
-.about__myth p {
+.about__outro p {
   margin: 0;
   line-height: 1.6;
   color: var(--color-text);

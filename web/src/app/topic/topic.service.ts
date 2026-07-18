@@ -10,6 +10,10 @@ export interface TopicEntry {
   background_image: string;
   site_title: string;
   site_emoji: string;
+  /** Short human headline used as the page <h1> (SEO). */
+  tagline?: string;
+  /** Sentence used as the meta description (SEO). */
+  description?: string;
 }
 
 /** Root shape of ``topics/topics.json``. */
@@ -47,7 +51,10 @@ export class TopicService {
         db: 'bgc',
         background_image: '/topics/live-music-brisbane-gold-coast/assets/bg.jpg',
         site_title: 'Gigsorooni',
-        site_emoji: '🎵'
+        site_emoji: '🎵',
+        tagline: 'Live music gigs in Brisbane & the Gold Coast',
+        description:
+          'Gigsorooni finds upcoming live music gigs across Brisbane and the Gold Coast — updated daily.'
       };
     }
     return reg.topics[reg.active];

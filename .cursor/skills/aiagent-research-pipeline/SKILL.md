@@ -48,6 +48,8 @@ Apply changes here when tasks mention duplicates or Sources:
 4. **Past events** — removed on each merge (`local_today()` — uses display timezone, not UTC). **No future pruning** (Task 7): events any distance in the future are stored. The one-month display window is applied only at read time by the API (`event_window.api_window_iso_bounds`, default `API_EVENT_WINDOW_DAYS=30`) in `event_store.load_events_api_payload`.
 5. **Poster URL self-heal (Task 13)** — every dedupe branch (URL re-ingest, exact match, partial match) calls `_maybe_upgrade_poster`, which uses `enrich.poster_quality_score` to replace stale/decorative existing Poster URLs with fresher event-specific ones from the new ingest. Never downgrades. Tiers: empty (-1) < decoration logo/ad/banner (0) < generic (1) < filename keywords overlap the act name (2+).
 
+**Admin remediation (Task 18):** `merge_and_write` compares new ingests against pre-existing rows but does not re-scan existing-only duplicates. `run_llm_semantic_dedupe` scans all rows but only at the end of each pipeline run when the LLM is up. `run_deterministic_dedupe` + `run_dedupe_remediation` in `local_output.py` re-scan the full `events` collection on demand; `POST /api/admin/dedupe-events` exposes this from **Admin → Reports**. See `docs/features/dedupe.md`.
+
 Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Summary, Added, Event ID`. Loader tolerates old files missing **Sources** only.
 
 ## LLM integration
@@ -64,6 +66,7 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 ## Outputs
 
 - **Angular API**: `api.py` serves `GET /api/<db>/events`, `GET /api/<db>/reports`, and `GET /api/<db>/images/<id>`.
+- **SEO**: `api.py` also serves `GET /robots.txt` and `GET /sitemap.xml` (built by `src/agent/seo.py` from the display-window events; nginx proxies the site-root paths). The Angular `SeoService` (`web/src/app/seo/seo.service.ts`) owns canonical/meta/robots tags and schema.org MusicEvent JSON-LD; events carry `isoDate` in the API payload for that markup. Topic `tagline`/`description` in `topics.json` drive the h1 and meta description.
 
 ## Config/env (do not overwrite `.env` without asking)
 

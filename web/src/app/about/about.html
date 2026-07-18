@@ -1,51 +1,33 @@
 <article class="about">
   <header class="about__hero">
-    <h1 class="about__title">How this site finds gigs 🎸</h1>
+    <h1 class="about__title">The robots behind the gigs 🤖🎸</h1>
     <p class="about__intro">
-      Behind the event list is a <strong>research agent</strong> — a pipeline of steps that runs about
-      every hour. It searches the web, reads venue pages, and saves curated gigs to a database. Only
-      <strong>two</strong> of those steps use a large language model (LLM, the same family of AI as
-      ChatGPT). The rest is ordinary code: crawlers, deduplication rules, and image caching.
+      Gigsorooni does not pay a room of interns to refresh venue websites. It runs a research agent
+      about every hour — and a <strong>small crew of large language models</strong> (the same family
+      of AI as ChatGPT) does the creative reading and thinking. Everything else is very sensible code
+      we are <em>not</em> going to describe here, because you have better things to do.
     </p>
   </header>
 
   <app-spotlight-carousel />
 
-  <section class="about__overview" aria-labelledby="about-overview-heading">
-    <h2 id="about-overview-heading" class="about__section-title">
-      <span aria-hidden="true">🗺️</span>
-      The pipeline at a glance
+  <section class="about__pitch" aria-labelledby="about-pitch-heading">
+    <h2 id="about-pitch-heading" class="about__section-title">
+      <span aria-hidden="true">🎪</span>
+      Meet the AI shift
     </h2>
-    <p class="about__overview-lead">
-      Seven steps, left to right. Orange <span class="about__ai-tag">AI</span> badges mark where an
-      LLM is called.
+    <p class="about__pitch-lead">
+      Four LLM jobs keep the listings fresh and filterable. Tap a card to hear how each one earns
+      its electricity bill.
     </p>
-    <figure class="about__figure">
-      <img
-        ngSrc="/about/pipeline-overview.png"
-        width="920"
-        height="280"
-        alt="Flow diagram: Plan, Search, Crawl, Curate, Enrich, and Save steps; Plan and Curate use AI"
-        class="about__diagram"
-      />
-      <figcaption class="about__figcaption">
-        Saved events land in MongoDB — the same data this website lists.
-      </figcaption>
-    </figure>
   </section>
 
   <section class="about__steps" aria-labelledby="about-steps-heading">
-    <h2 id="about-steps-heading" class="about__section-title">
-      <span aria-hidden="true">🎛️</span>
-      Step by step
-    </h2>
-    <p class="about__steps-lead">
-      Tap a row to expand it. Panels start collapsed so you can skim the summaries first.
-    </p>
+    <h2 id="about-steps-heading" class="sr-only">AI pipeline steps</h2>
 
     <div class="about__accordion">
       @for (step of steps; track step.id) {
-        <details class="step-panel" [class.step-panel--llm]="step.usesLlm">
+        <details class="step-panel step-panel--llm">
           <summary class="step-panel__summary">
             <span class="step-panel__order" aria-hidden="true">{{ step.order }}</span>
             <span class="step-panel__emoji" aria-hidden="true">{{ step.emoji }}</span>
@@ -53,12 +35,7 @@
               <span class="step-panel__title">{{ step.title }}</span>
               <span class="step-panel__summary-text">{{ step.summary }}</span>
             </span>
-            <span
-              class="step-panel__badge"
-              [class.step-panel__badge--llm]="step.usesLlm"
-            >
-              {{ stepBadge(step) }}
-            </span>
+            <span class="step-panel__badge step-panel__badge--llm">On shift</span>
             <span class="step-panel__chevron" aria-hidden="true"></span>
           </summary>
 
@@ -84,15 +61,15 @@
     </div>
   </section>
 
-  <section class="about__myth" aria-labelledby="about-myth-heading">
-    <h2 id="about-myth-heading" class="about__section-title">
-      <span aria-hidden="true">💡</span>
-      What AI does <em>not</em> do here
+  <section class="about__outro" aria-labelledby="about-outro-heading">
+    <h2 id="about-outro-heading" class="about__section-title">
+      <span aria-hidden="true">🌟</span>
+      The bit you use
     </h2>
     <p>
-      Duplicate gigs (“Powderfinger at the Tivoli” on two different sites) are merged by
-      <strong>deterministic rules</strong>, not by asking an LLM. Crawling, poster downloads, and
-      saving to the database are all plain code too — fast, repeatable, and easy to test.
+      The home-page <strong>search bar</strong> is fast database text search — no LLM, no waiting
+      for a model to finish its monologue. The robots above do the background shift work; you just
+      show up for the gigs.
     </p>
   </section>
 

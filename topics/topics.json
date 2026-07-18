@@ -6,14 +6,18 @@
       "db": "bgc",
       "background_image": "/topics/live-music-brisbane-gold-coast/assets/bg.jpg",
       "site_title": "Gigsorooni",
-      "site_emoji": "🎵"
+      "site_emoji": "🎵",
+      "tagline": "Live music gigs in Brisbane & the Gold Coast",
+      "description": "Gigsorooni finds upcoming live music gigs across Brisbane and the Gold Coast — rock, jazz, folk, electronic, open mics and more, updated daily."
     },
     "galway-live-music-events": {
       "name": "Galway Live Music Events",
       "db": "galway-music",
       "background_image": "/topics/galway-live-music-events/assets/bg.jpg",
       "site_title": "Galway live music",
-      "site_emoji": "🎻"
+      "site_emoji": "🎻",
+      "tagline": "Live music in Galway City",
+      "description": "Upcoming live music in Galway City — trad sessions, rock, folk, jazz and more, gathered from venues around Galway and updated daily."
     }
   }
 }

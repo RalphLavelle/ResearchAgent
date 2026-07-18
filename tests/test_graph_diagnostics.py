@@ -26,6 +26,24 @@ def test_node_plan_records_llm_unavailable(monkeypatch: pytest.MonkeyPatch) -> N
     assert "LLM backend" in out["pipeline_diagnostics"]["planner"]
 
 
+def test_node_plan_uses_targeted_admin_query_without_llm(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Admin targeted search skips planner LLM and venue templates."""
+    monkeypatch.setattr("agent.graph_nodes.config.llm_inference_enabled", lambda: False)
+    monkeypatch.setattr(
+        "agent.graph_nodes.load_targeted_venue_queries",
+        lambda *_a, **_k: ["Should not be used"],
+    )
+
+    out = node_plan({"targeted_query": "  Powderfinger Brisbane 2026  "})
+
+    assert out["queries"] == ["Powderfinger Brisbane 2026"]
+    assert out["pipeline_diagnostics"]["planner"] == (
+        "Targeted admin search (single query): Powderfinger Brisbane 2026"
+    )
+
+
 def test_node_plan_aborts_when_llm_call_fails(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

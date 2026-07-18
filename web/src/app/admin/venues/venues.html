@@ -47,6 +47,7 @@
               <th scope="col">Aliases</th>
               <th scope="col">What's On</th>
               <th scope="col">Last event</th>
+              <th scope="col">Events</th>
               <th scope="col">Actions</th>
             </tr>
           </thead>
@@ -73,6 +74,24 @@
                   }
                 </td>
                 <td class="venues-cell venues-cell--date">{{ venue.last_event_date || '—' }}</td>
+                <td class="venues-cell venues-cell--events">
+                  <button
+                    type="button"
+                    class="events-toggle"
+                    [class.events-toggle--expanded]="isVenueExpanded(venue.id)"
+                    [attr.aria-expanded]="isVenueExpanded(venue.id)"
+                    [attr.aria-controls]="'venue-events-' + venue.id"
+                    (click)="toggleVenueEvents(venue)"
+                  >
+                    @if (isVenueEventsLoading(venue.id)) {
+                      <span class="events-toggle__spinner" aria-hidden="true"></span>
+                      <span class="sr-only">Loading events</span>
+                    } @else {
+                      <span aria-hidden="true">🎵</span>
+                      {{ eventCount(venue) }}
+                    }
+                  </button>
+                </td>
                 <td class="venues-cell venues-cell--actions">
                   <button type="button" class="row-btn" (click)="openEdit(venue)">
                     Edit
@@ -82,6 +101,45 @@
                   </button>
                 </td>
               </tr>
+              @if (isVenueExpanded(venue.id)) {
+                <tr class="venue-events-row" [id]="'venue-events-' + venue.id">
+                  <td class="venue-events-row__cell" colspan="7">
+                    <div class="venue-events-panel" role="region" [attr.aria-label]="'Events at ' + venue.name">
+                      @if (isVenueEventsLoading(venue.id)) {
+                        <p class="venue-events-panel__status" role="status">Loading linked events…</p>
+                      } @else if (venueEventsError(); as err) {
+                        <p class="venue-events-panel__status venue-events-panel__status--error" role="alert">
+                          {{ err }}
+                        </p>
+                      } @else if (linkedEventsFor(venue.id); as events) {
+                        @if (events.length === 0) {
+                          <p class="venue-events-panel__empty">No linked events for this venue.</p>
+                        } @else {
+                          <ul class="venue-events-list">
+                            @for (event of events; track event.id) {
+                              <li class="venue-events-list__item">
+                                <span class="venue-events-list__date">{{ event.date || '—' }}</span>
+                                <span class="venue-events-list__name">{{ event.eventName }}</span>
+                                @if (event.url) {
+                                  <a
+                                    class="venue-events-list__link"
+                                    [href]="event.url"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    View listing
+                                    <span aria-hidden="true">↗</span>
+                                  </a>
+                                }
+                              </li>
+                            }
+                          </ul>
+                        }
+                      }
+                    </div>
+                  </td>
+                </tr>
+              }
             }
           </tbody>
         </table>

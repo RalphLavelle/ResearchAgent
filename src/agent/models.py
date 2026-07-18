@@ -72,6 +72,8 @@ class AgentState(TypedDict, total=False):
     dry_run: bool
     skip_doc_rewrite: bool
     pipeline_diagnostics: dict[str, str]
+    # When set, the planner step uses this single query only (admin targeted search).
+    targeted_query: str
     # Temperature used for the planner LLM call this run (randomised each pass).
     planner_temperature: float
 

@@ -270,21 +270,22 @@ def load_spotlight_api_payload(
     """Build ``GET /api/<db>/events/spotlight`` — only events with event-specific posters.
 
     Candidates must have ``image_id`` (poster cached in MongoDB), a valid
-    ``http(s)`` listing URL, and a date on or after ``local_today()``. Rows with
+    ``http(s)`` listing URL, and a date within the API display window
+    (``API_EVENT_WINDOW_DAYS``, same as ``GET /api/<db>/events``). Rows with
     a stored ``poster_quality`` below the spotlight minimum are excluded at query
     time; legacy rows missing ``poster_quality`` are scored from the poster URL
     (and backfilled) before selection. Up to *limit* rows are chosen at random.
     """
     from agent import venue_store
     from agent.enrich import SPOTLIGHT_MIN_POSTER_QUALITY
-    from agent.event_window import local_today
+    from agent.event_window import api_window_iso_bounds
     from agent.image_cache import api_image_url
     from agent.json_output import build_events_payload_from_rows
     from agent.mongodb import ensure_collection_indexes
 
     ensure_collection_indexes(db_name)
     cap = max(1, min(4, int(limit)))
-    today_iso = local_today().isoformat()
+    start_iso, end_iso = api_window_iso_bounds()
     skip = exclude_ids or set()
 
     query: dict[str, Any] = {
@@ -294,7 +295,7 @@ def load_spotlight_api_payload(
             {"poster_quality": {"$exists": False}},
         ],
         "url": {"$regex": r"^https?://", "$options": "i"},
-        "date": {"$gte": today_iso},
+        "date": {"$gte": start_iso, "$lte": end_iso},
     }
     if skip:
         query["_id"] = {"$nin": list(skip)}

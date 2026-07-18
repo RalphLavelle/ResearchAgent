@@ -11,6 +11,8 @@ import {
 import { NgOptimizedImage } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
+import { SeoService } from './seo/seo.service';
+
 @Component({
   selector: 'app-root',
   imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage],
@@ -27,6 +29,8 @@ export class App {
   protected readonly navOpen = signal(false);
 
   private readonly document = inject(DOCUMENT);
+  // Instantiated here so canonical/robots/description tracking starts with the first navigation.
+  private readonly seo = inject(SeoService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
   private readonly firstMobileLink = viewChild<ElementRef<HTMLAnchorElement>>('firstMobileLink');
 

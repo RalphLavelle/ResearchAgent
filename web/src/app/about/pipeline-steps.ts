@@ -1,13 +1,9 @@
-/** One step in the LangGraph research pipeline — used by the about page accordion. */
+/** One AI step on the About page — LLM-only, end-user friendly. */
 export interface PipelineStep {
-  /** Stable id for aria-controls and tracking. */
   id: string;
-  /** Display order (1-based). */
   order: number;
   emoji: string;
   title: string;
-  /** True when this step invokes an LLM. */
-  usesLlm: boolean;
   /** Short line shown in the collapsed panel header. */
   summary: string;
   /** Longer explanation paragraphs shown when expanded. */
@@ -18,100 +14,62 @@ export interface PipelineStep {
 }
 
 /**
- * Pipeline steps in run order.
- * Only **plan** and **curate** call an LLM; everything else is deterministic code.
+ * The parts of Gigsorooni that actually talk to a large language model.
+ * Everything else (crawlers, dedupe rules, poster downloads) stays off this page.
  */
-export const PIPELINE_STEPS: readonly PipelineStep[] = [
+export const AI_PIPELINE_STEPS: readonly PipelineStep[] = [
   {
     id: 'plan',
     order: 1,
     emoji: '🧠',
-    title: 'Plan — invent search queries',
-    usesLlm: true,
+    title: 'The planner — search-query brainstormer',
     summary:
-      'An LLM reads topic prompts and recent searches, then returns fresh DuckDuckGo query strings.',
+      'Every hour or so, an LLM invents fresh DuckDuckGo searches so we don’t keep asking the internet the same question.',
     details: [
-      'Every hour or so the agent wakes up and asks a planner LLM: “What should we search for next?” The model knows the topic (for example live music around Brisbane and the Gold Coast) and returns varied queries — gigs, concerts, “what’s on in Fortitude Valley”, and similar angles.',
-      'The planner also sees recent searches from past runs so it does not repeat itself. A handful of targeted venue queries (“What’s on in {venue} in {location}”) are merged in ahead of the LLM’s list.',
-      'If the LLM is unavailable, the run can still continue when targeted venue queries exist; otherwise the pipeline stops early with a diagnostic note.',
+      'Picture a music nerd with a whiteboard and too much coffee. That’s the planner LLM. It reads the topic (live music around Brisbane and the Gold Coast), peeks at what we searched last week, and returns a new batch of queries — gigs, concerts, “what’s on in Fortitude Valley”, and other angles we might not have tried yet.',
+      'It also gets a little help from a shortlist of venue-specific questions (“What’s on at {venue}?”) so favourite rooms don’t get forgotten. The planner runs at a random temperature each time — a deliberate sprinkle of chaos so the searches don’t get stale.',
+      'No planner, no fresh angles. The rest of the pipeline would be stuck re-reading the same corners of the web.',
     ],
     diagramSrc: '/about/step-planner.png',
     diagramAlt: 'Diagram: topic prompts flow into the planner LLM and out as search query strings',
   },
   {
-    id: 'search',
-    order: 2,
-    emoji: '🔍',
-    title: 'Search — DuckDuckGo snippets',
-    usesLlm: false,
-    summary: 'Plain code runs each planned query through DuckDuckGo and collects raw text snippets.',
-    details: [
-      'No AI here — just LangChain’s DuckDuckGo tool fetching result snippets for every query the planner produced.',
-      'The combined blob of text is passed to later steps. Search does not need an API key.',
-    ],
-  },
-  {
-    id: 'crawl',
-    order: 3,
-    emoji: '🕷️',
-    title: 'Crawl — follow promising venue pages',
-    usesLlm: false,
-    summary:
-      'Deterministic crawlers fetch listing pages — especially venue “What’s On” URLs — and append HTML text.',
-    details: [
-      'Search snippets alone often miss gigs buried on paginated venue calendars. The crawl step follows internal links with a bounded page budget, prioritising ticket and event URLs over menus and shop pages.',
-      'Known venues discovered in search results get their “What’s On” link mined first. Seeds are crawled round-robin so no single site hogs the whole budget.',
-    ],
-  },
-  {
     id: 'curate',
-    order: 4,
+    order: 2,
     emoji: '✨',
-    title: 'Curate — extract structured gigs',
-    usesLlm: true,
+    title: 'The curator — gig archaeologist',
     summary:
-      'The curator LLM reads messy search + crawl text and returns structured rows: act, venue, date, poster hints.',
+      'Websites are messy. This LLM digs through the rubble and hands back tidy rows: act, venue, date, poster hints.',
     details: [
-      'Websites are not built for machines — layouts change, dates sit in prose, and one page may list dozens of gigs. The curator LLM is good at turning that noise into a structured list the app can store.',
-      'It may also pick a poster image per event when inline [IMG …] markers are present in the crawled text. After the LLM returns, plain code filters out past dates, sorts soonest-first, and dedupes identical rows.',
+      'Venue pages were built for humans scrolling on phones, not for robots with clipboards. Dates hide in paragraphs. One URL might list twelve gigs and a pie menu. The curator LLM is the patient friend who actually reads all of it and returns structured events the site can store.',
+      'When the crawled text includes image markers, it can nominate a poster per gig — so you might see a real flyer instead of the venue’s logo. (Plain code handles the boring sorting and date filtering afterwards; you’re spared the lecture.)',
+      'This is the heaviest lift in the AI roster: turning noisy web text into the list you scroll on the home page.',
     ],
     diagramSrc: '/about/step-curator.png',
     diagramAlt: 'Diagram: messy web text flows through the curator LLM into structured event rows',
   },
   {
-    id: 'enrich',
-    order: 5,
-    emoji: '🖼️',
-    title: 'Enrich — poster images',
-    usesLlm: false,
-    summary: 'Code fills missing thumbnails using page Open Graph images and filename scoring.',
-    details: [
-      'When the curator leaves a poster slot blank, enrich fetches each event page’s og:image. A scoring pass prefers filenames and alt text that match the act name.',
-      'Posters are downloaded once per upstream URL and cached in MongoDB — many events can share one cached image.',
-    ],
-  },
-  {
-    id: 'fingerprint',
-    order: 6,
-    emoji: '🔑',
-    title: 'Fingerprint — detect changes',
-    usesLlm: false,
-    summary: 'A hash of the curated list is compared to the last run so unchanged runs skip heavy writes.',
-    details: [
-      'This quick checksum step avoids rewriting MongoDB when nothing new was found. The snapshot lives on disk under data/<topic_id>/snapshot.json.',
-    ],
-  },
-  {
-    id: 'output',
-    order: 7,
-    emoji: '💾',
-    title: 'Save — dedupe and publish',
-    usesLlm: false,
+    id: 'tags',
+    order: 3,
+    emoji: '🏷️',
+    title: 'The tagger — genre sticker machine',
     summary:
-      'Deterministic merge rules dedupe gigs, cache posters, and write events plus a run report to MongoDB.',
+      'New gigs get up to three filter tags (jazz, rock, free, …) so you can tap a pill instead of reading every line.',
     details: [
-      'Duplicate detection is **not** done by an LLM. Code merges rows when the same act and date appear on different sites, appends extra URLs to Sources, and drops past events.',
-      'The Angular app reads the result through GET /api/<db>/events. Admin reports show searches, crawled URLs, and merge stats for each run.',
+      'After events land in the database, a tagging LLM looks at untagged rows and picks short labels from tags we already use — no inventing “prog-steampunk” unless we’ve actually seen it before.',
+      'That’s why the tag bar on the home page stays useful: it reflects real genres and vibes from the listings, not whatever the model felt like hallucinating that Tuesday.',
+    ],
+  },
+  {
+    id: 'dedupe',
+    order: 4,
+    emoji: '🕵️',
+    title: 'The duplicate referee',
+    summary:
+      'When two listings describe the same gig with different wording, an LLM clusters them and one row gets sent to the bench.',
+    details: [
+      '“Dead of Winter @ Mo’s” and “Dead of Winter Festival Band Comp @ Burleigh” might be the same night out. Obvious duplicates are merged by plain rules; sneaky look-alikes get a second opinion from an LLM that reads same-day events side by side.',
+      'You can also trigger this pass from Admin → Reports if duplicates piled up while the model was on a coffee break.',
     ],
   },
 ];

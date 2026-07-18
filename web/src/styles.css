@@ -8,12 +8,15 @@
 
 html {
   overflow-x: clip;
+  /* Match logotype.webp baked-in cream before Angular boots and on overscroll. */
+  background-color: var(--page-bg);
 }
 
 body {
   margin: 0;
   padding: 0;
   overflow-x: clip;
+  background-color: var(--page-bg);
 }
 /* Set on <body> from App when the mobile nav overlay is open (scroll can’t escape under the sheet). */
 body.app-mobile-nav-open {

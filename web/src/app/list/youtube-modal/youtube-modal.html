@@ -1,0 +1,46 @@
+<div class="modal-backdrop" (click)="onBackdropClick($event)">
+  <div
+    class="modal-panel youtube-panel"
+    role="dialog"
+    aria-modal="true"
+    [attr.aria-labelledby]="embedUrl() ? 'youtube-modal-title' : null"
+    [attr.aria-describedby]="error() ? 'youtube-modal-error' : null"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <h2 id="youtube-modal-title" class="modal-title">
+        @if (videoTitle()) {
+          {{ videoTitle() }}
+        } @else {
+          YouTube 🎬
+        }
+      </h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">
+        ×
+      </button>
+    </header>
+
+    @if (loading()) {
+      <p class="youtube-status" role="status">Finding a clip on YouTube…</p>
+    } @else if (error(); as errMsg) {
+      <p id="youtube-modal-error" class="modal-status modal-status--error" role="alert">
+        {{ errMsg }}
+      </p>
+      <footer class="modal-actions modal-actions--solo">
+        <button type="button" class="modal-btn modal-btn--primary" (click)="closed.emit()">
+          Close
+        </button>
+      </footer>
+    } @else if (embedUrl(); as src) {
+      <div class="youtube-frame-wrap">
+        <iframe
+          class="youtube-frame"
+          [src]="src"
+          [title]="iframeTitle()"
+          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+          allowfullscreen
+        ></iframe>
+      </div>
+    }
+  </div>
+</div>

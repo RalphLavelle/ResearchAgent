@@ -99,6 +99,18 @@ class MergeStats:
 
 
 @dataclass(frozen=True)
+class DedupeRemediationResult:
+    """Counts from an admin-triggered full-database dedupe pass (Task 18)."""
+
+    removed_deterministic: int
+    removed_semantic: int
+
+    @property
+    def total_removed(self) -> int:
+        return self.removed_deterministic + self.removed_semantic
+
+
+@dataclass(frozen=True)
 class MergeAndWriteResult:
     """Result of ``merge_and_write`` that preserves legacy tuple unpacking."""
 
@@ -517,6 +529,118 @@ def _merge_cluster_rows(pairs: list[tuple[str, list]]) -> tuple[str, list]:
                 _add_source(merged, u2)
 
     return primary_uk, merged
+
+
+def _merge_duplicate_keys(existing: dict[str, list], keys: list[str]) -> tuple[str, int]:
+    """Collapse *keys* into one row; return the kept key and how many were removed."""
+    pairs = [(k, existing[k]) for k in keys if k in existing]
+    if len(pairs) < 2:
+        return keys[0], 0
+    primary_uk, merged = _merge_cluster_rows(pairs)
+    removed = 0
+    for k, _ in pairs:
+        if k != primary_uk:
+            del existing[k]
+            removed += 1
+    existing[primary_uk] = merged
+    return primary_uk, removed
+
+
+def run_deterministic_dedupe(db_name: str | None = None) -> int:
+    """Re-scan every row in the events collection for deterministic duplicates.
+
+    Unlike ``merge_and_write``, this compares **existing** rows against each
+    other — useful when duplicates crept in while the LLM semantic pass was
+    skipped or before dedupe rules were tightened.
+
+    Applies the same rules as merge:
+    - exact normalized act + same date (venue ignored)
+    - partial act names on the same venue + date
+
+    Returns the number of rows removed (not counting kept rows).
+    """
+    name = db_name or active_db_name()
+    existing = _load_existing_rows(name)
+    if len(existing) < 2:
+        return 0
+
+    for row in existing.values():
+        if not _row_venue_id(row) and str(row[_IDX_VENUE] or "").strip():
+            _resolve_venue_for_row(name, row)
+
+    removed = 0
+
+    # Pass 1 — exact act+date groups.
+    by_dk: dict[tuple[str, date], list[str]] = {}
+    for row_key, row in existing.items():
+        dk = _dedup_key_from_row(row)
+        if dk:
+            by_dk.setdefault(dk, []).append(row_key)
+
+    for keys in by_dk.values():
+        if len(keys) < 2:
+            continue
+        _primary, n = _merge_duplicate_keys(existing, keys)
+        removed += n
+
+    # Pass 2 — partial act names on the same venue + date (repeat until stable).
+    changed = True
+    while changed:
+        changed = False
+        keys = list(existing.keys())
+        for i, key_a in enumerate(keys):
+            if key_a not in existing:
+                continue
+            row_a = existing[key_a]
+            act_a = str(row_a[_IDX_EVENT] or "")
+            date_a = _row_date(row_a)
+            venue_id_a = _row_venue_id(row_a)
+            venue_name_a = str(row_a[_IDX_VENUE] or "")
+            if not act_a or date_a is None:
+                continue
+
+            for key_b in keys[i + 1 :]:
+                if key_b not in existing:
+                    continue
+                row_b = existing[key_b]
+                if _row_date(row_b) != date_a:
+                    continue
+                if not _venues_match_for_dedup(row_b, venue_id_a, venue_name_a):
+                    continue
+                act_b = str(row_b[_IDX_EVENT] or "")
+                if not _acts_partially_match(act_a, act_b):
+                    continue
+                _primary, n = _merge_duplicate_keys(existing, [key_a, key_b])
+                removed += n
+                changed = True
+                break
+            if changed:
+                break
+
+    if removed:
+        _write_workbook(name, existing)
+        logger.info(
+            "Deterministic dedupe removed %d duplicate event row(s) from db=%s.",
+            removed,
+            name,
+        )
+    return removed
+
+
+def run_dedupe_remediation(db_name: str | None = None) -> DedupeRemediationResult:
+    """Admin remediation: deterministic full-DB scan, then LLM semantic pass when available."""
+    name = db_name or active_db_name()
+    removed_det = run_deterministic_dedupe(name)
+    removed_sem = 0
+    if config.llm_inference_enabled():
+        try:
+            removed_sem = run_llm_semantic_dedupe(name)
+        except Exception as exc:
+            logger.warning("LLM semantic dedupe skipped during remediation: %s", exc)
+    return DedupeRemediationResult(
+        removed_deterministic=removed_det,
+        removed_semantic=removed_sem,
+    )
 
 
 def run_llm_semantic_dedupe(db_name: str | None = None) -> int:

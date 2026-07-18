@@ -1,5 +1,7 @@
 <section class="events-panel" aria-labelledby="events-heading">
-  
+  <!-- Page h1 — crawlable topic headline; also the target of the section's aria-labelledby. -->
+  <h1 class="panel-title events-heading" id="events-heading">{{ headline() }}</h1>
+
   @if (loading()) {
     <p class="status-msg" role="status">Loading the latest gigs…</p>
   }
@@ -23,30 +25,33 @@
       />
       <form class="event-search" role="search" (submit)="onSearchSubmit($event)">
         <label class="event-search__label" for="event-search-input">
-          <span class="event-search__icon" aria-hidden="true">🤖</span>
-          <span class="sr-only">Search upcoming events with AI</span>
+          @if (searchLoading()) {
+            <span class="event-search__spinner" role="status" aria-label="Searching"></span>
+          } @else {
+            <span class="event-search__icon" aria-hidden="true">🔍</span>
+          }
+          <span class="sr-only">Search upcoming events</span>
         </label>
-        <input
-          id="event-search-input"
-          class="event-search__input"
-          type="search"
-          name="search"
-          [ngModel]="searchInput()"
-          (ngModelChange)="searchInput.set($event)"
-          placeholder="DJ sets on the Gold Coast, Brisbane classical music…"
-          autocomplete="off"
-          enterkeyhint="search"
-        />
-        @if (searchLoading()) {
-          <span class="event-search__status" role="status">Searching…</span>
-        }
+        <div class="event-search__field">
+          <input
+            id="event-search-input"
+            class="event-search__input"
+            type="search"
+            name="search"
+            [ngModel]="searchInput()"
+            (ngModelChange)="searchInput.set($event)"
+            placeholder="DJ sets on the Gold Coast, Brisbane classical music…"
+            autocomplete="off"
+            enterkeyhint="search"
+          />
+        </div>
       </form>
       @if (searchError(); as searchErr) {
         <p class="status-msg error search-error" role="alert">{{ searchErr }}</p>
       }
       @if (activeSearchQuery()) {
         <p class="filter-hint" role="status">
-          AI search: “{{ activeSearchQuery() }}”
+          Search: “{{ activeSearchQuery() }}”
           @if (!searchLoading() && searchResults() !== null) {
             — {{ visibleEvents().length }} match{{ visibleEvents().length === 1 ? '' : 'es' }}
           }
@@ -142,7 +147,9 @@
                       <span class="sr-only"> (opens in new tab) </span>
                     </a>
                     @if (ev.summary) {
-                      <p class="event-summary">{{ ev.summary }}</p>
+                      <div class="event-detail__summary-row">
+                        <p class="event-summary">{{ ev.summary }}</p>
+                      </div>
                     }
                   </div>
                   @if (ev.venue) {
@@ -159,8 +166,12 @@
                       >
                         {{ venueButtonLabel(ev) }}
                       </button>
+                    </div>
+                  }
+                  @if (ev.tags.length > 0 || ev.youtubeEligible) {
+                    <div class="event-meta-row">
                       @if (ev.tags.length > 0) {
-                        <div class="event-tag-row">
+                        <div class="event-meta-row__tags">
                           @for (tag of ev.tags; track tag) {
                             <button
                               type="button"
@@ -173,6 +184,21 @@
                             </button>
                           }
                         </div>
+                      }
+                      @if (ev.youtubeEligible) {
+                        <button
+                          type="button"
+                          class="youtube-btn"
+                          (click)="openYouTube(ev)"
+                        >
+                          <img
+                            class="youtube-btn__logo"
+                            ngSrc="/youtube.png"
+                            [alt]="'Watch a YouTube video for ' + ev.eventName"
+                            width="32"
+                            height="22"
+                          />
+                        </button>
                       }
                     </div>
                   }
@@ -191,4 +217,15 @@
     [db]="activeDb()"
     (closed)="closeEmailSignup()"
   />
+}
+
+@if (youtubeTarget(); as ytEvent) {
+  @if (activeDb(); as db) {
+    <app-youtube-modal
+      [db]="db"
+      [eventId]="ytEvent.id"
+      [eventName]="ytEvent.eventName"
+      (closed)="closeYouTube()"
+    />
+  }
 }

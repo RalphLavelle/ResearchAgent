@@ -61,6 +61,14 @@
   min-width: min(100%, 16rem);
 }
 
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: var(--space-4);
+}
+
 .run-trigger__btn {
   display: inline-flex;
   align-items: center;
@@ -91,6 +99,15 @@
 .run-trigger__btn:disabled {
   opacity: 0.85;
   cursor: wait;
+}
+
+.run-trigger__btn--secondary {
+  background: var(--gradient-refresh-btn);
+  box-shadow: var(--shadow-btn);
+}
+
+.run-trigger__btn--secondary:hover:not(:disabled) {
+  box-shadow: var(--shadow-btn-hover);
 }
 
 .run-trigger__spinner {

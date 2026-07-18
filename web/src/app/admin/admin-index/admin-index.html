@@ -9,6 +9,70 @@
     </p>
   </header>
 
+  <section class="targeted-search" aria-labelledby="targeted-search-heading">
+    <h2 id="targeted-search-heading" class="targeted-search__title">
+      <span aria-hidden="true">🎯</span>
+      Targeted search
+    </h2>
+    <p class="targeted-search__hint">
+      Run the full research pipeline with <strong>one</strong> DuckDuckGo phrase — useful when
+      you already know a band or gig to chase (e.g. “Powderfinger Brisbane 2026”).
+      Crawl, curate, and save work exactly like a scheduled run; only the search step is narrowed.
+    </p>
+
+    <form class="targeted-search__form" (submit)="onTargetedSearchSubmit($event)">
+      <label class="targeted-search__label" for="targeted-search-input">
+        Search phrase
+      </label>
+      <div class="targeted-search__row">
+        <input
+          id="targeted-search-input"
+          class="targeted-search__input"
+          type="search"
+          name="query"
+          [ngModel]="searchInput()"
+          (ngModelChange)="searchInput.set($event)"
+          placeholder="Band name, venue, suburb, genre…"
+          autocomplete="off"
+          [disabled]="isRunBusy()"
+        />
+        <button
+          type="submit"
+          class="targeted-search__btn"
+          [disabled]="isRunBusy()"
+        >
+          @if (isRunBusy()) {
+            <span class="targeted-search__spinner" aria-hidden="true"></span>
+            Running…
+          } @else {
+            <span aria-hidden="true">🚀</span>
+            Run targeted search
+          }
+        </button>
+      </div>
+    </form>
+
+    @if (runStatus() !== 'idle') {
+      <p
+        class="targeted-search__status"
+        [class.targeted-search__status--running]="runStatus() === 'running'"
+        [class.targeted-search__status--completed]="runStatus() === 'completed'"
+        [class.targeted-search__status--error]="runStatus() === 'error'"
+        role="status"
+        aria-live="polite"
+      >
+        @if (runStatus() === 'running') {
+          Pipeline running — this may take several minutes.
+        } @else if (runMessage(); as msg) {
+          @if (runStatus() === 'completed') {
+            <span aria-hidden="true">✅</span>
+          }
+          {{ msg }}
+        }
+      </p>
+    }
+  </section>
+
   <nav class="admin-index__grid" aria-label="Admin sections">
     <a routerLink="/admin/reports" class="admin-card">
       <span class="admin-card__emoji" aria-hidden="true">📋</span>

@@ -110,6 +110,86 @@ def test_get_venues_returns_paged_records() -> None:
     assert len(body["venues"]) == 2
     names = {row["name"] for row in body["venues"]}
     assert names == {"The Tivoli Theatre", "Fortitude Music Hall"}
+    for row in body["venues"]:
+        assert "linkedEventCount" in row
+        assert row["linkedEventCount"] == 0
+
+
+def test_get_venues_linked_event_count() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    created = venue_store.create_venue(db, "Busy Room")
+    venue_id = str(created["_id"])
+    get_database(db)[EVENTS_COLLECTION].insert_many(
+        [
+            {
+                "_id": "evt-a",
+                "event": "Band A",
+                "venue": venue_to_mongo("Busy Room", venue_id),
+                "url": "https://example.com/a",
+                "date": "2026-07-01",
+            },
+            {
+                "_id": "evt-b",
+                "event": "Band B",
+                "venue": venue_to_mongo("Busy Room", venue_id),
+                "url": "https://example.com/b",
+                "date": "2026-08-01",
+            },
+        ]
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/venues?limit=50")
+
+    assert response.status_code == 200
+    row = next(item for item in response.json()["venues"] if item["id"] == venue_id)
+    assert row["linkedEventCount"] == 2
+
+
+def test_get_venue_events_returns_linked_events() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    created = venue_store.create_venue(db, "The Triffid")
+    venue_id = str(created["_id"])
+    get_database(db)[EVENTS_COLLECTION].insert_many(
+        [
+            {
+                "_id": "evt-later",
+                "event": "Later Band",
+                "venue": venue_to_mongo("The Triffid", venue_id),
+                "url": "https://example.com/later",
+                "date": "2026-09-01",
+            },
+            {
+                "_id": "evt-soon",
+                "event": "Soon Band",
+                "venue": venue_to_mongo("The Triffid", venue_id),
+                "url": "https://example.com/soon",
+                "date": "2026-07-01",
+            },
+        ]
+    )
+
+    client = TestClient(create_app())
+    response = client.get(f"/api/test-db/venues/{venue_id}/events")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["venueId"] == venue_id
+    assert body["total"] == 2
+    names = [event["eventName"] for event in body["events"]]
+    assert names == ["Soon Band", "Later Band"]
+
+
+def test_get_venue_events_unknown_venue_returns_404() -> None:
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/venues/missing-venue-id/events")
+    assert response.status_code == 404
 
 
 def test_get_venues_caps_limit_at_fifty() -> None:
@@ -161,9 +241,13 @@ def test_put_venue_updates_document() -> None:
 
 
 def test_get_events_spotlight_only_returns_cached_posters() -> None:
+    from datetime import timedelta
+
     from agent.event_store import save_existing_rows
+    from agent.event_window import local_today
     from agent.mongodb import EVENTS_COLLECTION, IMAGES_COLLECTION, get_database
 
+    in_window = local_today() + timedelta(days=10)
     get_database("test-db")[IMAGES_COLLECTION].insert_one(
         {
             "_id": "poster.jpg",
@@ -176,7 +260,7 @@ def test_get_events_spotlight_only_returns_cached_posters() -> None:
         "The Beths",
         "The Venue",
         "",
-        __import__("datetime").date(2099, 6, 1),
+        in_window,
         "https://example.com/with-poster",
         "",
         "https://cdn.example.com/the-beths-tour.jpg",
@@ -189,7 +273,7 @@ def test_get_events_spotlight_only_returns_cached_posters() -> None:
         "Band No Poster",
         "The Venue",
         "",
-        __import__("datetime").date(2099, 6, 2),
+        in_window + timedelta(days=1),
         "https://example.com/no-poster",
         "",
         "",
@@ -211,8 +295,12 @@ def test_get_events_spotlight_only_returns_cached_posters() -> None:
 
 
 def test_get_events_spotlight_includes_legacy_rows_missing_poster_quality() -> None:
+    from datetime import timedelta
+
+    from agent.event_window import local_today
     from agent.mongodb import EVENTS_COLLECTION, IMAGES_COLLECTION, get_database
 
+    in_window = (local_today() + timedelta(days=12)).isoformat()
     get_database("test-db")[IMAGES_COLLECTION].insert_one(
         {
             "_id": "legacy.jpg",
@@ -226,7 +314,7 @@ def test_get_events_spotlight_includes_legacy_rows_missing_poster_quality() -> N
             "_id": "evt-legacy",
             "event": "The Beths",
             "url": "https://example.com/legacy",
-            "date": "2099-06-10",
+            "date": in_window,
             "image_id": "legacy.jpg",
             "venue": {"name": "Venue", "id": ""},
         }
@@ -247,8 +335,12 @@ def test_get_events_spotlight_includes_legacy_rows_missing_poster_quality() -> N
 
 
 def test_get_events_spotlight_excludes_generic_cached_posters() -> None:
+    from datetime import timedelta
+
+    from agent.event_window import local_today
     from agent.mongodb import EVENTS_COLLECTION, get_database
 
+    in_window = (local_today() + timedelta(days=14)).isoformat()
     coll = get_database("test-db")[EVENTS_COLLECTION]
     coll.insert_many(
         [
@@ -256,7 +348,7 @@ def test_get_events_spotlight_excludes_generic_cached_posters() -> None:
                 "_id": "evt-specific",
                 "event": "The Beths",
                 "url": "https://example.com/specific",
-                "date": "2099-06-10",
+                "date": in_window,
                 "image_id": "specific.jpg",
                 "poster_quality": 3,
                 "poster_url": "https://cdn.example.com/the-beths-tour.jpg",
@@ -266,7 +358,7 @@ def test_get_events_spotlight_excludes_generic_cached_posters() -> None:
                 "_id": "evt-generic",
                 "event": "The Beths",
                 "url": "https://example.com/generic",
-                "date": "2099-06-11",
+                "date": in_window,
                 "image_id": "generic.jpg",
                 "poster_quality": 1,
                 "poster_url": "https://venue.example/og-image.jpg",
@@ -285,8 +377,12 @@ def test_get_events_spotlight_excludes_generic_cached_posters() -> None:
 
 
 def test_get_events_spotlight_respects_exclude() -> None:
+    from datetime import timedelta
+
+    from agent.event_window import local_today
     from agent.mongodb import EVENTS_COLLECTION, get_database
 
+    in_window = (local_today() + timedelta(days=8)).isoformat()
     coll = get_database("test-db")[EVENTS_COLLECTION]
     for idx in range(3):
         coll.insert_one(
@@ -294,7 +390,7 @@ def test_get_events_spotlight_respects_exclude() -> None:
                 "_id": f"evt-{idx}",
                 "event": f"Band {idx}",
                 "url": f"https://example.com/{idx}",
-                "date": "2099-06-10",
+                "date": in_window,
                 "image_id": f"img-{idx}.jpg",
                 "poster_quality": 2,
                 "venue": {"name": "Venue", "id": ""},
@@ -308,6 +404,50 @@ def test_get_events_spotlight_respects_exclude() -> None:
     events = response.json()["events"]
     assert len(events) == 1
     assert events[0]["id"] == "evt-2"
+
+
+def test_get_events_spotlight_only_returns_one_month_window() -> None:
+    """Spotlight uses the same read-time window as the main events list."""
+    from datetime import timedelta
+
+    from agent.event_window import local_today
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    today = local_today()
+    in_window = (today + timedelta(days=10)).isoformat()
+    far_future = (today + timedelta(days=120)).isoformat()
+
+    coll = get_database("test-db")[EVENTS_COLLECTION]
+    coll.insert_many(
+        [
+            {
+                "_id": "evt-spot-soon",
+                "event": "Soon Band",
+                "url": "https://example.com/soon-spot",
+                "date": in_window,
+                "image_id": "soon.jpg",
+                "poster_quality": 2,
+                "venue": {"name": "Venue", "id": ""},
+            },
+            {
+                "_id": "evt-spot-far",
+                "event": "Far Band",
+                "url": "https://example.com/far-spot",
+                "date": far_future,
+                "image_id": "far.jpg",
+                "poster_quality": 2,
+                "venue": {"name": "Venue", "id": ""},
+            },
+        ]
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/events/spotlight?limit=4")
+
+    assert response.status_code == 200
+    events = response.json()["events"]
+    assert len(events) == 1
+    assert events[0]["id"] == "evt-spot-soon"
 
 
 def test_post_admin_run_once_requires_password(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -375,6 +515,56 @@ def test_post_admin_run_once_llm_invocation_failed(
 
     assert response.status_code == 503
     assert "qwen3" in response.json()["error"]
+
+
+def test_post_admin_run_targeted_requires_query(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/admin/run-targeted",
+        json={"password": "secret-admin", "query": "   "},
+    )
+
+    assert response.status_code == 400
+    assert "query" in response.json()["error"]
+
+
+def test_post_admin_run_targeted_requires_password(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/admin/run-targeted",
+        json={"password": "wrong", "query": "Powderfinger Brisbane"},
+    )
+
+    assert response.status_code == 401
+
+
+def test_post_admin_run_targeted_runs_pipeline(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("agent.config.ADMIN_PASSWORD", "secret-admin")
+
+    def fake_execute(*, dry_run: bool = False, targeted_query: str | None = None):
+        assert dry_run is False
+        assert targeted_query == "Powderfinger Brisbane"
+        return {"run_log_message": "Saved 1 new event(s)."}
+
+    monkeypatch.setattr("agent.api.execute_run_once", fake_execute)
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/admin/run-targeted",
+        json={"password": "secret-admin", "query": "Powderfinger Brisbane"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["ok"] is True
+    assert body["message"] == "Saved 1 new event(s)."
+    assert body["query"] == "Powderfinger Brisbane"
 
 
 def test_post_admin_verify_password_accepts_correct_value(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -543,3 +733,28 @@ def test_delete_venue_deletes_linked_events() -> None:
         get_database(db)[EVENTS_COLLECTION].find_one({"_id": "evt-venue-delete-linked"})
         is None
     )
+
+
+def test_get_event_youtube_returns_cached_video() -> None:
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    coll = get_database("test-db")[EVENTS_COLLECTION]
+    coll.insert_one(
+        {
+            "_id": "evt-yt-api",
+            "event": "Junior Burger",
+            "url": "https://example.com/jb",
+            "date": "2026-08-03",
+            "youtube_video_id": "vid-api-1",
+            "youtube_video_title": "JB live",
+        }
+    )
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/events/evt-yt-api/youtube")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["videoId"] == "vid-api-1"
+    assert body["title"] == "JB live"
+    assert body["cached"] is True

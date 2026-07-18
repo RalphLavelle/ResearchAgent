@@ -3,11 +3,11 @@ import { NgOptimizedImage } from '@angular/common';
 import { RouterLink } from '@angular/router';
 
 import { SpotlightCarouselComponent } from '../spotlight-carousel/spotlight-carousel';
-import { PIPELINE_STEPS, PipelineStep } from './pipeline-steps';
+import { AI_PIPELINE_STEPS } from './pipeline-steps';
 
 /**
- * About page: visual walkthrough of how the research agent uses LLMs.
- * Each pipeline step sits in a native <details> panel (collapsed by default).
+ * About page: fun, end-user-focused tour of where Gigsorooni uses LLMs.
+ * Non-AI pipeline steps are intentionally omitted.
  */
 @Component({
   selector: 'app-about',
@@ -17,11 +17,6 @@ import { PIPELINE_STEPS, PipelineStep } from './pipeline-steps';
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class AboutComponent {
-  /** Ordered LangGraph steps — only plan and curate call an LLM. */
-  protected readonly steps: readonly PipelineStep[] = PIPELINE_STEPS;
-
-  /** Badge label for step headers. */
-  protected stepBadge(step: PipelineStep): string {
-    return step.usesLlm ? 'Uses AI' : 'Plain code';
-  }
+  /** LLM-only steps — planner, curator, tagger, duplicate referee. */
+  protected readonly steps = AI_PIPELINE_STEPS;
 }
