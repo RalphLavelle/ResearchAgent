@@ -630,9 +630,10 @@ def test_get_users_unknown_db_still_resolves() -> None:
     assert body["total"] == 0
 
 
-def test_post_user_subscribe_saves_email() -> None:
+def test_post_user_subscribe_saves_email(monkeypatch) -> None:
     from agent.mongodb import USERS_COLLECTION, get_database
 
+    monkeypatch.setattr("agent.config.EMAIL_SIGNUP_ENABLED", True)
     client = TestClient(create_app())
     response = client.post(
         "/api/test-db/users/subscribe",
@@ -648,7 +649,8 @@ def test_post_user_subscribe_saves_email() -> None:
     assert stored is not None
 
 
-def test_post_user_subscribe_rejects_invalid_email() -> None:
+def test_post_user_subscribe_rejects_invalid_email(monkeypatch) -> None:
+    monkeypatch.setattr("agent.config.EMAIL_SIGNUP_ENABLED", True)
     client = TestClient(create_app())
     response = client.post(
         "/api/test-db/users/subscribe",
@@ -659,12 +661,81 @@ def test_post_user_subscribe_rejects_invalid_email() -> None:
     assert "Invalid" in response.json()["error"]
 
 
-def test_post_user_subscribe_requires_email() -> None:
+def test_post_user_subscribe_requires_email(monkeypatch) -> None:
+    monkeypatch.setattr("agent.config.EMAIL_SIGNUP_ENABLED", True)
     client = TestClient(create_app())
     response = client.post("/api/test-db/users/subscribe", json={})
 
     assert response.status_code == 400
     assert response.json()["error"] == "email is required"
+
+
+def test_get_site_config_defaults_email_signup_off() -> None:
+    client = TestClient(create_app())
+    response = client.get("/api/config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "emailSignupEnabled": False,
+        "googleAnalyticsMeasurementId": None,
+    }
+
+
+def test_get_site_config_reflects_env(monkeypatch) -> None:
+    monkeypatch.setattr("agent.config.EMAIL_SIGNUP_ENABLED", True)
+    monkeypatch.setattr("agent.config.GOOGLE_ANALYTICS_MEASUREMENT_ID", "G-TEST123")
+    client = TestClient(create_app())
+    response = client.get("/api/config")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "emailSignupEnabled": True,
+        "googleAnalyticsMeasurementId": "G-TEST123",
+    }
+
+
+def test_post_user_subscribe_disabled_when_feature_off(monkeypatch) -> None:
+    monkeypatch.setattr("agent.config.EMAIL_SIGNUP_ENABLED", False)
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/test-db/users/subscribe",
+        json={"email": "fan@example.com"},
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "Email signup is disabled"
+
+
+def test_post_comment_saves_feedback() -> None:
+    from agent.mongodb import COMMENTS_COLLECTION, get_database
+
+    client = TestClient(create_app())
+    response = client.post(
+        "/api/test-db/comments",
+        json={"name": "Jamie", "comment": "Love the new layout!"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["name"] == "Jamie"
+    assert body["comment"] == "Love the new layout!"
+    assert body["date"]
+
+    stored = get_database("test-db")[COMMENTS_COLLECTION].find_one({"name": "Jamie"})
+    assert stored is not None
+    assert stored["comment"] == "Love the new layout!"
+
+
+def test_post_comment_requires_name_and_comment() -> None:
+    client = TestClient(create_app())
+
+    missing_name = client.post("/api/test-db/comments", json={"comment": "Hi"})
+    assert missing_name.status_code == 400
+    assert missing_name.json()["error"] == "name is required"
+
+    missing_comment = client.post("/api/test-db/comments", json={"name": "Jamie"})
+    assert missing_comment.status_code == 400
+    assert missing_comment.json()["error"] == "comment is required"
 
 
 def test_delete_venue_reassigns_events() -> None:

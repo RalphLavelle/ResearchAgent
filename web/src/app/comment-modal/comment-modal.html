@@ -1,0 +1,94 @@
+<div class="modal-backdrop" (click)="onBackdropClick($event)">
+  <div
+    class="modal-panel"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="comment-modal-title"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <h2 id="comment-modal-title" class="modal-title">Comments &amp; suggestions 💬</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">
+        ×
+      </button>
+    </header>
+
+    @if (submitted()) {
+      <div class="thank-you" role="status">
+        <p class="thank-you__emoji" aria-hidden="true">🙏</p>
+        <p class="thank-you__title">Thanks for your feedback!</p>
+        <p class="thank-you__body">
+          Your comment has been saved. We really appreciate you taking the time to help improve
+          Gigsorooni.
+        </p>
+        <button type="button" class="modal-btn modal-btn--primary" (click)="closed.emit()">
+          Close
+        </button>
+      </div>
+    } @else {
+      <p class="modal-lead">
+        Spot a bug, missing gig, or idea to make the site better? Tell us below.
+      </p>
+
+      @if (error(); as errMsg) {
+        <p class="modal-status modal-status--error" role="alert">{{ errMsg }}</p>
+      }
+
+      <form class="comment-form" [formGroup]="form" (ngSubmit)="submit()">
+        <label class="modal-label" for="comment-name">Your name</label>
+        <input
+          id="comment-name"
+          class="modal-input"
+          type="text"
+          formControlName="name"
+          autocomplete="name"
+          maxlength="100"
+          placeholder="Alex"
+          (input)="onInput()"
+        />
+        @if (form.controls.name.touched && form.controls.name.invalid) {
+          <p class="field-error" role="alert">
+            @if (form.controls.name.hasError('required')) {
+              Please enter your name.
+            } @else {
+              Name must be 100 characters or fewer.
+            }
+          </p>
+        }
+
+        <label class="modal-label" for="comment-text">Comment or suggestion</label>
+        <textarea
+          id="comment-text"
+          class="modal-textarea"
+          formControlName="comment"
+          rows="5"
+          maxlength="2000"
+          placeholder="What would make Gigsorooni better for you?"
+          (input)="onInput()"
+        ></textarea>
+        @if (form.controls.comment.touched && form.controls.comment.invalid) {
+          <p class="field-error" role="alert">
+            @if (form.controls.comment.hasError('required')) {
+              Please enter a comment or suggestion.
+            } @else {
+              Comment must be 2000 characters or fewer.
+            }
+          </p>
+        }
+
+        <footer class="modal-actions">
+          <button type="button" class="modal-btn modal-btn--ghost" (click)="closed.emit()">
+            Cancel
+          </button>
+          <button
+            type="submit"
+            class="modal-btn modal-btn--primary"
+            [disabled]="submitting()"
+          >
+            {{ submitting() ? 'Sending…' : 'Submit' }}
+          </button>
+        </footer>
+      </form>
+    }
+  </div>
+</div>

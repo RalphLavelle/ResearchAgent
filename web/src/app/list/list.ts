@@ -17,6 +17,7 @@ import { ResearchEvent, normalizeResearchEvent, posterSrc } from '../events/rese
 import { EventsStore } from '../events/events-store.service';
 import { SeoService } from '../seo/seo.service';
 import { TopicService } from '../topic/topic.service';
+import { SiteConfigService } from '../site-config/site-config.service';
 import { EmailSignupModalComponent } from './email-signup-modal/email-signup-modal';
 import { YouTubeModalComponent } from './youtube-modal/youtube-modal';
 import {
@@ -54,6 +55,7 @@ export class ListComponent {
   readonly #destroyRef = inject(DestroyRef);
   readonly #events = inject(EventsStore);
   readonly #topic = inject(TopicService);
+  readonly #siteConfig = inject(SiteConfigService);
   readonly #route = inject(ActivatedRoute);
   readonly #router = inject(Router);
   readonly #http = inject(HttpClient);
@@ -89,6 +91,8 @@ export class ListComponent {
 
   /** Active topic MongoDB name — passed to the signup modal API call. */
   protected readonly activeDb = computed(() => this.#topic.active().db);
+  /** Whether the weekly email signup button should appear. */
+  protected readonly emailSignupEnabled = this.#siteConfig.emailSignupEnabled;
 
   /** Topic headline rendered as the page <h1> (SEO). */
   protected readonly headline = computed(

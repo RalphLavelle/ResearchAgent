@@ -20,7 +20,7 @@
       </div>
     } @else {
       <app-spotlight-carousel
-        [showEmailSignup]="true"
+        [showEmailSignup]="emailSignupEnabled()"
         (emailSignupClick)="openEmailSignup()"
       />
       <form class="event-search" role="search" (submit)="onSearchSubmit($event)">
@@ -212,7 +212,7 @@
   }
 </section>
 
-@if (emailSignupOpen()) {
+@if (emailSignupOpen() && emailSignupEnabled()) {
   <app-email-signup-modal
     [db]="activeDb()"
     (closed)="closeEmailSignup()"

@@ -164,6 +164,12 @@ MONGODB_URI = (os.environ.get("MONGODB_URI") or "").strip()
 # Password required to access the Angular admin section (checked via ``POST /api/admin/verify-password``).
 ADMIN_PASSWORD = (os.environ.get("ADMIN_PASSWORD") or "").strip()
 
+# Weekly email signup button on the public site (``GET /api/config`` + ``POST /api/{db}/users/subscribe``).
+EMAIL_SIGNUP_ENABLED = _env_flag("EMAIL_SIGNUP_ENABLED", default=False)
+
+# Google Analytics 4 Measurement ID (``G-XXXXXXXXXX``) exposed to the Angular app via ``GET /api/config``.
+GOOGLE_ANALYTICS_MEASUREMENT_ID = (os.environ.get("GOOGLE_ANALYTICS_MEASUREMENT_ID") or "").strip()
+
 MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
 
 

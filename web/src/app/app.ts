@@ -12,10 +12,13 @@ import { NgOptimizedImage } from '@angular/common';
 import { RouterLink, RouterLinkActive, RouterOutlet } from '@angular/router';
 
 import { SeoService } from './seo/seo.service';
+import { AnalyticsService } from './analytics/analytics.service';
+import { CommentModalComponent } from './comment-modal/comment-modal';
+import { TopicService } from './topic/topic.service';
 
 @Component({
   selector: 'app-root',
-  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage],
+  imports: [RouterOutlet, RouterLink, RouterLinkActive, NgOptimizedImage, CommentModalComponent],
   templateUrl: './app.html',
   styleUrl: './app.css',
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -27,10 +30,16 @@ import { SeoService } from './seo/seo.service';
 export class App {
   /** When true, the mobile slide-out nav is visible (only styled on small viewports). */
   protected readonly navOpen = signal(false);
+  /** When true, the footer comment modal is open. */
+  protected readonly commentOpen = signal(false);
+
+  protected readonly topic = inject(TopicService);
 
   private readonly document = inject(DOCUMENT);
   // Instantiated here so canonical/robots/description tracking starts with the first navigation.
   private readonly seo = inject(SeoService);
+  // Loads gtag.js when configured and records SPA page views on navigation.
+  private readonly analytics = inject(AnalyticsService);
   private readonly menuButton = viewChild<ElementRef<HTMLButtonElement>>('menuButton');
   private readonly firstMobileLink = viewChild<ElementRef<HTMLAnchorElement>>('firstMobileLink');
 
@@ -75,6 +84,14 @@ export class App {
     }
     this.navOpen.set(false);
     queueMicrotask(() => this.menuButton()?.nativeElement.focus());
+  }
+
+  protected openCommentModal(): void {
+    this.commentOpen.set(true);
+  }
+
+  protected closeCommentModal(): void {
+    this.commentOpen.set(false);
   }
 
 }

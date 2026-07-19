@@ -19,6 +19,7 @@ Each topic has its own **MongoDB database** (the `db` field in `topics.json`, e.
 | `sources` | Multi-event listing URLs only — one document per host with a `urls` array (pages that yielded 2+ distinct events in a run); stale entries (`runs_contributed > 3 × events_added`) are pruned; one weighted-random URL is revisited each crawl |
 | `strategy_scores` | Deterministic scorecards for source URLs, hosts, venues, and query strings, updated after each successful run report; venue scores now bias targeted venue query selection |
 | `users` | Weekly email subscribers |
+| `comments` | Visitor comments and suggestions (`name`, `comment`, `date`) |
 | `schema_migrations` | Applied one-shot schema migration ids |
 
 **On disk** (under `data/<topic_id>/`, gitignored):
@@ -199,7 +200,9 @@ Restart `serve` after changing this value.
   | `POST /api/admin/run-targeted` | Trigger one full pipeline pass using a single admin-supplied DuckDuckGo phrase (skips planner LLM and venue templates); body `{ "password": "...", "query": "..." }`; returns `{ "ok": true, "message": "...", "query": "..." }` — used by **Targeted search** on `/admin` |
   | `POST /api/admin/dedupe-events` | Re-scan the active topic's `events` collection for duplicates without a new crawl; body `{ "password": "..." }`; runs deterministic dedupe on all rows, then LLM semantic dedupe when configured; returns `{ "ok": true, "message": "...", "removed_deterministic", "removed_semantic", "total_removed" }` — used by **Remove duplicate events** on `/admin/reports` |
   | `GET /api/{db}/users[?limit=50&skip=0]` | Weekly email subscribers (`id`, `email`, `subscribed_at`) — used by `/admin/users` |
-  | `POST /api/{db}/users/subscribe` | Weekly email signup — body `{ "email": "..." }`; saves to the topic's `users` collection |
+  | `GET /api/config` | Public UI flags — `{ "emailSignupEnabled": true/false, "googleAnalyticsMeasurementId": "G-…" \| null }` from `EMAIL_SIGNUP_ENABLED` and `GOOGLE_ANALYTICS_MEASUREMENT_ID` in `.env` |
+  | `POST /api/{db}/users/subscribe` | Weekly email signup — body `{ "email": "..." }`; saves to the topic's `users` collection (403 when signup is disabled) |
+  | `POST /api/{db}/comments` | Visitor feedback — body `{ "name": "...", "comment": "..." }`; saves to the topic's `comments` collection with a server-set UTC `date` |
   | `GET /robots.txt` | SEO — allows crawlers, blocks `/admin`, links the sitemap. Generated from the request host (no hard-coded domain); nginx proxies the site-root path here |
   | `GET /sitemap.xml` | SEO — sitemap of `/`, `/about`, plus one URL per distinct tag (`/tags/{tag}`) and venue (`/venues/{slug}`) in the active topic's display window |
 
@@ -254,6 +257,21 @@ npm start
 ```
 
 Then open the URL printed by the dev server (typically `http://localhost:4200/`). The **About** page (`/about`) walks through the LangGraph pipeline step by step — expandable panels for each stage, with PNG flow diagrams under `web/public/about/` (regenerate with `.\venv\Scripts\python.exe scripts\generate_about_diagrams.py` after installing Pillow). **Tag and venue filters are bookmarkable:** `/tags/rock` shows only rock-tagged gigs; `/venues/the-triffid` shows only that venue (slug from the venue name). Filtering is **instant and client-side** — the list is fetched once per topic and cached in the browser (`EventsStore`); changing filters only narrows the rows already in memory (no extra round-trip to MongoDB). Click an active filter again or use “show all gigs” to return to `/`. Use **Admin** in the nav (or `/admin`) for a **targeted search** panel (one DuckDuckGo phrase, full pipeline), pipeline reports, venue records, and email subscribers — you'll be prompted for the password set as **`ADMIN_PASSWORD`** in `.env` (stored in the browser's `sessionStorage` for the tab session). On **Reports**, use **Run pipeline now** to trigger the same pass as `python -m agent run-once` (shows a spinner while running, then refreshes the report list). The old `/reports` URL redirects to `/admin/reports`. If the API is not running, the browser console will show a proxy error (`ECONNREFUSED` on port 8765).
+
+**Google Analytics 4 (optional):** set your Measurement ID in `.env`:
+
+```env
+GOOGLE_ANALYTICS_MEASUREMENT_ID=G-XXXXXXXXXX
+```
+
+The Angular app loads it from `GET /api/config` and records **page views only** (no custom events) via the official gtag.js script. Each SPA navigation sends one `page_view` with the router path and query string preserved (e.g. `/?search=beatles`, `/venues/the-triffid`). When the variable is blank, analytics is disabled silently. All tracking code lives in `web/src/app/analytics/analytics.service.ts`.
+
+**Testing with GA4 DebugView:**
+
+1. In [Google Analytics](https://analytics.google.com/) → **Admin** → your property → **DebugView**, leave the page open.
+2. Install the [Google Analytics Debugger](https://chromewebstore.google.com/detail/google-analytics-debugger/jnkmfdileelhofjcijamephohjechhna) Chrome extension (or enable debug mode on your GA4 data stream).
+3. Set `GOOGLE_ANALYTICS_MEASUREMENT_ID` in `.env`, restart the API, refresh the Angular app, and browse routes (`/`, `/tags/jazz`, `/venues/the-zoo`, `/?search=beatles`).
+4. In DebugView you should see `page_view` events with `page_path` matching each URL. Duplicate navigations to the same URL should not produce a second event.
 
 ## Behavior
 

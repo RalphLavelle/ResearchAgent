@@ -76,8 +76,22 @@
   </main>
 
   <footer class="site-footer">
-    <p>
-      <a href="https://www.ralphlavelle.net" target="_blank" rel="noopener noreferrer">Ralph Lavelle</a>, 2026 | <a href="mailto:ralph@ralphlavelle.net?subject=Gigsorooni">📧</a>
-    </p>
+    <div class="site-footer__inner">
+      <button type="button" class="footer-comment-btn" (click)="openCommentModal()">
+        Leave a comment or suggestion 💬
+      </button>
+      <span class="site-footer__sep" aria-hidden="true">|</span>
+      <a
+        href="mailto:ralph@ralphlavelle.net?subject=Gigsorooni"
+        class="site-footer__email"
+        aria-label="Email Ralph Lavelle about Gigsorooni"
+      >
+        📧
+      </a>
+    </div>
   </footer>
 </div>
+
+@if (commentOpen()) {
+  <app-comment-modal [db]="topic.active().db" (closed)="closeCommentModal()" />
+}

@@ -21,7 +21,7 @@ from agent.mongodb import get_database
 from agent.report_store import list_reports
 from agent.runner import LLMInvocationError, LLMNotReadyError, execute_run_once
 from agent.topics import load_topics
-from agent import user_store, venue_store
+from agent import comment_store, user_store, venue_store
 from agent.youtube import resolve_event_youtube
 
 logger = logging.getLogger(__name__)
@@ -333,6 +333,8 @@ def get_users(request: Request) -> JSONResponse:
 
 async def post_user_subscribe(request: Request) -> JSONResponse:
     """Save an email address for the weekly digest (``users`` collection)."""
+    if not config.EMAIL_SIGNUP_ENABLED:
+        return JSONResponse({"error": "Email signup is disabled"}, status_code=403)
     db_key = request.path_params["db"]
     db_name = _resolve_db(db_key)
     if not db_name:
@@ -356,6 +358,48 @@ async def post_user_subscribe(request: Request) -> JSONResponse:
     except Exception as exc:
         logger.exception("API user subscribe error for db=%s", db_name)
         return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+async def post_comment(request: Request) -> JSONResponse:
+    """Save a visitor comment or suggestion (``comments`` collection)."""
+    db_key = request.path_params["db"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Request body must be a JSON object"}, status_code=400)
+        name = str(body.get("name") or "").strip()
+        comment = str(body.get("comment") or "").strip()
+        if not name:
+            return JSONResponse({"error": "name is required"}, status_code=400)
+        if not comment:
+            return JSONResponse({"error": "comment is required"}, status_code=400)
+        saved = await run_in_threadpool(comment_store.add_comment, db_name, name, comment)
+        return JSONResponse(
+            {
+                "name": str(saved.get("name") or ""),
+                "comment": str(saved.get("comment") or ""),
+                "date": str(saved.get("date") or ""),
+            }
+        )
+    except ValueError as exc:
+        return JSONResponse({"error": str(exc)}, status_code=400)
+    except Exception as exc:
+        logger.exception("API comment error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+def get_site_config(_request: Request) -> JSONResponse:
+    """Public UI flags for the Angular app (from ``.env``)."""
+    measurement_id = config.GOOGLE_ANALYTICS_MEASUREMENT_ID
+    return JSONResponse(
+        {
+            "emailSignupEnabled": config.EMAIL_SIGNUP_ENABLED,
+            "googleAnalyticsMeasurementId": measurement_id or None,
+        }
+    )
 
 
 async def post_admin_run_once(request: Request) -> JSONResponse:
@@ -554,6 +598,8 @@ def create_app() -> Starlette:
             Route("/api/{db}/venues/{venue_id}", delete_venue, methods=["DELETE"]),
             Route("/api/{db}/users", get_users, methods=["GET"]),
             Route("/api/{db}/users/subscribe", post_user_subscribe, methods=["POST"]),
+            Route("/api/{db}/comments", post_comment, methods=["POST"]),
+            Route("/api/config", get_site_config, methods=["GET"]),
             Route("/api/{db}/images/{image_id}", get_image, methods=["GET"]),
             Route("/api/admin/run-once", post_admin_run_once, methods=["POST"]),
             Route("/api/admin/run-targeted", post_admin_run_targeted, methods=["POST"]),
