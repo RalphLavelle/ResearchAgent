@@ -35,3 +35,23 @@ def test_add_comment_rejects_overlong_fields() -> None:
 
     with pytest.raises(ValueError, match="comment must be"):
         comment_store.add_comment("test-db", "Alex", "y" * 2001)
+
+
+def test_list_comments_page_newest_first() -> None:
+    comment_store.add_comment("test-db", "First", "One")
+    comment_store.add_comment("test-db", "Second", "Two")
+
+    docs, total = comment_store.list_comments_page("test-db", limit=50, skip=0)
+    assert total == 2
+    assert len(docs) == 2
+    assert docs[0]["name"] == "Second"
+    assert docs[1]["name"] == "First"
+
+
+def test_delete_comment_removes_row() -> None:
+    doc = comment_store.add_comment("test-db", "Alex", "Remove me")
+    cid = str(doc["_id"])
+
+    assert comment_store.delete_comment("test-db", cid) is True
+    assert comment_store.delete_comment("test-db", cid) is False
+    assert comment_store.delete_comment("test-db", "missing") is False

@@ -41,3 +41,29 @@ def add_comment(db_name: str, raw_name: str, raw_comment: str) -> dict[str, Any]
     coll.insert_one(doc)
     logger.info("Visitor comment saved in db=%s from %r", db_name, name)
     return doc
+
+
+def list_comments_page(
+    db_name: str,
+    *,
+    limit: int = 50,
+    skip: int = 0,
+) -> tuple[list[dict[str, Any]], int]:
+    """Return one page of comments (newest first) and the total count."""
+    ensure_collection_indexes(db_name)
+    coll = get_database(db_name)[COMMENTS_COLLECTION]
+    total = coll.count_documents({})
+    docs = list(coll.find().sort("date", -1).skip(skip).limit(limit))
+    return docs, total
+
+
+def delete_comment(db_name: str, comment_id: str) -> bool:
+    """Delete one comment by id. Returns True when a row was removed."""
+    cid = (comment_id or "").strip()
+    if not cid:
+        return False
+    coll = get_database(db_name)[COMMENTS_COLLECTION]
+    result = coll.delete_one({"_id": cid})
+    if result.deleted_count:
+        logger.info("Visitor comment deleted in db=%s id=%s", db_name, cid)
+    return result.deleted_count > 0

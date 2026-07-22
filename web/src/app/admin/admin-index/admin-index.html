@@ -9,6 +9,93 @@
     </p>
   </header>
 
+  <section class="pipeline-actions" aria-labelledby="pipeline-actions-heading">
+    <h2 id="pipeline-actions-heading" class="pipeline-actions__title">
+      <span aria-hidden="true">⚡</span>
+      Pipeline actions
+    </h2>
+    <p class="pipeline-actions__hint">
+      Run a full research pass for the active topic, or re-scan MongoDB for duplicate events without
+      a new crawl.
+    </p>
+
+    <div class="admin-actions">
+      <div class="run-trigger">
+        <button
+          type="button"
+          class="run-trigger__btn"
+          (click)="triggerRunOnce()"
+          [disabled]="isPipelineRunBusy()"
+          aria-describedby="run-once-status"
+        >
+          @if (pipelineRunStatus() === 'running') {
+            <span class="run-trigger__spinner" aria-hidden="true"></span>
+            Running pipeline…
+          } @else {
+            <span aria-hidden="true">🎵</span>
+            Run pipeline now
+          }
+        </button>
+
+        <p
+          id="run-once-status"
+          class="run-trigger__status"
+          [class.run-trigger__status--running]="pipelineRunStatus() === 'running'"
+          [class.run-trigger__status--completed]="pipelineRunStatus() === 'completed'"
+          [class.run-trigger__status--error]="pipelineRunStatus() === 'error'"
+          role="status"
+          aria-live="polite"
+        >
+          @if (pipelineRunStatus() === 'running') {
+            Research agent is running — this may take several minutes.
+          } @else if (pipelineRunStatus() === 'completed') {
+            <span aria-hidden="true">✅</span>
+            Completed{{ pipelineRunMessage() ? ': ' + pipelineRunMessage() : '' }}
+          } @else if (pipelineRunStatus() === 'error' && pipelineRunMessage(); as err) {
+            {{ err }}
+          }
+        </p>
+      </div>
+
+      <div class="run-trigger">
+        <button
+          type="button"
+          class="run-trigger__btn run-trigger__btn--secondary"
+          (click)="triggerDedupe()"
+          [disabled]="isDedupeBusy()"
+          aria-describedby="dedupe-status"
+        >
+          @if (dedupeStatus() === 'running') {
+            <span class="run-trigger__spinner" aria-hidden="true"></span>
+            Scanning for duplicates…
+          } @else {
+            <span aria-hidden="true">🧹</span>
+            Remove duplicate events
+          }
+        </button>
+
+        <p
+          id="dedupe-status"
+          class="run-trigger__status"
+          [class.run-trigger__status--running]="dedupeStatus() === 'running'"
+          [class.run-trigger__status--completed]="dedupeStatus() === 'completed'"
+          [class.run-trigger__status--error]="dedupeStatus() === 'error'"
+          role="status"
+          aria-live="polite"
+        >
+          @if (dedupeStatus() === 'running') {
+            Re-scanning the events collection — no new crawl.
+          } @else if (dedupeStatus() === 'completed') {
+            <span aria-hidden="true">✅</span>
+            {{ dedupeMessage() }}
+          } @else if (dedupeStatus() === 'error' && dedupeMessage(); as dedupeErr) {
+            {{ dedupeErr }}
+          }
+        </p>
+      </div>
+    </div>
+  </section>
+
   <section class="targeted-search" aria-labelledby="targeted-search-heading">
     <h2 id="targeted-search-heading" class="targeted-search__title">
       <span aria-hidden="true">🎯</span>
@@ -34,14 +121,14 @@
           (ngModelChange)="searchInput.set($event)"
           placeholder="Band name, venue, suburb, genre…"
           autocomplete="off"
-          [disabled]="isRunBusy()"
+          [disabled]="isAnyPipelineBusy()"
         />
         <button
           type="submit"
           class="targeted-search__btn"
-          [disabled]="isRunBusy()"
+          [disabled]="isAnyPipelineBusy()"
         >
-          @if (isRunBusy()) {
+          @if (isAnyPipelineBusy()) {
             <span class="targeted-search__spinner" aria-hidden="true"></span>
             Running…
           } @else {
@@ -52,19 +139,19 @@
       </div>
     </form>
 
-    @if (runStatus() !== 'idle') {
+    @if (targetedRunStatus() !== 'idle') {
       <p
         class="targeted-search__status"
-        [class.targeted-search__status--running]="runStatus() === 'running'"
-        [class.targeted-search__status--completed]="runStatus() === 'completed'"
-        [class.targeted-search__status--error]="runStatus() === 'error'"
+        [class.targeted-search__status--running]="targetedRunStatus() === 'running'"
+        [class.targeted-search__status--completed]="targetedRunStatus() === 'completed'"
+        [class.targeted-search__status--error]="targetedRunStatus() === 'error'"
         role="status"
         aria-live="polite"
       >
-        @if (runStatus() === 'running') {
+        @if (targetedRunStatus() === 'running') {
           Pipeline running — this may take several minutes.
-        } @else if (runMessage(); as msg) {
-          @if (runStatus() === 'completed') {
+        } @else if (targetedRunMessage(); as msg) {
+          @if (targetedRunStatus() === 'completed') {
             <span aria-hidden="true">✅</span>
           }
           {{ msg }}
@@ -90,6 +177,12 @@
       <span class="admin-card__emoji" aria-hidden="true">📬</span>
       <span class="admin-card__title">Users</span>
       <span class="admin-card__hint">Weekly email subscribers for the active topic</span>
+    </a>
+
+    <a routerLink="/admin/comments" class="admin-card">
+      <span class="admin-card__emoji" aria-hidden="true">💬</span>
+      <span class="admin-card__title">Comments</span>
+      <span class="admin-card__hint">Visitor feedback and suggestions from the site footer</span>
     </a>
   </nav>
 

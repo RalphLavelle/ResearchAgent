@@ -5,6 +5,7 @@ import { adminAuthGuard } from './admin/admin-auth.guard';
 import { AdminLoginComponent } from './admin/admin-login/admin-login';
 import { AdminIndexComponent } from './admin/admin-index/admin-index';
 import { AdminUsersComponent } from './admin/users/users';
+import { AdminCommentsComponent } from './admin/comments/comments';
 import { AdminVenuesComponent } from './admin/venues/venues';
 import { HomeComponent } from './home/home';
 import { NotFoundComponent } from './not-found/not-found';
@@ -61,6 +62,13 @@ export const routes: Routes = [
     path: 'admin/users',
     component: AdminUsersComponent,
     title: 'Users',
+    canActivate: [adminAuthGuard],
+    data: { noindex: true },
+  },
+  {
+    path: 'admin/comments',
+    component: AdminCommentsComponent,
+    title: 'Comments',
     canActivate: [adminAuthGuard],
     data: { noindex: true },
   },

@@ -8,7 +8,7 @@ Task 18 (`docs/tasks/18.md`): investigate how duplicates creep into the database
 
 That gap is how duplicates accumulate when the LLM pass is skipped or when two similar rows were inserted before rules caught them.
 
-**Remedy implemented:** an admin button on **Reports** calls `POST /api/admin/dedupe-events`, which runs a full-database deterministic dedupe pass and then the LLM semantic pass when configured.
+**Remedy implemented:** an admin button on **Admin home** calls `POST /api/admin/dedupe-events`, which runs a full-database deterministic dedupe pass and then the LLM semantic pass when configured.
 
 ---
 
@@ -107,7 +107,7 @@ Response example:
 
 ### UI
 
-**Admin → Reports** — **Remove duplicate events** button next to **Run pipeline now**. Does not run the full research pipeline; only dedupes the current database.
+**Admin home** (`/admin`) — **Remove duplicate events** button next to **Run pipeline now**. Does not run the full research pipeline; only dedupes the current database.
 
 ### When to use it
 
@@ -126,7 +126,7 @@ Running **Run pipeline now** also attempts dedupe at the end of the merge, but o
 | Merge + deterministic remediation | `src/agent/local_output.py` |
 | LLM semantic clustering | `src/agent/semantic_dedupe.py` |
 | Admin API | `src/agent/api.py` → `post_admin_dedupe_events` |
-| Admin UI | `web/src/app/reports/reports.ts`, `reports.html` |
+| Admin UI | `web/src/app/admin/admin-index/admin-index.ts`, `admin-index.html` |
 | Tests | `tests/test_dedupe_remediation.py`, `tests/test_semantic_dedupe.py` |
 
 ## Recommendation summary

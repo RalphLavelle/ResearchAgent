@@ -391,6 +391,61 @@ async def post_comment(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
+def _comment_to_api(doc: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(doc.get("_id") or ""),
+        "name": str(doc.get("name") or ""),
+        "comment": str(doc.get("comment") or ""),
+        "date": str(doc.get("date") or ""),
+    }
+
+
+def get_comments(request: Request) -> JSONResponse:
+    """List visitor comments for the admin page (newest first)."""
+    db_key = request.path_params["db"]
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    try:
+        limit_raw = request.query_params.get("limit", "50")
+        skip_raw = request.query_params.get("skip", "0")
+        limit = max(1, min(50, int(limit_raw)))
+        skip = max(0, int(skip_raw))
+        docs, total = comment_store.list_comments_page(db_name, limit=limit, skip=skip)
+        return JSONResponse(
+            {
+                "comments": [_comment_to_api(doc) for doc in docs],
+                "total": total,
+                "limit": limit,
+                "skip": skip,
+            }
+        )
+    except ValueError:
+        return JSONResponse({"error": "Invalid limit or skip query parameter"}, status_code=400)
+    except Exception as exc:
+        logger.exception("API comments list error for db=%s", db_name)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
+def delete_comment(request: Request) -> JSONResponse:
+    """Remove one visitor comment (admin cleanup)."""
+    db_key = request.path_params["db"]
+    comment_id = str(request.path_params.get("comment_id") or "").strip()
+    db_name = _resolve_db(db_key)
+    if not db_name:
+        return JSONResponse({"error": "Unknown topic"}, status_code=404)
+    if not comment_id:
+        return JSONResponse({"error": "Comment id is required"}, status_code=400)
+    try:
+        deleted = comment_store.delete_comment(db_name, comment_id)
+        if not deleted:
+            return JSONResponse({"error": "Comment not found"}, status_code=404)
+        return JSONResponse({"deleted": True, "id": comment_id})
+    except Exception as exc:
+        logger.exception("API comment delete error for db=%s id=%s", db_name, comment_id)
+        return JSONResponse({"error": str(exc)}, status_code=500)
+
+
 def get_site_config(_request: Request) -> JSONResponse:
     """Public UI flags for the Angular app (from ``.env``)."""
     measurement_id = config.GOOGLE_ANALYTICS_MEASUREMENT_ID
@@ -598,6 +653,8 @@ def create_app() -> Starlette:
             Route("/api/{db}/venues/{venue_id}", delete_venue, methods=["DELETE"]),
             Route("/api/{db}/users", get_users, methods=["GET"]),
             Route("/api/{db}/users/subscribe", post_user_subscribe, methods=["POST"]),
+            Route("/api/{db}/comments/{comment_id}", delete_comment, methods=["DELETE"]),
+            Route("/api/{db}/comments", get_comments, methods=["GET"]),
             Route("/api/{db}/comments", post_comment, methods=["POST"]),
             Route("/api/config", get_site_config, methods=["GET"]),
             Route("/api/{db}/images/{image_id}", get_image, methods=["GET"]),

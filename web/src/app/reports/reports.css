@@ -35,14 +35,6 @@
   margin-bottom: var(--space-5);
 }
 
-.reports-header__row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: var(--space-4);
-}
-
 .reports-title {
   margin: 0 0 var(--space-2);
   font-size: var(--text-panel-title);
@@ -51,102 +43,6 @@
   background: var(--gradient-panel-title);
   background-clip: text;
   -webkit-text-fill-color: transparent;
-}
-
-.run-trigger {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-end;
-  gap: var(--space-2);
-  min-width: min(100%, 16rem);
-}
-
-.admin-actions {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: flex-end;
-  gap: var(--space-4);
-}
-
-.run-trigger__btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-5);
-  border: none;
-  border-radius: var(--radius-full);
-  font: inherit;
-  font-weight: 700;
-  color: #fff;
-  cursor: pointer;
-  background: linear-gradient(135deg, #6366f1, #ec4899);
-  box-shadow: 0 4px 14px rgba(99, 102, 241, 0.35);
-  transition: transform 0.15s ease, box-shadow 0.15s ease, opacity 0.15s ease;
-}
-
-.run-trigger__btn:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 18px rgba(236, 72, 153, 0.35);
-}
-
-.run-trigger__btn:focus-visible {
-  outline: var(--border-thick) solid var(--color-focus);
-  outline-offset: var(--outline-offset-sm);
-}
-
-.run-trigger__btn:disabled {
-  opacity: 0.85;
-  cursor: wait;
-}
-
-.run-trigger__btn--secondary {
-  background: var(--gradient-refresh-btn);
-  box-shadow: var(--shadow-btn);
-}
-
-.run-trigger__btn--secondary:hover:not(:disabled) {
-  box-shadow: var(--shadow-btn-hover);
-}
-
-.run-trigger__spinner {
-  width: 1.1rem;
-  height: 1.1rem;
-  border: 2px solid rgba(255, 255, 255, 0.35);
-  border-top-color: #fff;
-  border-radius: 50%;
-  animation: run-trigger-spin 0.75s linear infinite;
-}
-
-@keyframes run-trigger-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-.run-trigger__status {
-  margin: 0;
-  max-width: 22rem;
-  font-size: var(--text-sm);
-  text-align: right;
-  color: var(--color-empty-hint);
-  line-height: 1.45;
-}
-
-.run-trigger__status--running {
-  color: var(--color-link);
-  font-weight: 600;
-}
-
-.run-trigger__status--completed {
-  color: #047857;
-  font-weight: 600;
-}
-
-.run-trigger__status--error {
-  color: var(--color-error-text);
-  font-weight: 600;
 }
 
 .status-msg {

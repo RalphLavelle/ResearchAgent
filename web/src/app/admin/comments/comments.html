@@ -1,0 +1,112 @@
+<section class="comments-panel" aria-labelledby="comments-heading">
+  <p class="admin-breadcrumb">
+    <a routerLink="/admin" class="admin-breadcrumb__link">← Admin</a>
+  </p>
+
+  <header class="comments-header">
+    <h1 id="comments-heading" class="comments-title">
+      <span aria-hidden="true">💬</span>
+      Comments
+    </h1>
+    <p class="comments-intro">
+      Visitor feedback from the site footer (50 per page, newest first).
+    </p>
+  </header>
+
+  @if (loading()) {
+    <p class="status-msg" role="status">Loading comments…</p>
+  }
+
+  @if (error(); as errMsg) {
+    <p class="status-msg error" role="alert">{{ errMsg }}</p>
+  }
+
+  @if (!loading() && !error()) {
+    @if (comments().length === 0) {
+      <div class="empty-state">
+        <p class="empty-title">No comments yet</p>
+        <p class="empty-hint">
+          Suggestions left via the footer form are saved here automatically.
+        </p>
+      </div>
+    } @else {
+      <div class="table-scroll">
+        <table class="comments-table">
+          <caption class="sr-only">
+            Visitor comments for the active topic
+          </caption>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Comment</th>
+              <th scope="col">Submitted</th>
+              <th scope="col"><span class="sr-only">Actions</span></th>
+            </tr>
+          </thead>
+          <tbody>
+            @for (row of comments(); track row.id) {
+              <tr>
+                <td class="comments-cell comments-cell--name">{{ row.name }}</td>
+                <td class="comments-cell comments-cell--body">{{ row.comment }}</td>
+                <td class="comments-cell comments-cell--date">
+                  @if (row.date) {
+                    {{ row.date | date: 'medium' }}
+                  } @else {
+                    —
+                  }
+                </td>
+                <td class="comments-cell comments-cell--actions">
+                  <button
+                    type="button"
+                    class="delete-btn"
+                    (click)="openDeleteModal(row)"
+                  >
+                    Delete
+                  </button>
+                </td>
+              </tr>
+            }
+          </tbody>
+        </table>
+      </div>
+
+      @if (total() > pageSize) {
+        <nav class="comments-pagination" aria-label="Comments pagination">
+          <p class="comments-pagination__summary">
+            Showing {{ rangeStart() }}–{{ rangeEnd() }} of {{ total() }}
+            (page {{ pageNumber() }} of {{ totalPages() }})
+          </p>
+          <div class="comments-pagination__actions">
+            <button
+              type="button"
+              class="page-btn"
+              (click)="goToPreviousPage()"
+              [disabled]="!hasPrevious()"
+            >
+              Previous
+            </button>
+            <button
+              type="button"
+              class="page-btn"
+              (click)="goToNextPage()"
+              [disabled]="!hasNext()"
+            >
+              Next
+            </button>
+          </div>
+        </nav>
+      }
+    }
+  }
+</section>
+
+@if (deleteTarget(); as target) {
+  <app-comment-delete-modal
+    [db]="topic.active().db"
+    [commentId]="target.id"
+    [commentName]="target.name"
+    [commentPreview]="target.comment"
+    (closed)="closeDeleteModal()"
+    (deleted)="onCommentDeleted()"
+  />
+}

@@ -23,7 +23,6 @@
         </div>
 
         <nav class="site-nav site-nav--desktop" aria-label="Primary navigation">
-          <a routerLink="/admin" class="nav-link" routerLinkActive="nav-link--active">Admin</a>
           <a routerLink="/about" class="nav-link" routerLinkActive="nav-link--active">About</a>
         </nav>
 
@@ -59,12 +58,6 @@
     >
       <a
         #firstMobileLink
-        routerLink="/admin"
-        class="mobile-nav-drawer__link"
-        routerLinkActive="mobile-nav-drawer__link--active"
-        (click)="closeNav()"
-        >Admin</a>
-      <a
         routerLink="/about"
         class="mobile-nav-drawer__link"
         routerLinkActive="mobile-nav-drawer__link--active"

@@ -4,88 +4,10 @@
   </p>
 
   <header class="reports-header">
-    <div class="reports-header__row">
-      <h2 id="reports-heading" class="reports-title">
-        <span aria-hidden="true">📋</span>
-        Pipeline run reports
-      </h2>
-
-      <div class="admin-actions">
-        <div class="run-trigger">
-          <button
-            type="button"
-            class="run-trigger__btn"
-            (click)="triggerRunOnce()"
-            [disabled]="isRunBusy()"
-            aria-describedby="run-trigger-status"
-          >
-            @if (runStatus() === 'running') {
-              <span class="run-trigger__spinner" aria-hidden="true"></span>
-              Running pipeline…
-            } @else {
-              <span aria-hidden="true">🎵</span>
-              Run pipeline now
-            }
-          </button>
-
-          <p
-            id="run-trigger-status"
-            class="run-trigger__status"
-            [class.run-trigger__status--running]="runStatus() === 'running'"
-            [class.run-trigger__status--completed]="runStatus() === 'completed'"
-            [class.run-trigger__status--error]="runStatus() === 'error'"
-            role="status"
-            aria-live="polite"
-          >
-            @if (runStatus() === 'running') {
-              Research agent is running — this may take several minutes.
-            } @else if (runStatus() === 'completed') {
-              <span aria-hidden="true">✅</span>
-              Completed{{ runMessage() ? ': ' + runMessage() : '' }}
-            } @else if (runStatus() === 'error' && runMessage(); as err) {
-              {{ err }}
-            }
-          </p>
-        </div>
-
-        <div class="run-trigger">
-          <button
-            type="button"
-            class="run-trigger__btn run-trigger__btn--secondary"
-            (click)="triggerDedupe()"
-            [disabled]="isDedupeBusy()"
-            aria-describedby="dedupe-trigger-status"
-          >
-            @if (dedupeStatus() === 'running') {
-              <span class="run-trigger__spinner" aria-hidden="true"></span>
-              Scanning for duplicates…
-            } @else {
-              <span aria-hidden="true">🧹</span>
-              Remove duplicate events
-            }
-          </button>
-
-          <p
-            id="dedupe-trigger-status"
-            class="run-trigger__status"
-            [class.run-trigger__status--running]="dedupeStatus() === 'running'"
-            [class.run-trigger__status--completed]="dedupeStatus() === 'completed'"
-            [class.run-trigger__status--error]="dedupeStatus() === 'error'"
-            role="status"
-            aria-live="polite"
-          >
-            @if (dedupeStatus() === 'running') {
-              Re-scanning the events collection — no new crawl.
-            } @else if (dedupeStatus() === 'completed') {
-              <span aria-hidden="true">✅</span>
-              {{ dedupeMessage() }}
-            } @else if (dedupeStatus() === 'error' && dedupeMessage(); as dedupeErr) {
-              {{ dedupeErr }}
-            }
-          </p>
-        </div>
-      </div>
-    </div>
+    <h2 id="reports-heading" class="reports-title">
+      <span aria-hidden="true">📋</span>
+      Pipeline run reports
+    </h2>
   </header>
 
   @if (loading()) {

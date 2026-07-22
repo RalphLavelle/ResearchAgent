@@ -1,0 +1,41 @@
+<div class="modal-backdrop" (click)="onBackdropClick($event)">
+  <div
+    class="modal-panel"
+    role="alertdialog"
+    aria-modal="true"
+    aria-labelledby="comment-delete-title"
+    aria-describedby="comment-delete-desc"
+    (click)="$event.stopPropagation()"
+  >
+    <header class="modal-header">
+      <h2 id="comment-delete-title" class="modal-title">Delete comment?</h2>
+      <button type="button" class="modal-close" (click)="closed.emit()" aria-label="Close">
+        ×
+      </button>
+    </header>
+
+    <p id="comment-delete-desc" class="modal-lead">
+      Remove the comment from <strong>{{ commentName() }}</strong>? This cannot be undone.
+    </p>
+
+    <blockquote class="comment-preview">{{ commentPreview() }}</blockquote>
+
+    @if (error(); as errMsg) {
+      <p class="modal-status modal-status--error" role="alert">{{ errMsg }}</p>
+    }
+
+    <footer class="modal-actions">
+      <button type="button" class="modal-btn modal-btn--ghost" (click)="closed.emit()">
+        Cancel
+      </button>
+      <button
+        type="button"
+        class="modal-btn modal-btn--danger"
+        (click)="confirmDelete()"
+        [disabled]="deleting()"
+      >
+        {{ deleting() ? 'Deleting…' : 'Delete comment' }}
+      </button>
+    </footer>
+  </div>
+</div>

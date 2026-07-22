@@ -738,6 +738,38 @@ def test_post_comment_requires_name_and_comment() -> None:
     assert missing_comment.json()["error"] == "comment is required"
 
 
+def test_get_comments_lists_saved_feedback() -> None:
+    from agent import comment_store
+
+    saved = comment_store.add_comment("test-db", "Jamie", "Nice site!")
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/comments?limit=50&skip=0")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] >= 1
+    ids = {row["id"] for row in body["comments"]}
+    assert str(saved["_id"]) in ids
+
+
+def test_delete_comment_via_api() -> None:
+    from agent import comment_store
+    from agent.mongodb import COMMENTS_COLLECTION, get_database
+
+    saved = comment_store.add_comment("test-db", "Test", "Delete me")
+    cid = str(saved["_id"])
+    client = TestClient(create_app())
+
+    response = client.delete(f"/api/test-db/comments/{cid}")
+    assert response.status_code == 200
+    assert response.json()["deleted"] is True
+
+    assert get_database("test-db")[COMMENTS_COLLECTION].find_one({"_id": cid}) is None
+
+    missing = client.delete("/api/test-db/comments/does-not-exist")
+    assert missing.status_code == 404
+
+
 def test_delete_venue_reassigns_events() -> None:
     from agent.event_store import venue_to_mongo
     from agent.mongodb import EVENTS_COLLECTION, get_database
