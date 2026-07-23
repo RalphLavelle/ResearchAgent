@@ -27,6 +27,11 @@ def mongodb_test_env(monkeypatch: pytest.MonkeyPatch) -> None:
     client["test-db"]["users"].drop()
     client["test-db"]["schema_migrations"].drop()
 
+    from agent.events_api_cache import reset_events_api_cache
+
+    reset_events_api_cache()
+
     yield
 
     mongodb.reset_client_cache()
+    reset_events_api_cache()

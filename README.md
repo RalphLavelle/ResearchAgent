@@ -184,7 +184,7 @@ Restart `serve` after changing this value.
 
   | Endpoint | Purpose |
   |----------|---------|
-  | `GET /api/{db}/events` | Event list for a topic — **next month only** (events dated today through today+30; the store keeps all future events, this query applies the display window). JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc` |
+  | `GET /api/{db}/events` | Event list for a topic — **next month only** (events dated today through today+30; the store keeps all future events, this query applies the display window). JSON with `generated` + `events`; `{db}` is the topic's MongoDB database name from `topics.json`, e.g. `bgc`. Responses are served from an **in-process cache** warmed after each pipeline run (see `docs/features/events-cache.md`; disable with `EVENTS_API_CACHE_ENABLED=false`) |
   | `POST /api/{db}/events/search` | Text search over the same display window — body `{ "query": "..." }`; returns `generated`, `events` (matched rows), and `searchQuery`. Searches `event`, `summary`, `tags`, and `venue.name` in MongoDB (no LLM). Used by the home-page search bar (`?search=` in the URL) |
   | `GET /api/{db}/events/spotlight[?limit=4&exclude=id1,id2]` | Up to four random events within the **same display window** as the main list (default 30 days) with an **event-specific** cached poster (`poster_quality` ≥ 2 — scored on read and backfilled for legacy rows) |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |

@@ -65,7 +65,7 @@ Spreadsheet columns: `Event, Venue, Location, Date, URL, Sources, Poster URL, Su
 
 ## Outputs
 
-- **Angular API**: `api.py` serves `GET /api/<db>/events`, `GET /api/<db>/reports`, and `GET /api/<db>/images/<id>`.
+- **Angular API**: `api.py` serves `GET /api/<db>/events`, `GET /api/<db>/reports`, and `GET /api/<db>/images/<id>`. The events list JSON is cached in-process (`events_api_cache.py`) and warmed after each `write_output` — see `docs/features/events-cache.md`.
 - **SEO**: `api.py` also serves `GET /robots.txt` and `GET /sitemap.xml` (built by `src/agent/seo.py` from the display-window events; nginx proxies the site-root paths). The Angular `SeoService` (`web/src/app/seo/seo.service.ts`) owns canonical/meta/robots tags and schema.org MusicEvent JSON-LD; events carry `isoDate` in the API payload for that markup. Topic `tagline`/`description` in `topics.json` drive the h1 and meta description.
 
 ## Config/env (do not overwrite `.env` without asking)

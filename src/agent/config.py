@@ -170,6 +170,9 @@ EMAIL_SIGNUP_ENABLED = _env_flag("EMAIL_SIGNUP_ENABLED", default=False)
 # Google Analytics 4 Measurement ID (``G-XXXXXXXXXX``) exposed to the Angular app via ``GET /api/config``.
 GOOGLE_ANALYTICS_MEASUREMENT_ID = (os.environ.get("GOOGLE_ANALYTICS_MEASUREMENT_ID") or "").strip()
 
+# In-process cache for ``GET /api/<db>/events`` — warmed after each pipeline run (see docs/features/events-cache.md).
+EVENTS_API_CACHE_ENABLED = _env_flag("EVENTS_API_CACHE_ENABLED", default=True)
+
 MAX_SEARCH_QUERIES = int(os.environ.get("MAX_SEARCH_QUERIES", "8"))
 
 

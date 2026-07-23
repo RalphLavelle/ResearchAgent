@@ -15,6 +15,7 @@ from starlette.routing import Route
 from agent import config, seo
 from agent.event_search import load_search_api_payload
 from agent.event_store import load_events_api_payload, load_spotlight_api_payload
+from agent.events_api_cache import get_events_api_payload, warm_events_api_cache
 from agent.image_store import fetch_image
 from agent.local_output import run_dedupe_remediation
 from agent.mongodb import get_database
@@ -54,7 +55,7 @@ def get_events(request: Request) -> JSONResponse:
     if not db_name:
         return JSONResponse({"error": "Unknown topic"}, status_code=404)
     try:
-        payload: dict[str, Any] = load_events_api_payload(db_name)
+        payload: dict[str, Any] = get_events_api_payload(db_name, load_events_api_payload)
         return JSONResponse(payload)
     except Exception as exc:
         logger.exception("API events error for db=%s", db_name)
@@ -560,6 +561,7 @@ async def post_admin_dedupe_events(request: Request) -> JSONResponse:
             if sem:
                 parts.append(f"{sem} semantic (LLM)")
             message = f"Removed {total} duplicate event row(s) ({', '.join(parts)})."
+        await run_in_threadpool(warm_events_api_cache, db_name, load_events_api_payload)
         return JSONResponse({"ok": True, "message": message, **stats})
     except Exception as exc:
         logger.exception("API admin dedupe-events error")
@@ -609,7 +611,7 @@ def get_robots_txt(request: Request) -> PlainTextResponse:
 def get_sitemap_xml(request: Request) -> Response:
     """sitemap.xml built from the active topic's display-window events (SEO)."""
     try:
-        events = load_events_api_payload(_active_db_name()).get("events", [])
+        events = get_events_api_payload(_active_db_name(), load_events_api_payload).get("events", [])
     except Exception:
         logger.exception("Sitemap: could not load events; serving static pages only")
         events = []

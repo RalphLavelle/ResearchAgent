@@ -951,6 +951,12 @@ def write_output(resources: list[Resource]) -> MergeStats:
         logger.warning("Venue tidy-up skipped: %s", exc)
 
     total_after = len(synced)
+
+    from agent.events_api_cache import warm_events_api_cache
+    from agent.event_store import load_events_api_payload
+
+    warm_events_api_cache(db_name, load_events_api_payload)
+
     return MergeStats(
         added=added,
         skipped=skipped,
