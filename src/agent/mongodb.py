@@ -112,6 +112,7 @@ def ensure_collection_indexes(db_name: str) -> None:
     db[EVENTS_COLLECTION].create_index("date", background=True)
     db[EVENTS_COLLECTION].create_index("poster_quality", background=True, sparse=True)
     db[EVENTS_COLLECTION].create_index("image_id", background=True, sparse=True)
+    db[VENUES_COLLECTION].create_index("sort_name", background=True)
     db[IMAGES_COLLECTION].create_index("source_url", background=True)
     db[SOURCES_COLLECTION].create_index("host", unique=True, background=True)
     db[SOURCES_COLLECTION].create_index("urls.url", background=True)

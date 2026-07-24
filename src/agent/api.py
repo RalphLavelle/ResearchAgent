@@ -144,7 +144,11 @@ def get_reports(request: Request) -> JSONResponse:
         return JSONResponse({"error": str(exc)}, status_code=500)
 
 
-def _venue_to_api(doc: dict[str, Any], *, db_name: str | None = None) -> dict[str, Any]:
+def _venue_to_api(
+    doc: dict[str, Any],
+    *,
+    linked_event_count: int | None = None,
+) -> dict[str, Any]:
     venue_id = str(doc.get("_id") or "")
     payload = {
         "id": venue_id,
@@ -155,8 +159,8 @@ def _venue_to_api(doc: dict[str, Any], *, db_name: str | None = None) -> dict[st
         "events_link": str(doc.get("events_link") or ""),
         "last_event_date": str(doc.get("last_event_date") or ""),
     }
-    if db_name and venue_id:
-        payload["linkedEventCount"] = venue_store.count_events_for_venue(db_name, venue_id)
+    if linked_event_count is not None:
+        payload["linkedEventCount"] = linked_event_count
     return payload
 
 
@@ -170,7 +174,8 @@ def get_venues(request: Request) -> JSONResponse:
             docs = venue_store.list_venues(db_name)
             return JSONResponse(
                 {
-                    "venues": [_venue_to_api(doc, db_name=db_name) for doc in docs],
+                    # Replacement-venue picker only needs id/name/aliases — skip N count queries.
+                    "venues": [_venue_to_api(doc) for doc in docs],
                     "total": len(docs),
                     "limit": len(docs),
                     "skip": 0,
@@ -181,9 +186,17 @@ def get_venues(request: Request) -> JSONResponse:
         limit = max(1, min(50, int(limit_raw)))
         skip = max(0, int(skip_raw))
         docs, total = venue_store.list_venues_page(db_name, limit=limit, skip=skip)
+        venue_ids = [str(doc.get("_id") or "") for doc in docs]
+        counts = venue_store.linked_event_counts(db_name, venue_ids)
         return JSONResponse(
             {
-                "venues": [_venue_to_api(doc, db_name=db_name) for doc in docs],
+                "venues": [
+                    _venue_to_api(
+                        doc,
+                        linked_event_count=counts.get(str(doc.get("_id") or ""), 0),
+                    )
+                    for doc in docs
+                ],
                 "total": total,
                 "limit": limit,
                 "skip": skip,

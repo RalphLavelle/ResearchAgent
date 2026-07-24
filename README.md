@@ -189,8 +189,8 @@ Restart `serve` after changing this value.
   | `GET /api/{db}/events/spotlight[?limit=4&exclude=id1,id2]` | Up to four random events within the **same display window** as the main list (default 30 days) with an **event-specific** cached poster (`poster_quality` ≥ 2 — scored on read and backfilled for legacy rows) |
   | `GET /api/{db}/images/{image_id}` | Cached poster image bytes for an event (`image_id` from MongoDB) |
   | `GET /api/{db}/reports[?limit=50]` | Pipeline run reports (`datetime`, `llm_model`, `planner_temperature`, `searches`, `urls`, `changes`) — used by `/admin/reports` |
-  | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `location`, `aliases`, `linkedEventCount`, …) — used by `/admin/venues` (50 per page max) |
-  | `GET /api/{db}/venues?all=true` | All venue records (for admin delete reassignment dropdown) |
+  | `GET /api/{db}/venues[?limit=50&skip=0]` | Venue records (`id`, `name`, `location`, `aliases`, `linkedEventCount`, …) — used by `/admin/venues` (50 per page max). Paginated in MongoDB with a `sort_name` index; linked-event counts are batched in one aggregation per page |
+  | `GET /api/{db}/venues?all=true` | All venue records sorted by name for the admin delete reassignment dropdown — omits `linkedEventCount` (not needed for the picker) |
   | `GET /api/{db}/venues/{venue_id}` | Raw venue JSON for admin editing (`_id`, `name`, `location`, `aliases`, `linkedEventCount`) |
   | `GET /api/{db}/venues/{venue_id}/events` | Linked events for one venue (`events`: `id`, `eventName`, `date`, `url`) — used by the expandable **Events** column on `/admin/venues` |
   | `PUT /api/{db}/venues/{venue_id}` | Save edited venue JSON back to MongoDB |

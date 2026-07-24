@@ -317,6 +317,45 @@ def test_list_venues_all_uses_same_sort() -> None:
     assert names == ["Miami Marketta", "The Triffid"]
 
 
+def test_create_venue_sets_sort_name() -> None:
+    db = "test-db"
+    created = venue_store.create_venue(db, "The Cooly Hotel")
+    assert created["sort_name"] == "cooly hotel"
+
+
+def test_linked_event_counts_batch() -> None:
+    from agent.event_store import venue_to_mongo
+    from agent.mongodb import EVENTS_COLLECTION, get_database
+
+    db = "test-db"
+    busy = venue_store.create_venue(db, "Busy Room")
+    quiet = venue_store.create_venue(db, "Quiet Room")
+    busy_id = str(busy["_id"])
+    quiet_id = str(quiet["_id"])
+    get_database(db)[EVENTS_COLLECTION].insert_many(
+        [
+            {
+                "_id": "evt-1",
+                "event": "Band A",
+                "venue": venue_to_mongo("Busy Room", busy_id),
+                "url": "https://example.com/a",
+                "date": "2026-07-01",
+            },
+            {
+                "_id": "evt-2",
+                "event": "Band B",
+                "venue": venue_to_mongo("Busy Room", busy_id),
+                "url": "https://example.com/b",
+                "date": "2026-08-01",
+            },
+        ]
+    )
+
+    counts = venue_store.linked_event_counts(db, [busy_id, quiet_id])
+    assert counts[busy_id] == 2
+    assert quiet_id not in counts
+
+
 def test_update_venue_replaces_document() -> None:
     db = "test-db"
     created = venue_store.create_venue(db, "Before")

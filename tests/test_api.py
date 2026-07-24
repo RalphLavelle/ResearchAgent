@@ -149,6 +149,21 @@ def test_get_venues_linked_event_count() -> None:
     assert row["linkedEventCount"] == 2
 
 
+def test_get_venues_all_skips_linked_event_counts() -> None:
+    db = "test-db"
+    venue_store.create_venue(db, "Alpha")
+    venue_store.create_venue(db, "Beta")
+
+    client = TestClient(create_app())
+    response = client.get("/api/test-db/venues?all=true")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total"] == 2
+    for row in body["venues"]:
+        assert "linkedEventCount" not in row
+
+
 def test_get_venue_events_returns_linked_events() -> None:
     from agent.event_store import venue_to_mongo
     from agent.mongodb import EVENTS_COLLECTION, get_database

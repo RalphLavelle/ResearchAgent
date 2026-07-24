@@ -33,6 +33,40 @@ def sort_name_key(name: str) -> str:
     return without_leading_the(normalize_venue_key(name))
 
 
+_VENUE_LIST_PROJECTION = {
+    "_id": 1,
+    "name": 1,
+    "aliases": 1,
+    "location": 1,
+    "events_link": 1,
+    "last_event_date": 1,
+    "website": 1,
+    "events_link_checked": 1,
+    "last_mined": 1,
+}
+
+
+def ensure_venue_sort_names(db_name: str) -> None:
+    """Backfill ``sort_name`` on legacy venue rows so MongoDB can sort and paginate."""
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    for doc in coll.find({"sort_name": {"$exists": False}}, {"_id": 1, "name": 1}):
+        name = str(doc.get("name") or "")
+        coll.update_one(
+            {"_id": doc["_id"]},
+            {"$set": {"sort_name": sort_name_key(name)}},
+        )
+
+
+def _venue_list_cursor(db_name: str):
+    """Sorted venue query — uses indexed ``sort_name`` after backfill."""
+    from agent.mongodb import ensure_collection_indexes
+
+    ensure_collection_indexes(db_name)
+    ensure_venue_sort_names(db_name)
+    coll = get_database(db_name)[VENUES_COLLECTION]
+    return coll.find({}, _VENUE_LIST_PROJECTION).sort([("sort_name", 1), ("name", 1)])
+
+
 def _sort_venues_by_name(docs: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Return *docs* sorted A–Z by ``sort_name_key(name)`` (stable tie-break on name)."""
     return sorted(
@@ -86,6 +120,7 @@ def create_venue(db_name: str, name: str) -> dict[str, Any]:
     doc = {
         "_id": str(uuid4()),
         "name": canonical,
+        "sort_name": sort_name_key(canonical),
         "aliases": [],
         "location": "",
     }
@@ -113,8 +148,7 @@ def resolve_or_create(db_name: str, raw_text: str) -> tuple[str, str]:
 
 def list_venues(db_name: str) -> list[dict[str, Any]]:
     """Return all venue documents sorted by canonical name (``The `` ignored)."""
-    coll = get_database(db_name)[VENUES_COLLECTION]
-    return _sort_venues_by_name(list(coll.find()))
+    return list(_venue_list_cursor(db_name))
 
 
 def set_location(db_name: str, venue_id: str, location: str) -> None:
@@ -143,9 +177,9 @@ def list_venues_page(
 ) -> tuple[list[dict[str, Any]], int]:
     """Return one page of venues (sorted by name, ``The `` ignored) and the total count."""
     coll = get_database(db_name)[VENUES_COLLECTION]
-    docs = _sort_venues_by_name(list(coll.find()))
-    total = len(docs)
-    page = docs[skip : skip + limit]
+    cursor = _venue_list_cursor(db_name)
+    total = coll.count_documents({})
+    page = list(cursor.skip(max(0, skip)).limit(max(0, limit)))
     return page, total
 
 
@@ -199,6 +233,7 @@ def normalize_venue_document(raw: dict[str, Any], venue_id: str) -> dict[str, An
     doc: dict[str, Any] = {
         "_id": venue_id,
         "name": name,
+        "sort_name": sort_name_key(name),
         "aliases": aliases,
         "location": location,
     }
@@ -235,6 +270,41 @@ def count_events_for_venue(db_name: str, venue_id: str) -> int:
     """Count events linked to a venues-collection id."""
     coll = get_database(db_name)[EVENTS_COLLECTION]
     return coll.count_documents(_events_for_venue_filter(venue_id))
+
+
+def linked_event_counts(db_name: str, venue_ids: list[str]) -> dict[str, int]:
+    """Return ``venue_id → linked event count`` for many venues in one aggregation."""
+    ids = [vid for vid in venue_ids if vid]
+    if not ids:
+        return {}
+
+    coll = get_database(db_name)[EVENTS_COLLECTION]
+    pipeline = [
+        {
+            "$match": {
+                "$or": [
+                    {"venue.id": {"$in": ids}},
+                    {"venue_id": {"$in": ids}},
+                ]
+            }
+        },
+        {
+            "$project": {
+                "vid": {
+                    "$ifNull": [
+                        "$venue.id",
+                        {"$ifNull": ["$venue_id", ""]},
+                    ]
+                }
+            }
+        },
+        {"$match": {"vid": {"$ne": ""}}},
+        {"$group": {"_id": "$vid", "count": {"$sum": 1}}},
+    ]
+    return {
+        str(row["_id"]): int(row["count"])
+        for row in coll.aggregate(pipeline)
+    }
 
 
 def list_events_for_venue(db_name: str, venue_id: str) -> list[dict[str, Any]]:
